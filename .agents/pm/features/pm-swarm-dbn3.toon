@@ -6,10 +6,56 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:54.320Z"
-updated_at: "2026-10-15T18:29:58.668Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-15T21:32:52.353Z"
 author: codex-agent
+estimated_minutes: 30
 acceptance_criteria: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
 parent: pm-swarm-07o2
+comments[8]{created_at,author,text}:
+  "2026-10-15T18:53:48.064Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T19:51:44.210Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-dbn3 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
+  "2026-10-15T20:12:40.631Z",codex-agent,"Round 2: --agent is currently registered only on start. Register it on sync and reap; exercise actual CLI parsing with a distinct principal, prove default reap preserves that principal claim and explicit reap releases it, and retain foreign-claim protection. Expand the README terminal-status sentence."
+  "2026-10-15T20:19:33.249Z",codex-agent,"Behavioural revert proof for finding 2: reverting only reap flag registration makes the real CLI regression fail (exit 1; child exit 2, unknown --agent for swarm reap). Independently reverting only sync flag registration fails the same regression at sync (exit 1; child exit 2, unknown --agent for swarm sync). Exact source bytes restored after each control. Fixed CLI scenarios passed 2/2: default reap preserves both foreign stale claims; reap --agent lane-agent releases only that principal and preserves foreign-agent. Sync --agent lane-agent --apply succeeds. Finding 3 README wording now uses the requested full terminal-status sentence."
+  "2026-10-15T20:42:29.627Z",codex-agent,"Final Round 2 linked acceptance: pm test pm-swarm-dbn3 --run --progress passed 2/2 commands and 12/12 reported tests (10 + 2), zero failures/skips/cancellations/todo. Both real CLI ownership scenarios also passed in all four full release gates. Revert controls for reap and sync remain documented above; code and append-only tracker evidence are committed together. Item remains in progress for orchestrator verification."
+  "2026-10-15T21:07:09.377Z",codex-agent,"Round 3: verified stale lane cleanup can leave orphan directories or fail on missing registered directories. Implement scoped registration cleanup and validate orphan identity plus configured-root containment before removal; refuse unsafe paths and prove both stale cases by reverting the changed cleanup function."
+  "2026-10-15T21:15:12.277Z",codex-agent,"Round 3 verdict: orphan cleanup and unsafe configured paths are valid defects. On Git 2.53.0, the old worktree remove already succeeds for a missing registered directory; the new flow explicitly detects this stale state, removes only that registration, and reports pruned_registration without pruning unrelated entries. Restoring only reapLanes from c086605 makes node --test --test-name-pattern=\"reap repairs|reap refuses config\" test/review-r3.test.ts fail 3/3 (exit 1): missing-state cleanup receipt absent, orphan directory remains on disk, and an outside-root configured directory incorrectly permits branch retirement. Fixed coverage checks dry-run immutability, both stale states, unrelated-registration preservation, config retention on refusal, arbitrary directories, symlink redirection, malformed and foreign markers, active detached worktrees and locked lanes. Exact function bytes restored. Recursive removal requires expected root-contained lane location and an orphan marker belonging to this repository."
+  "2026-10-15T21:32:48.476Z",codex-agent,"Round 3 final acceptance: pm test pm-swarm-dbn3 --run --progress passed 3/3 linked commands and 16/16 reported tests (10 + 2 + 4), with zero failures/skips/cancellations/todo. Both stale-state scenarios and outside-root refusal pass in all four unchanged-threshold release gates: npm run release:check and bun run release:check, each ordinary and CI-like. Each gate passed 81/81 suite tests and 1/1 packed acceptance covering npm/npx and native Bun/bunx. CI-like environments used fresh HOME, CI=true, GITHUB_ACTIONS=true, GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. All 20 configured source files meet 100% statements, branches, functions and lines; production audit reports zero vulnerabilities. Dirty registered worktrees, unrelated stale registrations, foreign claims and refused paths remain protected. Existing history is append-only. Item stays in progress for orchestrator review; claim released at handoff."
+files[7]{path,scope}:
+  src/commands.ts,project
+  src/reap.ts,project
+  src/swarm.ts,project
+  test/commands.test.ts,project
+  test/edges.test.ts,project
+  test/review-r3.test.ts,project
+  test/swarm.test.ts,project
+tests[3]:
+  - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-15T19:01:16.755Z"
+      source_kind: local_mutation
+      source_ref: feat/swarm
+  - command: "node --test --test-name-pattern=\"CLI reap\" test/commands.test.ts"
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-15T20:14:05.563Z"
+      source_kind: local_mutation
+      source_ref: feat/swarm-r1
+  - command: "node --test --test-name-pattern=\"reap\" test/review-r3.test.ts"
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-15T21:10:41.538Z"
+      source_kind: local_mutation
+      source_ref: feat/swarm-r1
+docs[1]{path,scope}:
+  README.md,project
 body: ""

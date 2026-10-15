@@ -1,0 +1,18 @@
+id: pm-swarm-zn7m
+title: Refresh glob development toolchain when an advisory fix is available
+description: Full npm audit reports one high-severity braces denial-of-service advisory propagated through micromatch and fast-glob. npm reports three affected development packages and no available fix; production audit reports zero vulnerabilities. Keep this separate from package runtime acceptance.
+type: Chore
+status: open
+priority: 2
+tags: []
+created_at: "2026-10-15T19:02:36.530Z"
+updated_at: "2026-10-15T19:08:58.925Z"
+author: codex-agent
+estimated_minutes: 60
+acceptance_criteria: Adopt a released compatible glob toolchain fix when available; full audit no longer reports GHSA-vfj7-8cjw-p6xm; preserve production audit and full fleet gates.
+files[2]{path,scope}:
+  package-lock.json,project
+  package.json,project
+docs[1]{path,scope}:
+  docs/verification.md,project
+body: ""

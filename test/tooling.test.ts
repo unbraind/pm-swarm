@@ -24,6 +24,9 @@ import { runDocstringGate } from "../scripts/docstring-gate.ts";
 import { auditIdentities, runIdentityGate } from "../scripts/identity-gate.ts";
 import * as typeContracts from "../src/types.ts";
 
+import { gitEnvironment } from '../src/git-environment.ts';
+import { assertFixtureRepo } from './git-helpers.ts';
+
 import fleetConfig from "../eslint.config.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
@@ -111,13 +114,15 @@ after(() => rmSync(scratchBase, { recursive: true, force: true }));
 
 /** Isolate fixture Git from the caller's global and system configuration (e.g. commit.gpgsign, init.templateDir). */
 function fixtureGitEnvironment(root: string, extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  return { ...process.env, GIT_CONFIG_GLOBAL: join(root, '.gitconfig-global'), GIT_CONFIG_NOSYSTEM: '1', ...extra };
+  return gitEnvironment({ ...process.env, GIT_CONFIG_GLOBAL: join(root, '.gitconfig-global'), GIT_CONFIG_NOSYSTEM: '1', ...extra });
 }
 
 /** Run Git in an isolated fixture with an explicit public test identity. */
 function fixtureGit(root: string, args: readonly string[], author = 'noreply@github.com', committer = author): string {
+  if (args[0] !== 'init') assertFixtureRepo(root);
   const result = spawnSync('git', [...args], { cwd: root, encoding: 'utf8', env: fixtureGitEnvironment(root, { GIT_AUTHOR_NAME: 'Fixture', GIT_AUTHOR_EMAIL: author, GIT_COMMITTER_NAME: 'Fixture', GIT_COMMITTER_EMAIL: committer }) });
   assert.equal(result.status, 0, result.stderr);
+  if (args[0] === 'init') assertFixtureRepo(root);
   return result.stdout.trim();
 }
 
