@@ -1,5 +1,5 @@
 import { gitEnvironment } from './git-environment.ts';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -10,6 +10,7 @@ import { certifyCompleteListResult, computeActionabilityReport, selectActionable
 import { branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
 import { footprintPath, overlaps, partition } from './planner.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
+import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
 import type { Lane, SwarmSettings } from './types.ts';
 
@@ -109,8 +110,8 @@ export class Swarm {
       return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
     });
     for (const [i, left] of lanes.entries()) for (const right of lanes.slice(i + 1)) predictions.push({ ...predict(this.repo, left.sha, right.sha), left_id: left.id, left_branch: left.branch, right_id: right.id, right_branch: right.branch });
-    const clean_pairs = predictions.filter(row => row.conflicts.length === 0).length;
-    const visible = full ? predictions : predictions.filter(row => row.conflicts.length > 0).map(({ left: _left, right: _right, tree: _tree, ...row }) => row);
+    const clean_pairs = predictions.filter(row => row.clean).length;
+    const visible = full ? predictions : predictions.filter(row => !row.clean).map(({ left: _left, right: _right, tree: _tree, ...row }) => row);
     return { lanes: rows, predictions: visible, clean_pairs, missing_merge_drivers: missingDrivers(this.repo) };
   }
 
@@ -140,13 +141,14 @@ export class Swarm {
       let simulated = base;
       for (const lane of order) {
         const result = predict(this.repo, simulated, lane.sha);
+        if (!result.clean) throw new Error('Lane changed during landing; simulate again');
         simulated = chain(this.repo, simulated, lane.sha, result.tree);
         await this.checkTests(lane.id, simulated);
       }
       let expected = base;
       for (const lane of order) {
         this.assertLandingBase(config.base, expected);
-        if (commit(this.repo, lane.branch) !== lane.sha || predict(this.repo, expected, lane.sha).conflicts.length > 0) throw new Error('Lane changed during landing; simulate again');
+        if (commit(this.repo, lane.branch) !== lane.sha || !predict(this.repo, expected, lane.sha).clean) throw new Error('Lane changed during landing; simulate again');
         git(this.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'merge', '--no-ff', '--no-edit', lane.sha]);
         expected = commit(this.repo, 'HEAD');
       }
@@ -159,20 +161,20 @@ export class Swarm {
     return blocked.map(lane => {
       let current = base;
       const peers = [];
-      const baseConflict = predict(this.repo, current, lane.sha).conflicts;
-      if (baseConflict.length > 0) peers.push({ id: 'base', branch: target, conflicts: baseConflict, next_step: `rebase ${lane.branch} after ${target} lands` });
+      const baseConflict = predict(this.repo, current, lane.sha);
+      if (!baseConflict.clean) peers.push({ id: 'base', branch: target, conflicts: baseConflict.conflicts, messages: baseConflict.messages, next_step: `rebase ${lane.branch} after ${target} lands` });
       let previous = baseConflict;
       for (const peer of order) {
         const merged = predict(this.repo, current, peer.sha);
         current = chain(this.repo, current, peer.sha, merged.tree);
-        const conflicts = predict(this.repo, current, lane.sha).conflicts;
-        const direct = predict(this.repo, peer.sha, lane.sha).conflicts;
-        const introduced = conflicts.filter(file => !previous.includes(file));
-        const files = [...new Set([...direct, ...introduced])].sort();
-        if (files.length > 0) peers.push({ id: peer.id, branch: peer.branch, conflicts: files, next_step: `rebase ${lane.branch} after ${peer.branch} lands` });
-        previous = conflicts;
+        const prediction = predict(this.repo, current, lane.sha);
+        const direct = predict(this.repo, peer.sha, lane.sha);
+        const introduced = prediction.conflicts.filter(file => !previous.conflicts.includes(file));
+        const files = [...new Set([...direct.conflicts, ...introduced])].sort();
+        if (!direct.clean || (!prediction.clean && previous.clean) || files.length > 0) peers.push({ id: peer.id, branch: peer.branch, conflicts: files, messages: prediction.messages, next_step: `rebase ${lane.branch} after ${peer.branch} lands` });
+        previous = prediction;
       }
-      return { id: lane.id, branch: lane.branch, conflicts: previous, peers };
+      return { id: lane.id, branch: lane.branch, conflicts: previous.conflicts, messages: previous.messages, peers };
     });
   }
 
@@ -203,22 +205,32 @@ export class Swarm {
 
   /** Check ancestry and remove registrations under the shared repository lease. */
   private async reapLanes(dryRun: boolean) {
-    const lanes = await this.lanes(); const removed: string[] = []; const released: string[] = [];
+    const lanes = await this.lanes(); const config = await settings(this.pmRoot);
+    const removed: string[] = []; const released: string[] = [];
+    const cleanup: { id: string; action: string }[] = []; const refused: { id: string; reason: string }[] = [];
     for (const lane of lanes) {
       if (!lane.terminal || spawnSync('git', ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)], { cwd: this.repo, env: gitEnvironment() }).status !== 0) continue;
       const pathResult = spawnSync('git', ['config', '--local', '--get', `swarm.lane.${lane.id}`], { cwd: this.repo, env: gitEnvironment(), encoding: 'utf8' });
       const path = pathResult.stdout.trimEnd();
       const worktrees = git(this.repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0');
       const matching = worktrees.find(entry => entry.split('\0').includes(`branch refs/heads/${lane.branch}`));
-      if (matching !== undefined && !matching.split('\0').includes(`worktree ${path}`)) continue;
+      if (matching !== undefined && !matching.split('\0').includes(`worktree ${path}`)) { refused.push({ id: lane.id, reason: 'Lane branch is checked out at a different location' }); continue; }
+      const refusal = path === '' ? null : lanePathRefusal(this.repo, config.root, lane.id, path, matching === undefined);
+      if (refusal !== null) { refused.push({ id: lane.id, reason: refusal }); continue; }
+      const missing = !existsSync(path);
+      if (matching !== undefined && matching.split('\0').some(field => field.startsWith('locked'))) { refused.push({ id: lane.id, reason: 'Lane worktree is locked' }); continue; }
+      if (matching !== undefined) cleanup.push({ id: lane.id, action: missing ? 'pruned_registration' : 'removed_worktree' });
+      else if (!missing) cleanup.push({ id: lane.id, action: 'removed_orphan' });
       if (!dryRun) {
-        if (matching !== undefined) git(this.repo, ['worktree', 'remove', path]);
+        // Remove only this lane's stale registration; a global prune would touch unrelated worktrees.
+        if (matching !== undefined) git(this.repo, ['worktree', 'remove', ...(missing ? ['--force'] : []), path]);
+        else if (!missing) rmSync(path, { recursive: true });
         git(this.repo, ['branch', '-d', lane.branch]);
         if (pathResult.status === 0) git(this.repo, ['config', '--local', '--unset', `swarm.lane.${lane.id}`]);
       }
       removed.push(lane.id);
       if (lane.agent === this.author) { if (!dryRun) await this.client.release(lane.id, { author: this.author }); released.push(lane.id); }
     }
-    return { dry_run: dryRun, removed, released };
+    return { dry_run: dryRun, removed, released, cleanup, refused };
   }
 }

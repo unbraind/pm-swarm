@@ -133,7 +133,7 @@ test('land backtracks to the only clean three-lane order, chains ancestry, tests
   f.save(); const base = commit(f.repo, 'main'); const lanes = await f.swarm.lanes(); const laneA = lanes.find(lane => lane.branch === 'a')!; const laneB = lanes.find(lane => lane.branch === 'b')!; const laneC = lanes.find(lane => lane.branch === 'c')!;
   // Input begins at a dead end, so selecting the first clean branch alone is insufficient.
   const permutations = [[laneA, laneB, laneC], [laneA, laneC, laneB], [laneB, laneA, laneC], [laneB, laneC, laneA], [laneC, laneA, laneB], [laneC, laneB, laneA]];
-  const clean = permutations.filter(sequence => { let current = base; for (const lane of sequence) { const merge = predict(f.repo, current, lane.sha); if (merge.conflicts.length > 0) return false; current = chain(f.repo, current, lane.sha, merge.tree); } return true; });
+  const clean = permutations.filter(sequence => { let current = base; for (const lane of sequence) { const merge = predict(f.repo, current, lane.sha); if (!merge.clean) return false; current = chain(f.repo, current, lane.sha, merge.tree); } return true; });
   assert.deepEqual(clean.map(sequence => sequence.map(lane => lane.branch)), [['a', 'b', 'c']]);
   const found = cleanOrder(f.repo, base, [laneC, laneB, laneA]); assert.deepEqual(found?.map(lane => lane.branch), ['a', 'b', 'c']);
   assert.equal(predict(f.repo, base, b).conflicts.length > 0, true); assert.equal(predict(f.repo, a, c).conflicts.length > 0, true);
@@ -188,7 +188,9 @@ test('partial land maximizes the clean subset, explains blocked peers and execut
   const preview = await f.swarm.land();
   assert.deepEqual(preview.order, [ids[0], ids[2]]); assert.equal(preview.exit_code, 1); assert.equal(preview.executed, false);
   assert.deepEqual(preview.conflicting_set.sort(), ids.slice(0, 2));
-  assert.deepEqual(preview.blocked, [{ id: ids[1], branch: starts[1].branch, conflicts: ['same'], peers: [{ id: ids[0], branch: starts[0].branch, conflicts: ['same'], next_step: `rebase ${starts[1].branch} after ${starts[0].branch} lands` }] }]);
+  assert.match(preview.blocked[0].messages.join('\n'), /CONFLICT \(content\)/);
+  assert.match(preview.blocked[0].peers[0].messages.join('\n'), /CONFLICT \(content\)/);
+  assert.deepEqual(preview.blocked.map(({ messages: _messages, ...row }) => ({ ...row, peers: row.peers.map(({ messages: _peerMessages, ...peer }) => peer) })), [{ id: ids[1], branch: starts[1].branch, conflicts: ['same'], peers: [{ id: ids[0], branch: starts[0].branch, conflicts: ['same'], next_step: `rebase ${starts[1].branch} after ${starts[0].branch} lands` }] }]);
   assert.equal(commit(f.repo, 'HEAD'), before);
   const blockedSha = commit(f.repo, starts[1].branch); const blockedStatus = git(starts[1].worktree, ['status', '--porcelain']);
   const execution = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'land', '--execute', '--json'], { cwd: f.repo, env: { ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }, encoding: 'utf8' });

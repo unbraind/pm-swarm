@@ -23,7 +23,7 @@ export function changedFiles(repo: string, base: string, branch: string): string
 }
 /** Ask Git's real merge engine, including configured low-level merge drivers. */
 export function predict(repo: string, left: string, right: string): Prediction {
-  const result = spawnSync('git', ['merge-tree', '--write-tree', '--name-only', '-z', '--no-messages', left, right], { cwd: repo, env: gitEnvironment(), encoding: 'utf8' });
+  const result = spawnSync('git', ['merge-tree', '--write-tree', '--name-only', '-z', '--messages', left, right], { cwd: repo, env: gitEnvironment(), encoding: 'utf8' });
   if (result.status !== 0 && result.status !== 1) throw new Error('merge-tree failed; conflict prediction unavailable');
   // pm drivers write their human receipt before Git writes its NUL-delimited result.
   // The tree record is the first SHA followed by NUL, following a line boundary.
@@ -31,8 +31,15 @@ export function predict(repo: string, left: string, right: string): Prediction {
   if (record === null) throw new Error('merge-tree returned no tree; conflict prediction unavailable');
   const tree = record[1];
   const entries = result.stdout.slice(record.index + record[0].length).split('\0');
-  const conflicts = entries.filter(Boolean);
-  return { left, right, tree, conflicts, tracker_conflicts: conflicts.filter(path => path.startsWith('.agents/pm/')) };
+  const separator = entries.indexOf('');
+  const conflicts = entries.slice(0, separator);
+  const messages: string[] = [];
+  for (let cursor = separator + 1; cursor < entries.length - 1;) {
+    const count = Number(entries[cursor]);
+    messages.push(entries[cursor + count + 2].trimEnd());
+    cursor += count + 3;
+  }
+  return { left, right, tree, clean: result.status === 0, conflicts, messages, tracker_conflicts: conflicts.filter(path => path.startsWith('.agents/pm/')) };
 }
 /** Create an unreferenced merge commit so subsequent simulations retain ancestry. */
 export function chain(repo: string, left: string, right: string, tree: string): string {

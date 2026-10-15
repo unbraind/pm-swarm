@@ -22,7 +22,9 @@ export interface Prediction {
   left: string;
   right: string;
   tree: string;
+  clean: boolean;
   conflicts: string[];
+  messages: string[];
   tracker_conflicts: string[];
 }
 /** Active branch identity, with no machine-specific worktree location. */

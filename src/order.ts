@@ -6,7 +6,7 @@ export function cleanOrder(repo: string, base: string, lanes: Lane[]): Lane[] | 
   if (lanes.length === 0) return [];
   for (const lane of lanes) {
     const result = predict(repo, base, lane.sha);
-    if (result.conflicts.length > 0) continue;
+    if (!result.clean) continue;
     const next = chain(repo, base, lane.sha, result.tree);
     const tail = cleanOrder(repo, next, lanes.filter(other => other.id !== lane.id));
     if (tail !== null) return [lane, ...tail];
