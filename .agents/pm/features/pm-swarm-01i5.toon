@@ -6,8 +6,9 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:30.677Z"
-updated_at: "2026-10-15T19:05:45.997Z"
+updated_at: "2026-10-15T19:08:32.557Z"
 author: codex-agent
+estimated_minutes: 60
 acceptance_criteria: Atomic SDK claim rejects foreign holders; branch and SHA fields registered; paths stay local; driver registration checked.
 parent: pm-swarm-07o2
 comments[1]{created_at,author,text}:

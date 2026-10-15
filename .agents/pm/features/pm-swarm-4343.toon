@@ -6,8 +6,9 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:34.844Z"
-updated_at: "2026-10-15T19:05:48.440Z"
+updated_at: "2026-10-15T19:08:35.679Z"
 author: codex-agent
+estimated_minutes: 60
 acceptance_criteria: Real branch pairs and current base tip merges; drift and ahead behind; prove tracker driver behavior.
 parent: pm-swarm-07o2
 comments[3]{created_at,author,text}:

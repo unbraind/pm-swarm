@@ -6,8 +6,9 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:54.320Z"
-updated_at: "2026-10-15T19:05:54.426Z"
+updated_at: "2026-10-15T19:08:48.274Z"
 author: codex-agent
+estimated_minutes: 30
 acceptance_criteria: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
 parent: pm-swarm-07o2
 comments[1]{created_at,author,text}:
