@@ -1,3 +1,4 @@
+import { gitEnvironment } from './git-environment.ts';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, join, resolve, extname } from 'node:path';
@@ -191,7 +192,7 @@ export class Swarm {
     try {
       await acknowledgeLinkedTests(join(path, '.agents/pm'), tests, nowIso());
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
-      const environment: NodeJS.ProcessEnv = { ...process.env, PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
+      const environment: NodeJS.ProcessEnv = { ...gitEnvironment(), PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
       const result = spawnSync(process.execPath, [fileURLToPath(runner)], { cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
       if (result.status !== 0 || result.stdout !== JSON.stringify({ passed: true })) throw new Error(`Linked tests failed for ${id}: ${result.stderr}`);
     } finally { git(this.repo, ['worktree', 'remove', '--force', path]); rmSync(directory, { recursive: true, force: true }); }
@@ -204,8 +205,8 @@ export class Swarm {
   private async reapLanes(dryRun: boolean) {
     const lanes = await this.lanes(); const removed: string[] = []; const released: string[] = [];
     for (const lane of lanes) {
-      if (!lane.terminal || spawnSync('git', ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)], { cwd: this.repo }).status !== 0) continue;
-      const pathResult = spawnSync('git', ['config', '--local', '--get', `swarm.lane.${lane.id}`], { cwd: this.repo, encoding: 'utf8' });
+      if (!lane.terminal || spawnSync('git', ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)], { cwd: this.repo, env: gitEnvironment() }).status !== 0) continue;
+      const pathResult = spawnSync('git', ['config', '--local', '--get', `swarm.lane.${lane.id}`], { cwd: this.repo, env: gitEnvironment(), encoding: 'utf8' });
       const path = pathResult.stdout.trimEnd();
       const worktrees = git(this.repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0');
       const matching = worktrees.find(entry => entry.split('\0').includes(`branch refs/heads/${lane.branch}`));

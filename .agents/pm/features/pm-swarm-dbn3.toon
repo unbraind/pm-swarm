@@ -6,20 +6,26 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:54.320Z"
-updated_at: "2026-10-15T20:04:23.889Z"
+updated_at: "2026-10-15T20:42:36.587Z"
 author: codex-agent
 estimated_minutes: 30
 acceptance_criteria: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
 parent: pm-swarm-07o2
-comments[2]{created_at,author,text}:
+comments[5]{created_at,author,text}:
   "2026-10-15T18:53:48.064Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:51:44.210Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-dbn3 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
-files[3]{path,scope}:
+  "2026-10-15T20:12:40.631Z",codex-agent,"Round 2: --agent is currently registered only on start. Register it on sync and reap; exercise actual CLI parsing with a distinct principal, prove default reap preserves that principal claim and explicit reap releases it, and retain foreign-claim protection. Expand the README terminal-status sentence."
+  "2026-10-15T20:19:33.249Z",codex-agent,"Behavioural revert proof for finding 2: reverting only reap flag registration makes the real CLI regression fail (exit 1; child exit 2, unknown --agent for swarm reap). Independently reverting only sync flag registration fails the same regression at sync (exit 1; child exit 2, unknown --agent for swarm sync). Exact source bytes restored after each control. Fixed CLI scenarios passed 2/2: default reap preserves both foreign stale claims; reap --agent lane-agent releases only that principal and preserves foreign-agent. Sync --agent lane-agent --apply succeeds. Finding 3 README wording now uses the requested full terminal-status sentence."
+  "2026-10-15T20:42:29.627Z",codex-agent,"Final Round 2 linked acceptance: pm test pm-swarm-dbn3 --run --progress passed 2/2 commands and 12/12 reported tests (10 + 2), zero failures/skips/cancellations/todo. Both real CLI ownership scenarios also passed in all four full release gates. Revert controls for reap and sync remain documented above; code and append-only tracker evidence are committed together. Item remains in progress for orchestrator verification."
+files[5]{path,scope}:
+  src/commands.ts,project
   src/swarm.ts,project
+  test/commands.test.ts,project
   test/edges.test.ts,project
   test/swarm.test.ts,project
-tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+tests[2]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
   "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:01:16.755Z",local_mutation,feat/swarm
+  "node --test --test-name-pattern=\"CLI reap\" test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T20:14:05.563Z",local_mutation,feat/swarm-r1
 docs[1]{path,scope}:
   README.md,project
 body: ""

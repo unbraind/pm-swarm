@@ -4,15 +4,19 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, appendFile
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
-import { assertFixtureRepo } from './git-helpers.ts';
+import { gitEnvironment } from '../src/git-environment.ts';
+import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, t => {
   const root = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-install-'));
   t.after(() => rmSync(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const decoy = join(scratch, 'decoy'); mkdirSync(decoy); fixtureGit(decoy, ['init', '-b', 'main']);
+  writeFileSync(join(decoy, 'sentinel'), 'preserve decoy contents\n'); fixtureGit(decoy, ['add', 'sentinel']);
+  const before = fixtureSnapshot(decoy);
   /** Run an isolated consumer command, refusing nonzero setup or command results. */
   const run = (cwd: string, bin: string, args: string[]) => {
-    const env = { ...process.env, HOME: scratch, PM_PATH: join(cwd, '.agents/pm'), PM_AUTHOR: 'install-test', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', NPM_CONFIG_USERCONFIG: '/dev/null', npm_config_userconfig: '/dev/null' };
+    const env = gitEnvironment({ ...process.env, GIT_DIR: join(decoy, '.git'), HOME: scratch, PM_PATH: join(cwd, '.agents/pm'), PM_AUTHOR: 'install-test', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', NPM_CONFIG_USERCONFIG: '/dev/null', npm_config_userconfig: '/dev/null' });
     for (const key of Object.keys(env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete (env as NodeJS.ProcessEnv)[key];
     if (bin === 'git' && args[0] !== 'init') assertFixtureRepo(cwd);
     const result = spawnSync(bin, args, { cwd, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
@@ -24,7 +28,8 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
   for (const runtime of ['npm', 'bun']) {
     const cwd = join(scratch, runtime); mkdirSync(cwd); writeFileSync(join(cwd, 'package.json'), '{"name":"swarm-consumer","private":true,"type":"module"}\n');
     run(cwd, runtime, [runtime === 'npm' ? 'install' : 'add', '--ignore-scripts', tarball, '@unbrained/pm-cli@2026.10.15']);
-    run(cwd, 'git', ['init', '-b', 'main']);
+    run(cwd, 'git', ['init', '-b', 'main', cwd]);
+    assertFixtureRepo(cwd);
     const runner = runtime === 'npm' ? 'npx' : 'bunx'; const prefix = runtime === 'npm' ? ['--no-install', 'pm'] : ['--bun', '--no-install', 'pm'];
     /** Invoke the installed host with the packed project extension enabled. */
     const pm = (...args: string[]) => run(cwd, runner, [...prefix, ...args]);
@@ -54,4 +59,5 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     assert.equal((JSON.parse(pm('swarm', 'reap', '--dry-run', '--json')) as { removed: string[] }).removed.length, 0);
     for (const file of run(cwd, 'git', ['ls-files', '-z', '.agents/pm']).split('\0').filter(Boolean)) assert.equal(readFileSync(join(cwd, file), 'utf8').includes(scratch), false, file);
   }
+  assert.deepEqual(fixtureSnapshot(decoy), before, 'Decoy repository changed');
 });

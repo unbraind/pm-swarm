@@ -5,17 +5,20 @@ import type { TestContext } from 'node:test';
 import { PmClient } from '@unbrained/pm-cli/sdk';
 import { fixtureGit as git, assertFixtureRepo } from './git-helpers.ts';
 import type { TestResult } from '@unbrained/pm-cli/sdk';
+import { gitEnvironment } from '../src/git-environment.ts';
 import { Swarm } from '../src/swarm.ts';
 
 /** Create a real Git repository and SDK tracker with isolated fixture identity. */
 export async function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), 'pm-swarm-test-')); const repo = join(root, 'repo'); mkdirSync(repo);
   t.after(() => rmSync(root, { recursive: true, force: true }));
+  const sourceEnv = { ...process.env };
+  const clean = gitEnvironment();
+  for (const key of Object.keys(sourceEnv)) if (!(key in clean)) delete process.env[key];
   git(repo, ['init', '-b', 'main']);
-  const sourceEnv = { PM_SOURCE_WORKSPACE_ROOT: process.env.PM_SOURCE_WORKSPACE_ROOT, GITHUB_HEAD_REF: process.env.GITHUB_HEAD_REF, GITHUB_REF_NAME: process.env.GITHUB_REF_NAME };
   process.env.PM_SOURCE_WORKSPACE_ROOT = repo;
   delete process.env.GITHUB_HEAD_REF; delete process.env.GITHUB_REF_NAME;
-  t.after(() => { for (const [key, value] of Object.entries(sourceEnv)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; } });
+  t.after(() => { for (const key of Object.keys(process.env)) if (!(key in sourceEnv)) delete process.env[key]; Object.assign(process.env, sourceEnv); });
   assertFixtureRepo(repo);
   const pmRoot = join(repo, '.agents/pm'); const client = new PmClient({ cwd: repo, pmRoot, author: 'swarm-test', noExtensions: false });
   await client.init('swarm-test', { defaults: true, agentGuidance: 'skip' });

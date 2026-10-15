@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { gitEnvironment } from '../src/git-environment.ts';
 import { test } from 'node:test';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -79,4 +81,24 @@ test('fixture mutation guards refuse a nested directory resolving to its parent 
   assert.throws(() => git(nested, ['config', '--local', 'swarm.leak', 'forbidden']), /Fixture Git root escaped/);
   assert.throws(() => f.save(['.agents/pm'], nested), /Fixture Git root escaped/);
   assert.equal(git(f.repo, ['config', '--local', '--list']), before);
+});
+
+
+for (const useAgent of [false, true]) test(`CLI reap and sync ${useAgent ? 'accept --agent and release only that stale claim' : 'preserve foreign stale claims for the default principal'}`, async t => {
+  const f = await fixture(t); const ids = [await f.item(), await f.item()]; f.save();
+  /** Exercise real CLI option parsing and SDK ownership against the fixture tracker. */
+  const run = (...args: string[]) => {
+    const result = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', ...args, '--json'], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }), encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr); return JSON.parse(result.stdout) as { released: string[]; dry_run: boolean };
+  };
+  for (const [index, id] of ids.entries()) run('start', id, '--agent', index === 0 ? 'lane-agent' : 'foreign-agent');
+  assert.equal(run('sync', ids[0], '--agent', 'lane-agent', '--apply').dry_run, false);
+  for (const [index, id] of ids.entries()) {
+    await f.client.update(id, { status: 'closed', message: 'Fixture completed' });
+    await f.client.claim(id, { author: index === 0 ? 'lane-agent' : 'foreign-agent', force: true });
+  }
+  const reaped = run('reap', ...(useAgent ? ['--agent', 'lane-agent'] : []));
+  assert.deepEqual(reaped.released, useAgent ? [ids[0]] : []);
+  const [own, foreign] = await Promise.all(ids.map(id => f.client.get(id)));
+  assert.equal(own.claim_state?.claimed, !useAgent); assert.equal(foreign.claim_state?.assignee, 'foreign-agent');
 });

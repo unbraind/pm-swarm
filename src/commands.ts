@@ -64,9 +64,9 @@ export function register(api: ExtensionApi): void {
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
     start: { description: 'Claim an item and create a private worktree lane', flags: ['agent', 'base', 'root'], id: true },
     status: { description: 'Predict branch conflicts and report footprint drift', flags: ['full'], id: false },
-    sync: { description: 'Preview changed-file links; --apply records them', flags: ['dry-run', 'apply'], id: true },
+    sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
-    reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['dry-run'], id: false },
+    reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
     settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'apply'], id: false },
   };
   for (const [name, definition] of Object.entries(definitions)) {

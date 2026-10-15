@@ -1,9 +1,10 @@
 import { spawnSync } from 'node:child_process';
+import { gitEnvironment } from './git-environment.ts';
 import type { Prediction } from './types.ts';
 
 /** Run Git without a shell; all failures use path-free package diagnostics. */
 export function git(repo: string, args: string[], input?: string): string {
-  const result = spawnSync('git', args, { cwd: repo, input, encoding: 'utf8', env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+  const result = spawnSync('git', args, { cwd: repo, input, encoding: 'utf8', env: gitEnvironment() });
   if (result.status !== 0) throw new Error(`git ${args[0]} failed; inspect repository state`);
   return result.stdout.trimEnd();
 }
@@ -13,7 +14,7 @@ export function commit(repo: string, ref: string): string {
 }
 /** Test existence without converting a missing branch into a command failure. */
 export function branchExists(repo: string, branch: string): boolean {
-  return spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: repo }).status === 0;
+  return spawnSync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], { cwd: repo, env: gitEnvironment() }).status === 0;
 }
 /** Read changed paths relative to the true common ancestor, preserving unusual names. */
 export function changedFiles(repo: string, base: string, branch: string): string[] {
@@ -22,7 +23,7 @@ export function changedFiles(repo: string, base: string, branch: string): string
 }
 /** Ask Git's real merge engine, including configured low-level merge drivers. */
 export function predict(repo: string, left: string, right: string): Prediction {
-  const result = spawnSync('git', ['merge-tree', '--write-tree', '--name-only', '-z', '--no-messages', left, right], { cwd: repo, encoding: 'utf8' });
+  const result = spawnSync('git', ['merge-tree', '--write-tree', '--name-only', '-z', '--no-messages', left, right], { cwd: repo, env: gitEnvironment(), encoding: 'utf8' });
   if (result.status !== 0 && result.status !== 1) throw new Error('merge-tree failed; conflict prediction unavailable');
   // pm drivers write their human receipt before Git writes its NUL-delimited result.
   // The tree record is the first SHA followed by NUL, following a line boundary.
@@ -39,10 +40,10 @@ export function chain(repo: string, left: string, right: string, tree: string): 
 }
 /** Inspect every driver declared by tracked attributes in the worktree's context. */
 export function missingDrivers(repo: string): string[] {
-  const result = spawnSync('git', ['show', 'HEAD:.gitattributes'], { cwd: repo, encoding: 'utf8' });
+  const result = spawnSync('git', ['show', 'HEAD:.gitattributes'], { cwd: repo, env: gitEnvironment(), encoding: 'utf8' });
   if (result.status !== 0) return ['pm merge attributes'];
   const attrs = result.stdout;
   const names = [...new Set([...attrs.matchAll(/merge=(pm-[\w-]+)/g)].map(match => match[1]))];
   if (names.length === 0) return ['pm merge attributes'];
-  return names.filter(name => spawnSync('git', ['config', '--get', `merge.${name}.driver`], { cwd: repo, stdio: 'ignore' }).status !== 0);
+  return names.filter(name => spawnSync('git', ['config', '--get', `merge.${name}.driver`], { cwd: repo, env: gitEnvironment(), stdio: 'ignore' }).status !== 0);
 }

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
-import { realpathSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { realpathSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { git } from '../src/git.ts';
 
 /** Refuse inherited parent repositories before a fixture can mutate Git state. */
@@ -16,4 +18,9 @@ export function fixtureGit(repo: string, args: string[], input?: string): string
   }
   assertFixtureRepo(repo);
   return git(repo, args, input);
+}
+
+/** Hash every fixture file so redirected Git writes cannot hide behind unchanged refs. */
+export function fixtureSnapshot(repo: string): [string, string][] {
+  return readdirSync(repo, { recursive: true }).map(String).sort().filter(path => statSync(join(repo, path)).isFile()).map(path => [path, createHash('sha256').update(readFileSync(join(repo, path))).digest('hex')]);
 }

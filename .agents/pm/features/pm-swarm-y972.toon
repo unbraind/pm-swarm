@@ -6,26 +6,39 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-15T20:04:22.229Z"
+updated_at: "2026-10-15T20:42:34.143Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[5]{created_at,author,text}:
+comments[8]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
   "2026-10-15T19:51:48.311Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-y972 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
   "2026-10-15T20:04:12.802Z",codex-agent,"Final Round 1 gates: npm run release:check and bun run release:check both pass in ordinary and CI-like environments. Each of the four runs passed 70/70 suite tests and 1/1 packed npm/npx plus native Bun/bunx acceptance, with zero fail/skip/cancel/todo. Coverage remains 100% statements/branches/functions/lines across 18 source files at unchanged thresholds; identity, types, lint, zero duplication, docstrings, production audit (zero findings), package allowlist, changelog and attestation checks pass. CI-like environment used fresh HOME, GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1, CI=true, GITHUB_ACTIONS=true and hosted source ref feat/swarm. All eight linked items passed 12 commands / 90 tests. No source changes during the four successful gate runs. Existing development-toolchain advisory remains tracked separately."
-files[6]{path,scope}:
+  "2026-10-15T20:12:38.180Z",codex-agent,"Round 2: confirmed inherited Git location variables remain unsanitized at 92e03fa. Use one shared environment helper for direct Git calls, fixture helpers and consumer subprocesses. Production will strip all eight location variables unconditionally so explicit repository cwd and linked-worktree discovery determine the target; preserve unrelated identity/config variables. Add decoy-repository acceptance and behavioral revert proof; retain pinned dependencies and all gate thresholds."
+  "2026-10-15T20:18:07.844Z",codex-agent,"Behavioural revert proof for finding 1: removing only the shared gitEnvironment stripping loop makes the Git-location real-repository regression fail (exit 1, 0/1 pass): branchExists cannot see the intended main branch under the inherited decoy location. Restored exact helper bytes. The regression exercises branch lookup, merge prediction, driver discovery, local configuration and linked-worktree discovery, then hashes every decoy file to verify no writes. Packed acceptance additionally supplies a decoy GIT_DIR to each isolated consumer environment before sanitizing it."
+  "2026-10-15T20:42:27.871Z",codex-agent,"Final Round 2 verification: npm run release:check and bun run release:check each passed in normal and CI-like environments (four runs). Each passed 73/73 suite tests plus 1/1 packed npm/npx and native Bun/bunx acceptance, zero failures/skips/cancellations/todo. Every packed acceptance supplies a decoy GIT_DIR before sanitizing consumer environments and verifies all decoy files are unchanged. CI-like runs used CI=true, GITHUB_ACTIONS=true, fresh HOME, GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. Coverage is 100% statements/branches/functions/lines across 19 source files; unchanged thresholds, zero duplication, 40 documented declarations, clean production audit, identity, types, lint, package allowlist, changelog and attestation all pass. Recorded source/manifest/docs hashes were unchanged across the matrix. PM-linked quality acceptance passed 2 commands / 11 tests (10 + 1); changed tracker items together passed 6 commands / 36 tests. Existing development advisory remains separately tracked by pm-swarm-zn7m. No new PM CLI/SDK defect was encountered."
+files[15]{path,scope}:
   index.ts,project
   package.json,project
+  scripts/identity-gate.ts,project
   src/commands.ts,project
+  src/git-environment.ts,project
+  src/git.ts,project
   src/settings.ts,project
+  src/swarm.ts,project
   test/commands.test.ts,project
+  test/edges.test.ts,project
+  test/git-helpers.ts,project
+  test/helpers.ts,project
   test/install.acceptance.ts,project
-tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+  test/prepare-merge-driver.test.ts,project
+  test/tooling.test.ts,project
+tests[2]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
   "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:01:19.572Z",local_mutation,feat/swarm
+  "node --test --test-name-pattern=\"Git location\" test/edges.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T20:14:11.400Z",local_mutation,feat/swarm-r1
 docs[1]{path,scope}:
   README.md,project
 body: ""

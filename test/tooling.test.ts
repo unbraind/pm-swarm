@@ -24,6 +24,7 @@ import { runDocstringGate } from "../scripts/docstring-gate.ts";
 import { auditIdentities, runIdentityGate } from "../scripts/identity-gate.ts";
 import * as typeContracts from "../src/types.ts";
 
+import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo } from './git-helpers.ts';
 
 import fleetConfig from "../eslint.config.ts";
@@ -113,7 +114,7 @@ after(() => rmSync(scratchBase, { recursive: true, force: true }));
 
 /** Isolate fixture Git from the caller's global and system configuration (e.g. commit.gpgsign, init.templateDir). */
 function fixtureGitEnvironment(root: string, extra: Readonly<Record<string, string>> = {}): NodeJS.ProcessEnv {
-  return { ...process.env, GIT_CONFIG_GLOBAL: join(root, '.gitconfig-global'), GIT_CONFIG_NOSYSTEM: '1', ...extra };
+  return gitEnvironment({ ...process.env, GIT_CONFIG_GLOBAL: join(root, '.gitconfig-global'), GIT_CONFIG_NOSYSTEM: '1', ...extra });
 }
 
 /** Run Git in an isolated fixture with an explicit public test identity. */

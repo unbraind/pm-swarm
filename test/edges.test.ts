@@ -4,7 +4,7 @@ import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { PmClient, runTest, acknowledgeLinkedTests, nowIso, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef } from '@unbrained/pm-cli/sdk';
 import { fixture, linkFromBranch } from './helpers.ts';
-import { fixtureGit as git } from './git-helpers.ts';
+import { fixtureGit as git, fixtureSnapshot } from './git-helpers.ts';
 import { Swarm } from '../src/swarm.ts';
 import { commit, predict, missingDrivers, branchExists } from '../src/git.ts';
 import { verifyLinkedTests } from '../src/test-runner.ts';
@@ -120,4 +120,24 @@ test('hosted source refs deliberately trust matching provenance across local bra
   const before = commit(f.repo, 'HEAD');
   await assert.rejects(f.swarm.land(true), /Linked tests failed/);
   assert.equal(commit(f.repo, 'HEAD'), before);
+});
+
+
+test('Git location environment cannot redirect production or fixture operations into a decoy', async t => {
+  const f = await fixture(t); const decoy = join(f.root, 'decoy'); mkdirSync(decoy); git(decoy, ['init', '-b', 'main']); f.save([], decoy);
+  const before = fixtureSnapshot(decoy); const original = { ...process.env };
+  const keys = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_NAMESPACE', 'GIT_PREFIX'];
+  try {
+    for (const key of keys) process.env[key] = join(decoy, '.git');
+    assert.equal(branchExists(f.repo, 'main'), true); assert.equal(branchExists(f.repo, 'missing'), false);
+    assert.deepEqual(missingDrivers(f.repo), []);
+    assert.deepEqual(predict(f.repo, 'HEAD', 'HEAD').conflicts, []);
+    git(f.repo, ['config', '--local', 'swarm.isolation', 'fixture-only']);
+    const lane = join(f.root, 'linked'); git(f.repo, ['worktree', 'add', '--detach', lane, 'HEAD']);
+    assert.equal(git(lane, ['rev-parse', '--show-toplevel']), lane);
+    git(f.repo, ['worktree', 'remove', lane]);
+    assert.deepEqual(fixtureSnapshot(decoy), before);
+  } finally {
+    for (const key of keys) { if (original[key] === undefined) delete process.env[key]; else process.env[key] = original[key]; }
+  }
 });
