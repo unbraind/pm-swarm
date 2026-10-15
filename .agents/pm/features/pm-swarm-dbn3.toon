@@ -6,13 +6,14 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:54.320Z"
-updated_at: "2026-10-15T19:08:48.274Z"
+updated_at: "2026-10-15T20:04:23.889Z"
 author: codex-agent
 estimated_minutes: 30
 acceptance_criteria: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
 parent: pm-swarm-07o2
-comments[1]{created_at,author,text}:
+comments[2]{created_at,author,text}:
   "2026-10-15T18:53:48.064Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T19:51:44.210Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-dbn3 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
 files[3]{path,scope}:
   src/swarm.ts,project
   test/edges.test.ts,project

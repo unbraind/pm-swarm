@@ -6,13 +6,17 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-15T19:08:54.195Z"
+updated_at: "2026-10-15T20:04:22.229Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[1]{created_at,author,text}:
+comments[5]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
+  "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
+  "2026-10-15T19:51:48.311Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-y972 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
+  "2026-10-15T20:04:12.802Z",codex-agent,"Final Round 1 gates: npm run release:check and bun run release:check both pass in ordinary and CI-like environments. Each of the four runs passed 70/70 suite tests and 1/1 packed npm/npx plus native Bun/bunx acceptance, with zero fail/skip/cancel/todo. Coverage remains 100% statements/branches/functions/lines across 18 source files at unchanged thresholds; identity, types, lint, zero duplication, docstrings, production audit (zero findings), package allowlist, changelog and attestation checks pass. CI-like environment used fresh HOME, GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1, CI=true, GITHUB_ACTIONS=true and hosted source ref feat/swarm. All eight linked items passed 12 commands / 90 tests. No source changes during the four successful gate runs. Existing development-toolchain advisory remains tracked separately."
 files[6]{path,scope}:
   index.ts,project
   package.json,project

@@ -8,7 +8,7 @@ import type { PmClient, TestResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
 import { branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
 import { footprintPath, overlaps, partition } from './planner.ts';
-import { cleanOrder, minimalConflict } from './order.ts';
+import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { settings } from './settings.ts';
 import type { Lane, SwarmSettings } from './types.ts';
 
@@ -99,16 +99,18 @@ export class Swarm {
   }
 
   /** Report actual branch changes, footprint drift, and pairwise/base-tip merge predictions. */
-  async status() {
+  async status(full = false) {
     const lanes = await this.lanes(); const predictions = [];
     const rows = lanes.map(lane => {
       const tip = commit(this.repo, lane.target); const changed = changedFiles(this.repo, tip, lane.sha);
       const [behind, ahead] = git(this.repo, ['rev-list', '--left-right', '--count', `${tip}...${lane.sha}`]).split(/\s+/).map(Number);
-      predictions.push(predict(this.repo, lane.sha, tip));
+      predictions.push({ ...predict(this.repo, lane.sha, tip), left_id: lane.id, left_branch: lane.branch, right_id: 'base', right_branch: lane.target });
       return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
     });
-    for (const [i, left] of lanes.entries()) for (const right of lanes.slice(i + 1)) predictions.push(predict(this.repo, left.sha, right.sha));
-    return { lanes: rows, predictions, missing_merge_drivers: missingDrivers(this.repo) };
+    for (const [i, left] of lanes.entries()) for (const right of lanes.slice(i + 1)) predictions.push({ ...predict(this.repo, left.sha, right.sha), left_id: left.id, left_branch: left.branch, right_id: right.id, right_branch: right.branch });
+    const clean_pairs = predictions.filter(row => row.conflicts.length === 0).length;
+    const visible = full ? predictions : predictions.filter(row => row.conflicts.length > 0).map(({ left: _left, right: _right, tree: _tree, ...row }) => row);
+    return { lanes: rows, predictions: visible, clean_pairs, missing_merge_drivers: missingDrivers(this.repo) };
   }
 
   /** Preview footprint updates by default; apply through the SDK files mutation. */
@@ -129,8 +131,9 @@ export class Swarm {
     const lanes = await this.lanes(); const config = await settings(this.pmRoot);
     if (lanes.length > 8) throw new Error('Landing search supports at most 8 lanes; land a smaller batch');
     if (lanes.some(lane => lane.target !== config.base)) throw new Error('All lanes must target the configured swarm base');
-    const base = commit(this.repo, config.base); const order = cleanOrder(this.repo, base, lanes);
-    if (order === null) return { order: [], conflicting_set: minimalConflict(this.repo, base, lanes), executed: false, exit_code: 1 };
+    const base = commit(this.repo, config.base); const order = maximalCleanOrder(this.repo, base, lanes);
+    const blocked = this.blockedLanes(base, config.base, lanes.filter(lane => !order.includes(lane)), order);
+    const conflicting_set = blocked.length > 0 ? minimalConflict(this.repo, base, lanes) : [];
     if (execute && order.length > 0) {
       this.assertLandingBase(config.base, base);
       let simulated = base;
@@ -147,7 +150,29 @@ export class Swarm {
         expected = commit(this.repo, 'HEAD');
       }
     }
-    return { order: order.map(lane => lane.id), conflicting_set: [], executed: execute };
+    return { order: order.map(lane => lane.id), conflicting_set, blocked, executed: execute, ...(blocked.length > 0 ? { exit_code: 1 } : {}) };
+  }
+
+  /** Attribute blocked files to the base or the clean prefix introducing their conflict. */
+  private blockedLanes(base: string, target: string, blocked: Lane[], order: Lane[]) {
+    return blocked.map(lane => {
+      let current = base;
+      const peers = [];
+      const baseConflict = predict(this.repo, current, lane.sha).conflicts;
+      if (baseConflict.length > 0) peers.push({ id: 'base', branch: target, conflicts: baseConflict, next_step: `rebase ${lane.branch} after ${target} lands` });
+      let previous = baseConflict;
+      for (const peer of order) {
+        const merged = predict(this.repo, current, peer.sha);
+        current = chain(this.repo, current, peer.sha, merged.tree);
+        const conflicts = predict(this.repo, current, lane.sha).conflicts;
+        const direct = predict(this.repo, peer.sha, lane.sha).conflicts;
+        const introduced = conflicts.filter(file => !previous.includes(file));
+        const files = [...new Set([...direct, ...introduced])].sort();
+        if (files.length > 0) peers.push({ id: peer.id, branch: peer.branch, conflicts: files, next_step: `rebase ${lane.branch} after ${peer.branch} lands` });
+        previous = conflicts;
+      }
+      return { id: lane.id, branch: lane.branch, conflicts: previous, peers };
+    });
   }
 
   /** Refuse dirty workspaces or a base that moved after simulation. */
@@ -166,7 +191,7 @@ export class Swarm {
     try {
       await acknowledgeLinkedTests(join(path, '.agents/pm'), tests, nowIso());
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
-      const environment = { ...process.env }; delete environment.NODE_TEST_CONTEXT;
+      const environment: NodeJS.ProcessEnv = { ...process.env, PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
       const result = spawnSync(process.execPath, [fileURLToPath(runner)], { cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
       if (result.status !== 0 || result.stdout !== JSON.stringify({ passed: true })) throw new Error(`Linked tests failed for ${id}: ${result.stderr}`);
     } finally { git(this.repo, ['worktree', 'remove', '--force', path]); rmSync(directory, { recursive: true, force: true }); }

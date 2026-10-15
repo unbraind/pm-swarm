@@ -26,3 +26,15 @@ function combinations<T>(items: T[], size: number): T[][] {
   if (size === 0) return [[]];
   return items.flatMap((item, index) => combinations(items.slice(index + 1), size - 1).map(tail => [item, ...tail]));
 }
+
+/** Select the largest clean subset; sorted IDs break equal-size order ties deterministically. */
+export function maximalCleanOrder(repo: string, base: string, lanes: Lane[]): Lane[] {
+  const sorted = [...lanes].sort((left, right) => left.id.localeCompare(right.id));
+  for (let size = sorted.length; size > 0; size--) {
+    for (const subset of combinations(sorted, size)) {
+      const order = cleanOrder(repo, base, subset);
+      if (order !== null) return order;
+    }
+  }
+  return [];
+}

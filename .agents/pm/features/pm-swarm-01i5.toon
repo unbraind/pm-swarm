@@ -2,24 +2,56 @@ id: pm-swarm-01i5
 title: Claim and create isolated worktree lanes
 description: ""
 type: Feature
+pm_format_version: 2
 status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:30.677Z"
-updated_at: "2026-10-15T19:08:32.557Z"
+updated_at: "2026-10-15T20:04:15.625Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Atomic SDK claim rejects foreign holders; branch and SHA fields registered; paths stay local; driver registration checked.
 parent: pm-swarm-07o2
-comments[1]{created_at,author,text}:
+comments[4]{created_at,author,text}:
   "2026-10-15T18:53:18.922Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
-files[4]{path,scope}:
+  "2026-10-15T19:35:51.055Z",codex-agent,"Round 1: command harness omits workspace roots and dispatcher falls back to process cwd. Bind scratch command contexts and guard fixture Git roots before mutations; verify linked runs leave package registrations unchanged."
+  "2026-10-15T19:43:58.428Z",codex-agent,"Behavioural revert proof: restoring only runCommand repository fallback to process cwd makes the registered-host regression fail, exit 1: a parallel branch appears in a disposable foreign repository instead of the tracker repository. Reversion never targets the package checkout. Guard regression refuses mutating Git commands from a nested directory before changing config. Exact fixed function restored."
+  "2026-10-15T19:51:29.136Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-01i5 --run --progress passed 2 linked command(s), 11 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
+files[11]{path,scope}:
+  src/commands.ts,project
   src/git.ts,project
   src/swarm.ts,project
+  test/commands.test.ts,project
   test/edges.test.ts,project
+  test/git-helpers.ts,project
+  test/helpers.ts,project
+  test/install.acceptance.ts,project
+  test/prepare-merge-driver.test.ts,project
   test/swarm.test.ts,project
-tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
-  "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:00:59.407Z",local_mutation,feat/swarm
+  test/tooling.test.ts,project
+tests[2]:
+  - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-15T19:00:59.407Z"
+      source_kind: local_mutation
+      source_ref: feat/swarm
+  - command: "node --test --test-name-pattern=\"fixture mutation\" test/commands.test.ts"
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-15T19:41:57.498Z"
+      source_kind: local_mutation
+      source_ref: feat/swarm-r1
+    updated_by: codex-agent
+    updated_at: "2026-10-15T19:43:07.422Z"
 docs[1]{path,scope}:
   README.md,project
 body: ""

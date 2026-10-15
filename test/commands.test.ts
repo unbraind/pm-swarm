@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
 import type { CommandHandlerContext, ExtensionApi } from '@unbrained/pm-cli/sdk/authoring';
 import extension from '../index.ts';
 import { runCommand } from '../src/commands.ts';
 import { fixture } from './helpers.ts';
+import { assertFixtureRepo, fixtureGit as git } from './git-helpers.ts';
 
 test('registered host commands exercise SDK settings, flags and every command dispatcher', async t => {
   const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema'] });
   /** Run the real host dispatcher with its native bound SDK context. */
   const run = (command: string, options: Record<string, unknown> = {}, args: string[] = []) => ext.runCommand({ command: `swarm ${command}`, pmRoot: f.pmRoot, global: { author: 'swarm-test' }, options, args });
   assert.ok(await run('settings'));
-  await run('settings', { base: 'main', root: '../lanes', branchPrefix: 'parallel/', limit: '2', apply: true });
+  await run('settings', { base: 'main', root: 'lanes', branchPrefix: 'parallel/', limit: '2', apply: true });
   const prefs = JSON.parse(readFileSync(join(f.pmRoot, 'settings.json'), 'utf8')) as { swarm: { branch_prefix: string; lane_limit: number } };
   assert.equal(prefs.swarm.branch_prefix, 'parallel/'); assert.equal(prefs.swarm.lane_limit, 2);
   await assert.rejects(run('settings', { root: f.root, apply: true }), /relative/);
@@ -23,7 +24,20 @@ test('registered host commands exercise SDK settings, flags and every command di
   const id = await f.item(['code.txt']); f.write('code.txt', 'base\n'); f.save(['.agents/pm', 'code.txt']);
   assert.ok(await run('plan', { parent: 'absent', limit: '1' }));
   await assert.rejects(run('start'), /id is required/);
-  await run('start', { agent: 'swarm-test' }, [id]);
+  assertFixtureRepo(f.repo);
+  const packageRepo = git(process.cwd(), ['worktree', 'list', '--porcelain']);
+  const foreign = join(f.root, 'foreign'); mkdirSync(foreign); git(foreign, ['init', '-b', 'main']);
+  f.save([], foreign);
+  const originalCwd = process.cwd();
+  let started: { worktree: string };
+  try {
+    process.chdir(foreign);
+    started = (await run('start', { agent: 'swarm-test' }, [id])).result as { worktree: string };
+  } finally { process.chdir(originalCwd); }
+  assert.equal(git(foreign, ['worktree', 'list', '--porcelain']).includes('parallel/'), false);
+  assert.equal(started.worktree, join(f.repo, 'lanes', `repo-${id}`));
+  assert.equal(git(process.cwd(), ['worktree', 'list', '--porcelain']), packageRepo);
+  assert.match(git(f.repo, ['config', '--get', `swarm.lane.${id}`]), /lanes/);
   await run('status'); await run('sync', {}, [id]); await run('sync', { apply: true, dryRun: true }, [id]); await run('sync', { apply: true }, [id]);
   await run('land'); await run('reap', { dryRun: true }); await run('reap');
 });
@@ -45,4 +59,24 @@ test('native host context resolves the default author and rejects unknown comman
   }, { name: 'context-adapter', capabilities: ['commands'] });
   assert.ok(await ext.runCommand({ command: 'fallback', pmRoot: f.pmRoot }));
   await assert.rejects(ext.runCommand({ command: 'unknown', pmRoot: f.pmRoot }), /Unknown swarm/);
+});
+
+test('plan hides certified read receipts by default and retains them for full and JSON output', async t => {
+  const f = await fixture(t); for (let index = 0; index < 13; index++) await f.item([`src/file-${index}.ts`]);
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema'] });
+  const compact = (await ext.runCommand({ command: 'swarm plan', pmRoot: f.pmRoot, global: { json: false } })).result as Record<string, unknown>;
+  assert.equal('complete_list' in compact, false); assert.equal('read_output' in compact, false);
+  for (const args of [{ options: { full: true }, global: { json: false } }, { global: { json: true } }]) {
+    const full = (await ext.runCommand({ command: 'swarm plan', pmRoot: f.pmRoot, ...args })).result as { complete_list: { item_count: number }; read_output: unknown };
+    assert.equal(full.complete_list.item_count, 13); assert.ok(full.read_output);
+  }
+  await ext.runCommand({ command: 'swarm status', pmRoot: f.pmRoot, options: { full: true } });
+});
+
+test('fixture mutation guards refuse a nested directory resolving to its parent repository', async t => {
+  const f = await fixture(t); const nested = join(f.repo, 'nested'); mkdirSync(nested);
+  const before = git(f.repo, ['config', '--local', '--list']);
+  assert.throws(() => git(nested, ['config', '--local', 'swarm.leak', 'forbidden']), /Fixture Git root escaped/);
+  assert.throws(() => f.save(['.agents/pm'], nested), /Fixture Git root escaped/);
+  assert.equal(git(f.repo, ['config', '--local', '--list']), before);
 });

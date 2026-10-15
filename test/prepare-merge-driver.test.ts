@@ -12,6 +12,7 @@ import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
+import { assertFixtureRepo } from './git-helpers.ts';
 import test, { after } from "node:test";
 
 // npm runs tests from the package root, which is also where it runs `prepare`.
@@ -39,6 +40,7 @@ function checkout(name: string, pmOps: "absent" | "pinned" | "stale"): string {
   const directory = join(scratch, name);
   mkdirSync(join(directory, ".agents", "pm"), { recursive: true });
   assert.equal(spawnSync("git", ["init", "-q"], { cwd: directory }).status, 0);
+  assertFixtureRepo(directory);
   writeFileSync(join(directory, "package.json"), JSON.stringify({ name, type: "module" }));
   copyFileSync(join(root, ".gitattributes"), join(directory, ".gitattributes"));
   copyFileSync(join(root, ".agents", "pm", "settings.json"), join(directory, ".agents", "pm", "settings.json"));
@@ -73,6 +75,7 @@ function stubPm(name: string, status: number, body = ""): string {
  * @param extraEnv - Lifecycle variables such as `npm_command`.
  */
 function prepare(cwd: string, path: string, extraEnv: NodeJS.ProcessEnv = {}): SpawnSyncReturns<string> {
+  assertFixtureRepo(cwd);
   return spawnSync(process.execPath, [launcher], { cwd, encoding: "utf8", env: { ...process.env, PATH: path, ...extraEnv } });
 }
 

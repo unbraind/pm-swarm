@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { PmClient, runTest } from '@unbrained/pm-cli/sdk';
 import { fixture } from './helpers.ts';
-import { git, predict, changedFiles, branchExists, missingDrivers, commit, chain } from '../src/git.ts';
+import { fixtureGit as git } from './git-helpers.ts';
+import { predict, changedFiles, branchExists, missingDrivers, commit, chain } from '../src/git.ts';
 import { partition, separation, overlaps, footprintPath } from '../src/planner.ts';
-import { cleanOrder, minimalConflict } from '../src/order.ts';
+import { cleanOrder, minimalConflict, maximalCleanOrder } from '../src/order.ts';
 import { settings } from '../src/settings.ts';
 import { Swarm } from '../src/swarm.ts';
 import type { Lane } from '../src/types.ts';
@@ -63,7 +65,7 @@ test('status predicts real same-line conflicts, reports disjoint merges and foot
   for (const [i, id] of ids.entries()) {
     const lane = await f.swarm.start(id); f.write(i === 2 ? 'other.txt' : 'same.txt', `lane ${i}\n`, lane.worktree); f.save([i === 2 ? 'other.txt' : 'same.txt'], lane.worktree);
   }
-  const status = await f.swarm.status(); assert.equal(status.lanes.length, 3); assert.equal(status.predictions.length, 6);
+  const status = await f.swarm.status(true); assert.equal(status.lanes.length, 3); assert.equal(status.predictions.length, 6);
   assert.deepEqual(status.predictions.filter(row => row.conflicts.length > 0).map(row => row.conflicts), [['same.txt']]);
   assert.equal(status.lanes[0].ahead, 1); assert.equal(status.lanes[0].behind, 0);
   await f.client.files(ids[0], { remove: ['same.txt'] });
@@ -148,4 +150,69 @@ test('status and sync exclude inherited base changes after a lane updates its ba
   git(lane.worktree, ['merge', '--ff-only', 'main']); f.write('code.txt', 'lane\n', lane.worktree); f.save(['code.txt'], lane.worktree);
   const status = await f.swarm.status(); assert.deepEqual(status.lanes[0].changed_files, ['code.txt']); assert.deepEqual(status.lanes[0].footprint_drift, []);
   assert.deepEqual((await f.swarm.sync(id)).add, []);
+});
+
+test('status names conflicting lanes and base while full output preserves every SHA and tree', async t => {
+  const f = await fixture(t); const ids = [await f.item(['same']), await f.item(['same'])];
+  f.write('same', 'base\n'); f.save(['.agents/pm', 'same']);
+  const starts = [];
+  for (const [index, id] of ids.entries()) {
+    const lane = await f.swarm.start(id); starts.push(lane);
+    f.write('same', `lane ${index}\n`, lane.worktree); f.save(['same'], lane.worktree);
+  }
+  const compact = await f.swarm.status();
+  assert.equal(compact.predictions.length, 1); assert.equal(compact.clean_pairs, 2);
+  const pair = compact.predictions[0];
+  assert.deepEqual([pair.left_id, pair.right_id].sort(), [...ids].sort());
+  assert.equal(pair.left_branch, `swarm/${pair.left_id}`); assert.equal(pair.right_branch, `swarm/${pair.right_id}`);
+  assert.deepEqual(pair.conflicts, ['same']); assert.equal('left' in pair, false); assert.equal('tree' in pair, false);
+  const full = await f.swarm.status(true); assert.equal(full.predictions.length, 3);
+  assert.equal(full.predictions.filter(row => row.right_id === 'base' && row.right_branch === 'main').length, 2);
+  for (const row of full.predictions) { assert.ok('left' in row); assert.ok('right' in row); assert.ok('tree' in row); }
+  f.write('same', 'changed base\n'); f.save(['.agents/pm', 'same']);
+  assert.equal((await f.swarm.status()).predictions.filter(row => row.right_id === 'base').length, 2);
+});
+
+test('partial land maximizes the clean subset, explains blocked peers and executes only selected lanes', async t => {
+  const f = await fixture(t); const ids = [await f.item(['same']), await f.item(['same']), await f.item(['other'])].sort();
+  f.write('same', 'base\n'); f.write('other', 'base\n');
+  f.write('pass.test.js', "const {test}=require('node:test');test('pass',()=>{});\n");
+  for (const id of ids) await f.client.run('test', { id, options: { add: ['command=node --test pass.test.js'] } });
+  f.save(['.agents/pm', 'same', 'other', 'pass.test.js']);
+  const starts = [];
+  for (const [index, id] of ids.entries()) {
+    const lane = await f.swarm.start(id); starts.push(lane);
+    const path = index === 2 ? 'other' : 'same'; f.write(path, `lane ${index}\n`, lane.worktree); f.save([path], lane.worktree);
+  }
+  f.save(); const before = commit(f.repo, 'HEAD');
+  const preview = await f.swarm.land();
+  assert.deepEqual(preview.order, [ids[0], ids[2]]); assert.equal(preview.exit_code, 1); assert.equal(preview.executed, false);
+  assert.deepEqual(preview.conflicting_set.sort(), ids.slice(0, 2));
+  assert.deepEqual(preview.blocked, [{ id: ids[1], branch: starts[1].branch, conflicts: ['same'], peers: [{ id: ids[0], branch: starts[0].branch, conflicts: ['same'], next_step: `rebase ${starts[1].branch} after ${starts[0].branch} lands` }] }]);
+  assert.equal(commit(f.repo, 'HEAD'), before);
+  const blockedSha = commit(f.repo, starts[1].branch); const blockedStatus = git(starts[1].worktree, ['status', '--porcelain']);
+  const execution = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'land', '--execute', '--json'], { cwd: f.repo, env: { ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }, encoding: 'utf8' });
+  assert.equal(execution.status, 1, execution.stderr);
+  const landed = JSON.parse(execution.stdout) as typeof preview; assert.deepEqual(landed.order, preview.order); assert.equal(landed.exit_code, 1); assert.equal(landed.executed, true);
+  assert.equal(git(f.repo, ['show', 'HEAD:same']), 'lane 0'); assert.equal(git(f.repo, ['show', 'HEAD:other']), 'lane 2');
+  assert.equal(commit(f.repo, starts[1].branch), blockedSha); assert.equal(git(starts[1].worktree, ['status', '--porcelain']), blockedStatus);
+  const retry = await f.swarm.land(); assert.equal(retry.exit_code, 1); assert.ok(retry.blocked[0].peers.some(peer => peer.id === 'base'));
+});
+
+test('maximal clean order beats a greedy prefix and handles no clean lane', async t => {
+  const f = await fixture(t); f.write('x', 'base\n'); f.write('y', 'base\n'); f.save(['x', 'y']); const base = commit(f.repo, 'HEAD');
+  const lanes: Lane[] = [];
+  for (const id of ['a', 'b', 'c']) {
+    git(f.repo, ['switch', '-c', id, base]);
+    const files = id === 'a' ? ['x', 'y'] : [id === 'b' ? 'x' : 'y'];
+    for (const file of files) f.write(file, `${id}\n`);
+    const sha = f.save(files);
+    lanes.push({ id, branch: id, sha, base, target: 'main', agent: null, files, terminal: false });
+  }
+  git(f.repo, ['switch', 'main']);
+  assert.deepEqual(maximalCleanOrder(f.repo, base, lanes).map(lane => lane.id), ['b', 'c']);
+  assert.deepEqual(maximalCleanOrder(f.repo, base, [...lanes].reverse()).map(lane => lane.id), ['b', 'c']);
+  f.write('x', 'base changed\n'); f.write('y', 'base changed\n'); const moved = f.save(['x', 'y']);
+  assert.deepEqual(maximalCleanOrder(f.repo, moved, lanes), []);
+  assert.deepEqual(maximalCleanOrder(f.repo, moved, []), []);
 });

@@ -6,11 +6,11 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:05.170Z"
-updated_at: "2026-10-15T19:12:08.575Z"
+updated_at: "2026-10-15T20:04:27.135Z"
 author: codex-agent
 estimated_minutes: 375
 acceptance_criteria: Six swarm commands pass real git and SDK integration tests; all release gates pass at four 100 percent coverage dimensions; no tracked host paths; maintainer reviews before publication.
-comments[8]{created_at,author,text}:
+comments[10]{created_at,author,text}:
   "2026-10-15T18:29:27.225Z",codex-agent,"Companion specification: pm-cli-website-zlzh. Local package only; no publication or remote writes. Certified SDK corpus, conservative footprints, actual git merge simulation, private worktree locations. Supplied pm-lint lacks the sync caller; copied the identical pinned caller from supplied pm-jev reference."
   "2026-10-15T18:39:09.567Z",codex-agent,"Implemented command engines and SDK wiring. Regression suite uses real git and SDK trackers. SDK gaps: custom extension fields cannot be selected by get --fields, so full reads are used; claim_state must be requested explicitly. Settings private sections require SDK file/path read APIs, with governed mutateWorkspaceSettings for writes. Landing uses chained synthetic commits and tests merged snapshots before local merges."
   "2026-10-15T18:54:10.392Z",codex-agent,"Read-only dogfood on an isolated pm-vcs copy: 134 corpus items, 8 ready candidates, 4 planning waves, 14 separation pairs; 0 active lanes, 0 merge predictions, 0 conflicts. Suggested ids: pm-vcs-dispatch104, pm-vcs-j7mz, pm-vcs-w3yi, pm-vcs-00mb. Tracked state unchanged. Zero active lanes is zero-case conflict evidence."
@@ -19,6 +19,8 @@ comments[8]{created_at,author,text}:
   "2026-10-15T19:04:39.016Z",codex-agent,"Scoped PM-linked acceptance passes 10/10 with zero failed/skipped/cancelled/todo, through one passing linked command. Verification details, exact negative controls, full-suite scope, isolated copied-repository counts, SDK limitations and the development advisory are in docs/verification.md. No hosted services, remote writes, agents or publication were used. The maintainer owns final review and item closure."
   "2026-10-15T19:09:05.769Z",codex-agent,"Review validation completed: every curated source/doc/license artifact has explicit item ownership and every item has an estimate. Acceptance estimates are planning context, not measured execution duration. Claims remain released after local review handoff."
   "2026-10-15T19:12:08.569Z",codex-agent,"The first complete npm release gate passed 63 suite tests plus 1 packed-consumer acceptance test. Review then found and fixed inherited-base footprint accounting in status/sync. The new regression passes 1/1, and independently reverting status and sync each causes an assertion failure. Final gates will rerun the expanded 64-test suite on the final commit."
+  "2026-10-15T19:51:32.425Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-07o2 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
+  "2026-10-15T20:04:13.686Z",codex-agent,"Final Round 1 gates: npm run release:check and bun run release:check both pass in ordinary and CI-like environments. Each of the four runs passed 70/70 suite tests and 1/1 packed npm/npx plus native Bun/bunx acceptance, with zero fail/skip/cancel/todo. Coverage remains 100% statements/branches/functions/lines across 18 source files at unchanged thresholds; identity, types, lint, zero duplication, docstrings, production audit (zero findings), package allowlist, changelog and attestation checks pass. CI-like environment used fresh HOME, GIT_CONFIG_GLOBAL=/dev/null, GIT_CONFIG_NOSYSTEM=1, CI=true, GITHUB_ACTIONS=true and hosted source ref feat/swarm. All eight linked items passed 12 commands / 90 tests. No source changes during the four successful gate runs. Existing development-toolchain advisory remains tracked separately."
 files[7]{path,scope}:
   index.ts,project
   LICENSE,project

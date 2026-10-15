@@ -4,6 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, appendFile
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
+import { assertFixtureRepo } from './git-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, t => {
@@ -13,6 +14,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
   const run = (cwd: string, bin: string, args: string[]) => {
     const env = { ...process.env, HOME: scratch, PM_PATH: join(cwd, '.agents/pm'), PM_AUTHOR: 'install-test', GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', NPM_CONFIG_USERCONFIG: '/dev/null', npm_config_userconfig: '/dev/null' };
     for (const key of Object.keys(env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete (env as NodeJS.ProcessEnv)[key];
+    if (bin === 'git' && args[0] !== 'init') assertFixtureRepo(cwd);
     const result = spawnSync(bin, args, { cwd, env, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
     assert.equal(result.status, 0, `${bin} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`); return result.stdout;
   };
@@ -27,9 +29,9 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     /** Invoke the installed host with the packed project extension enabled. */
     const pm = (...args: string[]) => run(cwd, runner, [...prefix, ...args]);
     pm('init', 'consumer', '--defaults', '--agent-guidance', 'skip');
-    appendFileSync(join(cwd, '.gitignore'), '\n.agents/pm/extensions/\nnode_modules/\n');
+    appendFileSync(join(cwd, '.gitignore'), '\n.agents/pm/extensions/\nnode_modules/\nlanes/\n');
     pm('install', tarball, '--project');
-    pm('swarm', 'settings', '--limit', '2', '--apply', '--json');
+    pm('swarm', 'settings', '--root', 'lanes', '--limit', '2', '--apply', '--json');
     const raw = JSON.parse(readFileSync(join(cwd, '.agents/pm/settings.json'), 'utf8')) as { swarm: { lane_limit: number } }; assert.equal(raw.swarm.lane_limit, 2);
     const id = (JSON.parse(pm('create', 'Task', 'Consumer lane', '--json')) as { id: string }).id;
     pm('files', id, '--add', 'code.txt'); writeFileSync(join(cwd, 'code.txt'), 'base\n');
@@ -38,8 +40,12 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     run(cwd, 'git', ['add', '.agents/pm', '.gitignore', '.gitattributes', 'code.txt', 'package.json', 'verify.test.js', ...(existsSync(join(cwd, 'package-lock.json')) ? ['package-lock.json'] : []), ...(existsSync(join(cwd, 'bun.lock')) ? ['bun.lock'] : [])]);
     run(cwd, 'git', ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record consumer']);
     const plan = JSON.parse(pm('swarm', 'plan', '--json')) as { suggested_start_set: string[] }; assert.deepEqual(plan.suggested_start_set, [id]); assert.match(pm('swarm', 'plan'), /suggested_start_set/);
+    assert.doesNotMatch(pm('swarm', 'plan'), /complete_list|read_output|estimated_tokens/);
+    assert.match(pm('swarm', 'plan', '--full'), /complete_list/);
     const start = JSON.parse(pm('swarm', 'start', id, '--agent', 'install-test', '--json')) as { branch: string }; assert.equal(start.branch, `swarm/${id}`);
     const status = JSON.parse(pm('swarm', 'status', '--json')) as { lanes: unknown[] }; assert.equal(status.lanes.length, 1);
+    const detailed = JSON.parse(pm('swarm', 'status', '--full', '--json')) as { predictions: { left_id: string; right_id: string; tree: string }[] };
+    assert.equal(detailed.predictions.length, 1); assert.equal(detailed.predictions[0].left_id, id); assert.equal(detailed.predictions[0].right_id, 'base'); assert.match(detailed.predictions[0].tree, /^[a-f0-9]{40,64}$/);
     assert.equal((JSON.parse(pm('swarm', 'sync', id, '--json')) as { dry_run: boolean }).dry_run, true);
     assert.deepEqual((JSON.parse(pm('swarm', 'land', '--json')) as { order: string[] }).order, [id]);
     run(cwd, 'git', ['add', '.agents/pm']);

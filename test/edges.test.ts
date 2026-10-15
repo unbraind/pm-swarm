@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
-import { PmClient, runTest } from '@unbrained/pm-cli/sdk';
-import { fixture } from './helpers.ts';
+import { PmClient, runTest, acknowledgeLinkedTests, nowIso, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef } from '@unbrained/pm-cli/sdk';
+import { fixture, linkFromBranch } from './helpers.ts';
+import { fixtureGit as git } from './git-helpers.ts';
 import { Swarm } from '../src/swarm.ts';
-import { git, commit, predict, missingDrivers, branchExists } from '../src/git.ts';
+import { commit, predict, missingDrivers, branchExists } from '../src/git.ts';
 import { verifyLinkedTests } from '../src/test-runner.ts';
 import { settings } from '../src/settings.ts';
 
@@ -47,7 +48,7 @@ test('Git failure and missing driver diagnostics remain explicit', async t => {
 });
 
 test('land refuses dirty worktrees, missing or failing tests and mismatched targets before moving base', async t => {
-  const f = await fixture(t); assert.deepEqual(await f.swarm.land(true), { order: [], conflicting_set: [], executed: true });
+  const f = await fixture(t); assert.deepEqual(await f.swarm.land(true), { order: [], conflicting_set: [], blocked: [], executed: true });
   const id = await f.item(); f.save(); await f.swarm.start(id); const head = commit(f.repo, 'HEAD');
   await assert.rejects(f.swarm.land(true), /clean worktree/); f.save();
   await assert.rejects(f.swarm.land(true), /no linked tests/); assert.equal(commit(f.repo, 'HEAD'), commit(f.repo, 'main'));
@@ -77,10 +78,17 @@ test('land bounds exhaustive search and refuses untrusted linked tests', async t
   for (let index = 1; index < 9; index++) git(f.repo, ['branch', '-d', `lane-${index}`]);
   const id = (await f.swarm.lanes())[0].id;
   // Record through the real SDK from a different branch to create foreign provenance.
-  git(f.repo, ['switch', '-c', 'authoring']);
-  await f.client.run('test', { id, options: { add: ['command=node --test absent.test.js'] } });
-  f.save(); git(f.repo, ['switch', 'main']); git(f.repo, ['merge', '--ff-only', 'authoring']);
+  const tests = await linkFromBranch(f, id);
+  assert.equal(tests[0].provenance?.source_ref, 'authoring');
+  const trust = await resolveLinkedTestTrustBatch(f.pmRoot, tests, await resolveLinkedTestSourceRef(f.repo));
+  assert.equal(trust[0].reason, 'foreign_source_ref');
+  const before = commit(f.repo, 'HEAD');
   await assert.rejects(f.swarm.land(true), /untrusted/);
+  assert.equal(commit(f.repo, 'HEAD'), before);
+  await acknowledgeLinkedTests(f.pmRoot, tests, nowIso());
+  assert.equal((await resolveLinkedTestTrustBatch(f.pmRoot, tests, 'main'))[0].reason, 'acknowledged');
+  await assert.rejects(f.swarm.land(true), /Linked tests failed/);
+  assert.equal(commit(f.repo, 'HEAD'), before);
 });
 
 
@@ -100,4 +108,16 @@ test('landing notices a lane ref changed by a real Git merge hook', async t => {
   f.save(); const ordered = (await f.swarm.land()).order; const last = lanes.find(lane => lane.id === ordered[1])!;
   writeFileSync(join(f.repo, '.git/hooks/pre-merge-commit'), `#!/bin/sh\ngit update-ref refs/heads/${last.branch} HEAD\n`, { mode: 0o755 });
   await assert.rejects(f.swarm.land(true), /Lane changed during landing/);
+});
+
+test('hosted source refs deliberately trust matching provenance across local branch switches', async t => {
+  const f = await fixture(t); const id = await f.item(); f.save(); await f.swarm.start(id);
+  process.env.GITHUB_HEAD_REF = 'hosted-feature';
+  const tests = await linkFromBranch(f, id);
+  assert.equal(tests[0].provenance?.source_ref, 'hosted-feature');
+  assert.equal(await resolveLinkedTestSourceRef(f.repo), 'hosted-feature');
+  assert.equal((await resolveLinkedTestTrustBatch(f.pmRoot, tests, await resolveLinkedTestSourceRef(f.repo)))[0].reason, 'local_source_ref');
+  const before = commit(f.repo, 'HEAD');
+  await assert.rejects(f.swarm.land(true), /Linked tests failed/);
+  assert.equal(commit(f.repo, 'HEAD'), before);
 });
