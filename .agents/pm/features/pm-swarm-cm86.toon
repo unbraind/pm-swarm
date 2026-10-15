@@ -6,13 +6,14 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:39.655Z"
-updated_at: "2026-10-15T19:08:39.476Z"
+updated_at: "2026-10-15T19:12:03.158Z"
 author: codex-agent
 estimated_minutes: 15
 acceptance_criteria: Default preview; explicit apply uses SDK files semantics and repository relative paths.
 parent: pm-swarm-07o2
-comments[1]{created_at,author,text}:
+comments[2]{created_at,author,text}:
   "2026-10-15T18:53:33.233Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T19:11:55.857Z",codex-agent,"Sync compares against the current target merge base, so inherited base files and tracker updates are not linked as agent changes. Reverting only sync to the recorded starting base makes the new real-worktree regression fail with ERR_ASSERTION, exit 1. Exact source bytes restored."
 files[2]{path,scope}:
   src/swarm.ts,project
   test/swarm.test.ts,project

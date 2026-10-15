@@ -6,15 +6,16 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:34.844Z"
-updated_at: "2026-10-15T19:08:35.679Z"
+updated_at: "2026-10-15T19:11:58.300Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Real branch pairs and current base tip merges; drift and ahead behind; prove tracker driver behavior.
 parent: pm-swarm-07o2
-comments[3]{created_at,author,text}:
+comments[4]{created_at,author,text}:
   "2026-10-15T18:53:26.967Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T18:54:04.606Z",codex-agent,Git merge-tree executes configured pm item and history drivers. Two independently added SDK comments both survive in the merged item and history tree. Replacing the item driver with a failing command yields a tracker-path conflict. Driver receipts precede Git output; the predictor parses the NUL-delimited tree record and retains every unresolved tracker path. No source history is repaired or rewritten by simulation.
   "2026-10-15T19:02:32.565Z",codex-agent,"Behavioural revert proof: replaced only predict with the pre-feature no-conflict behavior. The real three-lane same-line conflict regression failed with ERR_ASSERTION, exit 1. Restored exact function bytes. Disjoint-file and tracker-driver predictions pass in the complete suite."
+  "2026-10-15T19:11:53.235Z",codex-agent,"Base-update regression passes 1/1 on real Git: after a lane fast-forwards newer base commits then edits its own file, status lists only the lane file and no inherited-base drift. Reverting only status to the recorded starting base makes this test fail with ERR_ASSERTION, exit 1. Exact source bytes restored."
 files[3]{path,scope}:
   src/git.ts,project
   src/swarm.ts,project

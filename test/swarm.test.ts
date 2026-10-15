@@ -140,3 +140,12 @@ test('land backtracks to the only clean three-lane order, chains ancestry, tests
   const result = await f.swarm.land(true); assert.equal(result.executed, true); assert.deepEqual(result.order, ids);
   assert.equal(git(f.repo, ['show', 'HEAD:x.txt']), '2'); assert.equal(git(f.repo, ['show', 'HEAD:y.txt']), '2'); assertPrivate(f.repo, f.root);
 });
+
+
+test('status and sync exclude inherited base changes after a lane updates its base', async t => {
+  const f = await fixture(t); const id = await f.item(['code.txt']); f.write('code.txt', 'base\n'); f.save(['.agents/pm', 'code.txt']);
+  const lane = await f.swarm.start(id); f.write('inherited.txt', 'upstream\n'); f.save(['.agents/pm', 'inherited.txt']);
+  git(lane.worktree, ['merge', '--ff-only', 'main']); f.write('code.txt', 'lane\n', lane.worktree); f.save(['code.txt'], lane.worktree);
+  const status = await f.swarm.status(); assert.deepEqual(status.lanes[0].changed_files, ['code.txt']); assert.deepEqual(status.lanes[0].footprint_drift, []);
+  assert.deepEqual((await f.swarm.sync(id)).add, []);
+});

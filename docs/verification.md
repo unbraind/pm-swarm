@@ -2,13 +2,15 @@
 
 The package is unpublished. `main` contains the initial scaffold; implementation is on `feat/swarm`. No repository, PR, tag, release, publish or push was created.
 
-The complete real-Git/SDK suite passed 63 tests with zero failed, skipped, cancelled or todo tests. All 18 authored modules, including tooling and extension entry points, reached 100% statements, branches, functions and lines. Thresholds remain 100 in every dimension, with no ignored source modules. The packed npm/npx and native Bun/bunx acceptance passed one test spanning both independent consumers, all commands, host TOON/JSON, local landing and tracker privacy.
+The final release gates require all 64 real-Git/SDK tests to pass with zero failed, skipped, cancelled or todo tests. The preceding complete run passed 63 tests; the added base-update regression passed separately before the final gates. All 18 authored modules, including tooling and extension entry points, reached 100% statements, branches, functions and lines. Thresholds remain 100 in every dimension, with no ignored source modules. The packed npm/npx and native Bun/bunx acceptance passed one test spanning both independent consumers, all commands, host TOON/JSON, local landing and tracker privacy.
 
 The scoped PM-linked command also passed 10 tests, zero failed/skipped/cancelled/todo.
 
 Three negative controls replaced one feature function at a time with its absent-feature behavior: `separation` returned no reasons, `predict` reported no conflicts, and `cleanOrder` returned input order. Each targeted regression failed with ERR_ASSERTION and exit 1. Each source file was restored byte-for-byte; import or compilation errors were not accepted as proof. The initial scaffold had no implementation, so these are behavioral reverts of each feature rather than reversions to an existing algorithm.
 
 Conflict prediction uses Git 2.53.0's actual merge engine. Two lane commits changing the same line produce a conflict, while a third lane changing a separate file does not. Every lane is also compared with its current target tip. The three-lane fixture checks all six permutations and only `a → b → c` succeeds. Simulations chain real unreferenced merge commits so later merge bases retain correct ancestry.
+
+A later base-update regression checks that status and sync exclude inherited base files after a lane updates its base. Independently reverting either function to the recorded starting base fails that regression with ERR_ASSERTION (two additional controls); both functions were restored exactly.
 
 Tracker-path experiment: both independent SDK comments survive in the resulting item and history tree with the configured pm drivers. Setting the item driver to a failing command creates a tracker conflict. Drivers print receipt text before Git's NUL-delimited result, which the predictor parses separately. Unresolved tracker paths are retained explicitly. Simulation changes no source tracker history. Driver clone-local runtime receipts are ignored state.
 

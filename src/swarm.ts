@@ -102,7 +102,7 @@ export class Swarm {
   async status() {
     const lanes = await this.lanes(); const predictions = [];
     const rows = lanes.map(lane => {
-      const tip = commit(this.repo, lane.target); const changed = changedFiles(this.repo, lane.base, lane.sha);
+      const tip = commit(this.repo, lane.target); const changed = changedFiles(this.repo, tip, lane.sha);
       const [behind, ahead] = git(this.repo, ['rev-list', '--left-right', '--count', `${tip}...${lane.sha}`]).split(/\s+/).map(Number);
       predictions.push(predict(this.repo, lane.sha, tip));
       return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
@@ -115,7 +115,7 @@ export class Swarm {
   async sync(id: string, apply = false) {
     const lane = (await this.lanes()).find(row => row.id === id);
     if (lane === undefined) throw new Error('No active lane for item');
-    const files = changedFiles(this.repo, lane.base, lane.sha).map(footprintPath);
+    const files = changedFiles(this.repo, commit(this.repo, lane.target), lane.sha).map(footprintPath);
     const add = files.filter(path => !lane.files.includes(path));
     if (apply && add.length > 0) await this.client.files(id, { add, author: this.author });
     return { id, dry_run: !apply, add };
