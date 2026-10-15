@@ -6,10 +6,21 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-15T18:30:08.627Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-15T19:05:56.021Z"
 author: codex-agent
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
+comments[1]{created_at,author,text}:
+  "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+files[6]{path,scope}:
+  index.ts,project
+  package.json,project
+  src/commands.ts,project
+  src/settings.ts,project
+  test/commands.test.ts,project
+  test/install.acceptance.ts,project
+tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:01:19.572Z",local_mutation,feat/swarm
+docs[1]{path,scope}:
+  README.md,project
 body: ""

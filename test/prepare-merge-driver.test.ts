@@ -26,7 +26,7 @@ const posixOnly = { skip: process.platform === "win32" };
 
 /** Every merge driver `.gitattributes` asks Git to use, e.g. `pm-history` from `merge=pm-history`. */
 const declaredDrivers = [
-  ...new Set([...readFileSync(join(root, ".gitattributes"), "utf8").matchAll(/\bmerge=([\w-]+)/g)].map((match) => match[1])),
+  ...new Set([...readFileSync(join(root, ".gitattributes"), "utf8").matchAll(/\bmerge=(pm-[\w-]+)/g)].map((match) => match[1])),
 ].sort();
 
 /**

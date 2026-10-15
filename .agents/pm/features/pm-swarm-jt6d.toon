@@ -6,10 +6,21 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:48.077Z"
-updated_at: "2026-10-15T18:29:52.218Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-15T19:05:52.851Z"
 author: codex-agent
 acceptance_criteria: Backtrack chained merge trees; minimal conflicting subset if impossible; require passing linked tests and clean local merges.
 parent: pm-swarm-07o2
+comments[2]{created_at,author,text}:
+  "2026-10-15T18:53:40.315Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T19:02:34.909Z",codex-agent,"Behavioural revert proof: replaced only cleanOrder with input order. The real three-lane ordering regression failed with ERR_ASSERTION, exit 1. All six permutations are checked; only a then b then c is clean. Restored exact function bytes. Linked tests are checked on every merged candidate before local execution."
+files[5]{path,scope}:
+  src/order.ts,project
+  src/swarm.ts,project
+  src/test-runner.ts,project
+  test/edges.test.ts,project
+  test/swarm.test.ts,project
+tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:01:12.063Z",local_mutation,feat/swarm
+docs[1]{path,scope}:
+  README.md,project
 body: ""

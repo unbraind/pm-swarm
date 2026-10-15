@@ -6,10 +6,20 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:34.844Z"
-updated_at: "2026-10-15T18:29:37.884Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-15T19:05:48.440Z"
 author: codex-agent
 acceptance_criteria: Real branch pairs and current base tip merges; drift and ahead behind; prove tracker driver behavior.
 parent: pm-swarm-07o2
+comments[3]{created_at,author,text}:
+  "2026-10-15T18:53:26.967Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T18:54:04.606Z",codex-agent,Git merge-tree executes configured pm item and history drivers. Two independently added SDK comments both survive in the merged item and history tree. Replacing the item driver with a failing command yields a tracker-path conflict. Driver receipts precede Git output; the predictor parses the NUL-delimited tree record and retains every unresolved tracker path. No source history is repaired or rewritten by simulation.
+  "2026-10-15T19:02:32.565Z",codex-agent,"Behavioural revert proof: replaced only predict with the pre-feature no-conflict behavior. The real three-lane same-line conflict regression failed with ERR_ASSERTION, exit 1. Restored exact function bytes. Disjoint-file and tracker-driver predictions pass in the complete suite."
+files[3]{path,scope}:
+  src/git.ts,project
+  src/swarm.ts,project
+  test/swarm.test.ts,project
+tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:01:03.850Z",local_mutation,feat/swarm
+docs[1]{path,scope}:
+  README.md,project
 body: ""

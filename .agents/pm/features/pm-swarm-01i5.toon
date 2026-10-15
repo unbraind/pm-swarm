@@ -6,10 +6,19 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:30.677Z"
-updated_at: "2026-10-15T18:29:33.268Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-15T19:05:45.997Z"
 author: codex-agent
 acceptance_criteria: Atomic SDK claim rejects foreign holders; branch and SHA fields registered; paths stay local; driver registration checked.
 parent: pm-swarm-07o2
+comments[1]{created_at,author,text}:
+  "2026-10-15T18:53:18.922Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+files[4]{path,scope}:
+  src/git.ts,project
+  src/swarm.ts,project
+  test/edges.test.ts,project
+  test/swarm.test.ts,project
+tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:00:59.407Z",local_mutation,feat/swarm
+docs[1]{path,scope}:
+  README.md,project
 body: ""

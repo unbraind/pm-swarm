@@ -6,10 +6,19 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:28.066Z"
-updated_at: "2026-10-15T18:29:29.939Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-15T19:05:44.364Z"
 author: codex-agent
 acceptance_criteria: SDK readiness and claims; overlaps and dependencies separate safe waves; unknown footprints isolated; complete receipt retained.
 parent: pm-swarm-07o2
+comments[2]{created_at,author,text}:
+  "2026-10-15T18:53:09.837Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
+  "2026-10-15T19:02:30.084Z",codex-agent,"Behavioural revert proof: replaced only separation with its pre-feature empty-reason behavior. The partition regression failed with ERR_ASSERTION, exit 1. Restored the exact original function bytes; no import or build failure counted as proof."
+files[3]{path,scope}:
+  src/planner.ts,project
+  src/swarm.ts,project
+  test/swarm.test.ts,project
+tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:00:55.522Z",local_mutation,feat/swarm
+docs[1]{path,scope}:
+  README.md,project
 body: ""
