@@ -1,0 +1,15 @@
+id: pm-swarm-dbn3
+title: Retire only merged terminal lanes
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:29:54.320Z"
+updated_at: "2026-10-15T18:29:58.668Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
+parent: pm-swarm-07o2
+body: ""

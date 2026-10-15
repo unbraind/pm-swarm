@@ -1,0 +1,15 @@
+id: pm-swarm-cm86
+title: Synchronize linked file footprints
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:29:39.655Z"
+updated_at: "2026-10-15T18:29:45.821Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: Default preview; explicit apply uses SDK files semantics and repository relative paths.
+parent: pm-swarm-07o2
+body: ""

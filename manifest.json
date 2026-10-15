@@ -1,0 +1,13 @@
+{
+  "name": "pm-swarm",
+  "version": "2026.10.15",
+  "description": "Git worktree lanes and real conflict prediction for parallel pm agents",
+  "author": "@unbraind",
+  "entry": "./dist/index.js",
+  "pm_min_version": "2026.10.15",
+  "priority": 90,
+  "capabilities": [
+    "commands",
+    "schema"
+  ]
+}

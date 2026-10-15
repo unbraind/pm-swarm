@@ -1,0 +1,15 @@
+id: pm-swarm-9kio
+title: Partition ready work by footprints and dependencies
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:29:28.066Z"
+updated_at: "2026-10-15T18:29:29.939Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: SDK readiness and claims; overlaps and dependencies separate safe waves; unknown footprints isolated; complete receipt retained.
+parent: pm-swarm-07o2
+body: ""

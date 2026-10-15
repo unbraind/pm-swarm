@@ -1,0 +1,15 @@
+id: pm-swarm-y972
+title: Integrate settings and package quality gates
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:30:00.964Z"
+updated_at: "2026-10-15T18:30:08.627Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
+parent: pm-swarm-07o2
+body: ""

@@ -1,0 +1,15 @@
+id: pm-swarm-01i5
+title: Claim and create isolated worktree lanes
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:29:30.677Z"
+updated_at: "2026-10-15T18:29:33.268Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: Atomic SDK claim rejects foreign holders; branch and SHA fields registered; paths stay local; driver registration checked.
+parent: pm-swarm-07o2
+body: ""

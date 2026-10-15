@@ -1,0 +1,15 @@
+id: pm-swarm-4343
+title: Predict conflicts from real git merges
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:29:34.844Z"
+updated_at: "2026-10-15T18:29:37.884Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: Real branch pairs and current base tip merges; drift and ahead behind; prove tracker driver behavior.
+parent: pm-swarm-07o2
+body: ""

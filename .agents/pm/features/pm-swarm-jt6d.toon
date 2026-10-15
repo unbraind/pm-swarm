@@ -1,0 +1,15 @@
+id: pm-swarm-jt6d
+title: Find and execute clean landing order
+description: ""
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-15T18:29:48.077Z"
+updated_at: "2026-10-15T18:29:52.218Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: Backtrack chained merge trees; minimal conflicting subset if impossible; require passing linked tests and clean local merges.
+parent: pm-swarm-07o2
+body: ""
