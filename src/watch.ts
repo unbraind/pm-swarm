@@ -1,4 +1,4 @@
-import { encode } from '@toon-format/toon';
+import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
 import type { Swarm } from './swarm.ts';
 
 /** The measured status shape shared with the normal status command. */
@@ -65,6 +65,6 @@ export async function runWatch(swarm: Swarm, interval: number, json: boolean): P
   const stop = () => controller.abort();
   process.on('SIGINT', stop);
   try {
-    await watchStatus(swarm, interval, controller.signal, event => { process.stdout.write(json ? `${JSON.stringify(event)}\n` : `${encode(event)}\n\n`); });
+    await watchStatus(swarm, interval, controller.signal, event => { process.stdout.write(json ? `${JSON.stringify(event)}\n` : `${encodeToon(event)}\n\n`); });
   } finally { process.removeListener('SIGINT', stop); }
 }
