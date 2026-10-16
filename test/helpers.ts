@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, appendFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -23,7 +24,7 @@ export async function fixture(t: TestContext) {
   const pmRoot = join(repo, '.agents/pm'); const client = new PmClient({ cwd: repo, pmRoot, author: 'swarm-test', noExtensions: false });
   await client.init('swarm-test', { defaults: true, agentGuidance: 'skip' });
   mkdirSync(join(pmRoot, 'extensions/pm-swarm'), { recursive: true });
-  writeFileSync(join(pmRoot, 'extensions/pm-swarm/manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema'] }));
+  writeFileSync(join(pmRoot, 'extensions/pm-swarm/manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers'] }));
   writeFileSync(join(pmRoot, 'extensions/pm-swarm/entry.js'), `export { default } from '${new URL('../index.ts', import.meta.url).href}';\n`);
   appendFileSync(join(repo, '.gitignore'), '\n.agents/pm/extensions/\n');
   const swarm = new Swarm(repo, pmRoot, client, 'swarm-test');
@@ -43,4 +44,12 @@ export async function linkFromBranch(f: Awaited<ReturnType<typeof fixture>>, id:
   await f.client.run('test', { id, options: { add: ['command=node --test absent.test.js'] } });
   f.save(); git(f.repo, ['switch', 'main']); git(f.repo, ['merge', '--ff-only', 'authoring']);
   return (await f.client.run('test', { id, options: { list: true } }) as TestResult).tests;
+}
+
+/** Invoke native CLI option parsing against a real fixture with scrubbed Git targeting. */
+export function swarmCli(f: Awaited<ReturnType<typeof fixture>>, args: string[]) {
+  const command = join(import.meta.dirname, '../node_modules/.bin/pm');
+  return spawnSync(process.execPath, [command, 'swarm', ...args, '--json'], {
+    cwd: f.repo, encoding: 'utf8', env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }),
+  });
 }

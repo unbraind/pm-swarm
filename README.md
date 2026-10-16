@@ -17,12 +17,34 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | Command | Example | Behavior |
 | --- | --- | --- |
 | plan | `pm swarm plan --parent project-id --limit 3` | Certified full corpus, SDK readiness and claim view, safe parallel waves |
-| start | `pm swarm start task-id --agent worker --base main --root ../lanes` | Claim, create worktree and branch, record portable fields |
+| next | `pm swarm next --agent worker --parent project-id` | Pick the best safe ready item and claim/create its lane; `--dry-run` previews the choice and makes no changes |
+| start | `pm swarm start task-id --agent worker --base main --root ../lanes` | Claim, create worktree and branch, record portable fields; warn on overlaps, or refuse with `--strict` |
 | status | `pm swarm status` | Conflicting pairs and clean pair count; `--full` includes every SHA/tree; active branches, ahead/behind current target, changed files, drift, pair and base-tip predictions |
+| status --watch | `pm swarm status --watch --interval 2 --json` | Stream lane and conflict changes as JSON lines (TOON blocks by default); stop with Ctrl-C |
 | sync | `pm swarm sync task-id --dry-run` | Preview changed-file links; `--apply` writes through the SDK |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
 | reap | `pm swarm reap --dry-run` | Preview cleanup; omit flag to remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
+
+The agent loop is `next` → work → `sync` → `land`:
+
+```sh
+pm swarm next --agent worker --parent project-id --dry-run
+pm swarm next --agent worker --parent project-id
+# Use the printed worktree and branch, edit, test, and commit your work.
+pm swarm sync task-id --agent worker --apply
+pm swarm status --watch --interval 2
+pm swarm land --json
+pm swarm land --execute
+```
+
+`next` uses the same certified corpus and SDK dependency readiness as `plan`, excluding existing lanes and both own and foreign claims. It selects known footprints that do not intersect any nonterminal lane's declared footprint or actual changed paths, measured with Git from the current target's merge base. Priority sorts ascending (0 first), then creation time ascending (oldest first), then item ID. A lower priority safe item beats a higher priority overlapping item. Output includes the selection reason and skipped candidates with overlapping lane IDs and paths. `--parent` selects direct children. Selection and start share a repository operation lease; the SDK claim is the final ownership check.
+
+Unknown candidate footprints are deferred until no known safe item exists, then started with an explicit warning. An active lane with neither linked nor changed paths cannot establish safety and blocks known candidates conservatively. When no eligible item remains, `selected` is null and no lane is created. `--dry-run` makes no claim, item/history edit, branch, worktree, or local Git configuration change. Normal host SDK read caches may still be refreshed. `next` uses the configured base, root and branch prefix, just as `start` does.
+
+`start` includes `overlap_warnings`, naming each active lane and the candidate and lane paths. The default still starts successfully; `pm swarm start task-id --strict` refuses overlaps before claiming or creating a worktree. These checks prevent obvious overlapping edits; real merge predictions remain available through `status` and `land`.
+
+`status --watch` emits initial lanes/conflicts as additions, then only changes: `lane_added`, `lane_changed`, `lane_removed`, `conflict_predicted`, `conflict_changed`, and `conflict_resolved`. Ahead/behind counts, changed files and footprint drift participate in lane comparisons. Repeated identical polls emit nothing. The default interval is two seconds; smaller positive requests are clamped to two seconds, and values above 86400 seconds or nonfinite/nonpositive values are rejected. `--interval` requires `--watch`. Ctrl-C exits successfully and clears the pending timer. Watch reads local refs without fetching; fetch remote work explicitly when needed. TOON blocks are separated by blank lines; `--json` emits one event per line. Watch uses the host-pinned SDK codec, keeping the package free of runtime dependencies.
 
 Each planning wave contains mutually compatible items. The first wave is the suggested start set. Every incompatible pair carries its separation reasons: equal or containing paths, dependencies, or an unknown footprint. Missing file links always mean `footprint: unknown`, with a solitary wave. Capacity is enforced independently by `--limit`. The SDK excludes blocked work and unfinished containers; only open and unclaimed items start in a plan. `--parent` selects direct children. Readiness is advisory: the SDK claim is the atomic ownership check when starting.
 
@@ -52,4 +74,4 @@ pm swarm status --full
 pm swarm land --json
 ```
 
-`status` reports conflicts without failing the process; `land` supplies the conflict exit gate. For package development, run `npm run release:check` and `bun run release:check` with isolated HOME and Git configuration. CI verifies tracker health, commit identity, TypeScript, lint, duplication, docstrings, four 100% coverage dimensions, production audit, package allowlist, generated changelog, release attestation and packed npm/native Bun consumers. Release has only a manual trigger plus an approval variable; scheduled publication stays disabled.
+`status` reports conflicts without failing the process; `land` supplies the conflict exit gate. For package development, run `npm run release:check` and `bun run release:check` with isolated HOME and Git configuration. CI verifies tracker health, commit identity, TypeScript, lint, duplication, docstrings, four 100% coverage dimensions, production audit, package allowlist, generated changelog, release attestation and packed npm/native Bun consumers. Packed acceptance extracts `npm pack`, installs the directory with `pm install <dir> --project` into fresh Git repositories and trackers, and checks real host commands through Node, npx, Bun and bunx, including TOON/JSON watch shutdown. A built artifact import check rejects dependencies outside Node built-ins and the pm SDK. Release has only a manual trigger plus an approval variable; scheduled publication stays disabled.

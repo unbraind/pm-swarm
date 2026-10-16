@@ -1,0 +1,34 @@
+id: pm-swarm-next
+title: Pick and start safe ready work automatically
+description: "Add next selection with active footprint and Git change exclusions, deterministic priority ordering and read-only previews."
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-16T13:15:53.913Z"
+updated_at: "2026-10-16T15:55:03.049Z"
+author: codex-agent
+estimated_minutes: 100
+acceptance_criteria: "Real Git and tracker regressions cover overlap exclusions, readiness, ordering, unknown fallback and dry-run purity."
+parent: pm-swarm-07o2
+comments[7]{created_at,author,text}:
+  "2026-10-16T13:18:18.456Z",codex-agent,"Design: reuse certified SDK readiness; rank priority then creation time then id; hold the shared repository lease across pick and claim/start. Compare declared active footprints plus actual merge-base diffs. Dry-run takes no write lease."
+  "2026-10-16T13:23:45.767Z",codex-agent,"Focused integration suite: 11/11 pass, including default and custom agent selection, dependencies, direct parent filtering, own/foreign claims, unknown fallback, priority/age/id ordering and byte-identical dry-run fixture state. Use certified corpus ownership to avoid per-item read usage ledger writes during selection."
+  "2026-10-16T13:26:24.563Z",codex-agent,"Behavioural revert proof: changing only nextLane to omit active overlap exclusion made the regression choose the higher priority overlapping item; focused test exited 1 (0 pass, 1 fail). Restored implementation. Tests import TypeScript sources, so no dist rebuild was needed."
+  "2026-10-16T13:57:28.933Z",codex-agent,"Final gates: npm run release:check and bun run release:check pass normally and with CI=1, isolated HOME, GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. Each run: 93/93 tests plus 1/1 packed npm/native Bun acceptance, zero failures/skips/cancellations, 21 authored source files at 100 percent statements, branches, functions and lines. Statements/lines 1337/1337; functions 72/72; branches 601/601 for normal npm and 600/600 for the other runs. Identity, types, lint, zero duplication, docstrings, production audit, package allowlist, changelog and publish attestation pass. Three behavioural revert proofs are recorded. Publication remains maintainer-gated."
+  "2026-10-16T15:27:54.181Z",codex-agent,"Round 2: address the three review findings with real tracker regression tests, an observed two-poll watch silence check, and complete dry-run documentation. Main is already an ancestor of this branch. Will record behavioral revert proof and rerun all release gates plus packed installation acceptance."
+  "2026-10-16T15:31:17.120Z",codex-agent,"Round 2: completed the README next row: dry-run previews the choice and makes no changes. The shared file-footprint fallback is retained and measured using real SDK reads; four SDK-created/legacy CLI regressions exercise start --strict and next. Behavioral revert proof is recorded on pm-swarm-overlap."
+  "2026-10-16T15:54:59.828Z",codex-agent,"Round 2 final validation: npm run release:check and bun run release:check pass normally and under env HOME=\"$(mktemp -d)\" GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 CI=1. Each configuration passes 97/97 suite tests and 2/2 packed acceptance tests, with zero failures, skips or cancellations. All 21 authored source files retain 100 percent statements, branches, functions and lines at unchanged thresholds. The linked next command also passes 7/7 tests. Completed the dry-run README sentence; missing-files revert proof is on pm-swarm-overlap. Ready for orchestrator verification; leaving status in progress."
+files[7]{path,scope}:
+  src/commands.ts,project
+  src/planner.ts,project
+  src/swarm.ts,project
+  test/commands.test.ts,project
+  test/helpers.ts,project
+  test/install.acceptance.ts,project
+  test/next-watch.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"next\" test/next-watch.test.ts",project,codex-agent,"2026-10-16T13:23:38.544Z",local_mutation,feat/next-and-watch
+docs[1]{path,scope}:
+  README.md,project
+body: ""

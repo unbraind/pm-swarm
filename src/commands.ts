@@ -6,6 +6,7 @@ import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbra
 import { git } from './git.ts';
 import { settings } from './settings.ts';
 import { Swarm } from './swarm.ts';
+import { runWatch, watchInterval } from './watch.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Read a scalar flag without accepting repeated or non-text values. */
@@ -40,8 +41,16 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
         const { complete_list: _complete, read_output: _read, ...compact } = result;
         return compact;
       }
-      case 'start': return swarm.start(id, opts);
-      case 'status': return swarm.status(ctx.options.full === true);
+      case 'next': return swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
+      case 'start': return swarm.start(id, opts, ctx.options.strict === true);
+      case 'status': {
+        if (ctx.options.watch === true) {
+          await runWatch(swarm, watchInterval(textOption(ctx.options.interval)), ctx.global.json === true || ctx.global.outputFormat === 'json');
+          return { swarm_watch_complete: true };
+        }
+        if (ctx.options.interval !== undefined) throw new Error('--interval requires --watch');
+        return swarm.status(ctx.options.full === true);
+      }
       case 'sync': return swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true);
       case 'land': return swarm.land(ctx.options.execute === true);
       case 'reap': return swarm.reap(ctx.options.dryRun === true);
@@ -59,18 +68,23 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
+  for (const format of ['toon', 'json'] as const) api.registerRenderer(format, () => '', {
+    commands: ['swarm status'],
+    resultDiscriminator: result => typeof result === 'object' && result !== null && 'swarm_watch_complete' in result && result.swarm_watch_complete === true,
+  });
   api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref'].map(name => ({ name, type: 'string', optional: true })));
   const definitions = {
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
-    start: { description: 'Claim an item and create a private worktree lane', flags: ['agent', 'base', 'root'], id: true },
-    status: { description: 'Predict branch conflicts and report footprint drift', flags: ['full'], id: false },
+    next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
+    start: { description: 'Claim an item and create a private worktree lane', flags: ['agent', 'base', 'root', 'strict'], id: true },
+    status: { description: 'Predict branch conflicts and report footprint drift', flags: ['full', 'watch', 'interval'], id: false },
     sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
     reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
     settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'apply'], id: false },
   };
   for (const [name, definition] of Object.entries(definitions)) {
-    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
+    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
     api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: derive safe parallel work from pm and Git', arguments: definition.id ? [{ name: 'id', required: true }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }
