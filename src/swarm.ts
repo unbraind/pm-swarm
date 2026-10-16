@@ -8,7 +8,7 @@ import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, st
 import type { PmClient, TestResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
 import { branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
-import { footprintPath, overlaps, partition } from './planner.ts';
+import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
@@ -49,7 +49,7 @@ export class Swarm {
     for (const { item } of ready) {
       if (item.status !== statuses.open_status || item.swarm_branch || (parent !== undefined && item.parent !== parent)) continue;
       if (item.assignee?.trim()) continue;
-      candidates.push({ id: item.id, files: (item.files ?? []).map(file => footprintPath(file.path)), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
+      candidates.push({ id: item.id, files: itemFootprint(item), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
     }
     return { candidates, corpus };
   }
@@ -114,8 +114,7 @@ export class Swarm {
     if (statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(prefs.schema))) throw new Error('Cannot start a terminal item');
     const view = await this.client.get(id, { fields: 'id,assignee,claim_state' });
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
-    // Full SDK reads materialize file collections, including empty arrays.
-    const overlap_warnings = this.footprintOverlaps(item.files!.map(file => footprintPath(file.path)), await this.activeFootprints());
+    const overlap_warnings = this.footprintOverlaps(itemFootprint(item), await this.activeFootprints());
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     await this.client.claim(item.id, { author: this.author });
@@ -142,7 +141,7 @@ export class Swarm {
       if (typeof item.swarm_branch !== 'string' || !branchExists(this.repo, item.swarm_branch)) continue;
       if (typeof item.swarm_base !== 'string') throw new Error(`Lane ${item.id} has no base SHA`);
       const target = typeof item.swarm_base_ref === 'string' ? item.swarm_base_ref : config.base;
-      lanes.push({ id: item.id, branch: item.swarm_branch, sha: commit(this.repo, item.swarm_branch), base: commit(this.repo, item.swarm_base), target, agent: item.assignee ?? null, files: (item.files ?? []).map(file => footprintPath(file.path)), terminal: statusIsTerminal(item.status, statuses) });
+      lanes.push({ id: item.id, branch: item.swarm_branch, sha: commit(this.repo, item.swarm_branch), base: commit(this.repo, item.swarm_base), target, agent: item.assignee ?? null, files: itemFootprint(item), terminal: statusIsTerminal(item.status, statuses) });
     }
     return lanes;
   }

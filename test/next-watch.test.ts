@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
@@ -9,6 +10,7 @@ import { createExtensionTestHarness, decodeToon } from '@unbrained/pm-cli/sdk/te
 import extension from '../index.ts';
 import { git as repoGit } from '../src/git.ts';
 import { Swarm } from '../src/swarm.ts';
+import { itemFootprint } from '../src/planner.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { statusChanges, watchInterval, watchStatus } from '../src/watch.ts';
 import { fixture, swarmCli } from './helpers.ts';
@@ -101,6 +103,31 @@ test('start warns on declared and changed paths and strict refuses before claim 
   assert.deepEqual(result.overlap_warnings.map(row => [row.lane_id, row.path]), [[id, 'other.txt'], [id, 'src/a.ts']]);
 });
 
+for (const legacy of [false, true]) for (const command of ['start', 'next']) test(`${command} starts a ${legacy ? 'legacy' : 'SDK-created'} item that never had files`, async t => {
+  const f = await fixture(t);
+  const id = (await f.client.create({ type: 'Task', title: 'Work without file links' })).item.id;
+  const path = join(f.pmRoot, 'tasks', `${id}.toon`);
+  if (legacy) {
+    // Older trackers may omit the optional files field entirely.
+    writeFileSync(path, `id: ${id}\ntitle: Legacy work\ndescription: ""\ntype: Task\nstatus: open\npriority: 2\ntags: []\ncreated_at: "2026-01-01T00:00:00.000Z"\nupdated_at: "2026-01-01T00:00:00.000Z"\nbody: ""\n`);
+  }
+  assert.doesNotMatch(readFileSync(path, 'utf8'), /^files[:[]/m);
+  const full = (await f.client.get(id, { depth: 'full' })).item;
+  assert.deepEqual(full.files, [], 'the pinned SDK materializes empty collections on full reads');
+  const standard = (await f.client.get(id)).item;
+  assert.equal(standard.files, undefined, 'a real standard SDK read omits empty file collections');
+  assert.deepEqual(itemFootprint(standard), [], 'the shared start/planning fallback accepts omitted files');
+  f.save();
+  const result = swarmCli(f, command === 'start' ? ['start', id, '--strict'] : ['next']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const lane = JSON.parse(result.stdout) as { id: string; selected?: string; branch: string; worktree: string; warnings?: string[]; overlap_warnings: unknown[] };
+  assert.equal(lane.id, id); assert.equal(lane.branch, `swarm/${id}`);
+  assert.equal(git(lane.worktree, ['branch', '--show-current']), lane.branch);
+  assert.deepEqual(lane.overlap_warnings, []);
+  if (command === 'next') { assert.equal(lane.selected, id); assert.match(lane.warnings!.join(' '), /Unknown footprint/); }
+  assert.equal((await f.client.get(id)).claim_state?.assignee, 'swarm-test');
+});
+
 test('CLI next flags and strict starts use the real host and return normal success for warnings', async t => {
   const f = await fixture(t); const parent = (await f.client.create({ type: 'Epic', title: 'CLI parent' })).item.id;
   const id = await f.item(['src']); await f.client.update(id, { parent }); f.save();
@@ -152,17 +179,19 @@ for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines
   git(right.worktree, ['switch', '--detach']);
   const sender = join(f.root, 'sender');
   repoGit(f.root, ['clone', '--branch', right.branch, f.repo, sender]);
-  const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }), stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test', PM_SWARM_TEST_POLL_HEARTBEAT: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
   const exit = once(child, 'exit'); t.after(() => { child.kill('SIGKILL'); });
   let output = ''; let error = ''; child.stdout.on('data', data => { output += String(data); }); child.stderr.on('data', data => { error += String(data); });
   /** Decode only complete frames so separate pipe chunks cannot race assertions. */
   const records = () => output.split(json ? '\n' : '\n\n').slice(0, -1).filter(part => part.trim() !== '').map(part => (json ? JSON.parse(part) : decodeToon(part)) as { event: string; data: { id?: string } });
   /** Wait for semantic output, with bounded failure diagnostics. */
   const until = async (predicate: () => boolean) => { const deadline = Date.now() + 15000; while (!predicate() && Date.now() < deadline) await delay(30); assert.ok(predicate(), output + error); };
-  await until(() => ids.every(id => records().some(row => row.event === 'lane_added' && row.data.id === id)));
-  const initial = output; await delay(2300); assert.equal(output, initial, 'unchanged polls are silent');
+  await until(() => error.includes('pm-swarm:test:poll-complete\n') && ids.every(id => records().some(row => row.event === 'lane_added' && row.data.id === id)));
+  /** Observe two completed serial polls after the current output, independent of Git speed. */
+  const twoPolls = async () => { const count = error.split('pm-swarm:test:poll-complete\n').length - 1; await until(() => error.split('pm-swarm:test:poll-complete\n').length - 1 >= count + 2); };
+  const initial = output; await twoPolls(); assert.equal(output, initial, 'two completed unchanged polls are silent');
   f.write('same.txt', 'right\n', sender); f.save(['same.txt'], sender);
-  await delay(2300); assert.equal(output, initial, 'an unpushed sender commit does not change watched refs');
+  await twoPolls(); assert.equal(output, initial, 'two completed polls ignore an unpushed sender commit');
   git(sender, ['push', 'origin', right.branch]);
   assert.equal(git(f.repo, ['rev-parse', right.branch]), git(sender, ['rev-parse', 'HEAD']));
   await until(() => records().some(row => row.event === 'conflict_predicted'));

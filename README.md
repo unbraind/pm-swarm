@@ -17,7 +17,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | Command | Example | Behavior |
 | --- | --- | --- |
 | plan | `pm swarm plan --parent project-id --limit 3` | Certified full corpus, SDK readiness and claim view, safe parallel waves |
-| next | `pm swarm next --agent worker --parent project-id` | Pick the best safe ready item and claim/create its lane; `--dry-run` previews the choice and skips |
+| next | `pm swarm next --agent worker --parent project-id` | Pick the best safe ready item and claim/create its lane; `--dry-run` previews the choice and makes no changes |
 | start | `pm swarm start task-id --agent worker --base main --root ../lanes` | Claim, create worktree and branch, record portable fields; warn on overlaps, or refuse with `--strict` |
 | status | `pm swarm status` | Conflicting pairs and clean pair count; `--full` includes every SHA/tree; active branches, ahead/behind current target, changed files, drift, pair and base-tip predictions |
 | status --watch | `pm swarm status --watch --interval 2 --json` | Stream lane and conflict changes as JSON lines (TOON blocks by default); stop with Ctrl-C |

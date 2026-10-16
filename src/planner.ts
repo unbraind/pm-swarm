@@ -7,6 +7,10 @@ export function footprintPath(path: string): string {
   if (clean.startsWith('/') || /^[A-Za-z]:/.test(clean) || clean === '..' || clean.startsWith('../') || clean.includes('\0')) throw new Error('Footprints must be repository-relative paths');
   return clean;
 }
+/** Treat omitted SDK file collections as unknown footprints on every lane path. */
+export function itemFootprint(item: { files?: readonly { path: string }[] }): string[] {
+  return (item.files ?? []).map(file => footprintPath(file.path));
+}
 /** Equality and directory containment both imply intersecting footprints. */
 export function overlaps(left: string, right: string): boolean {
   const a = footprintPath(left); const b = footprintPath(right);

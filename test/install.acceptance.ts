@@ -76,19 +76,24 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     for (const json of [false, true]) {
       const watchArgs = [host, 'swarm', 'status', '--watch', '--interval', '0.1'];
       if (json) watchArgs.push('--json');
-      const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: environment(cwd), cwd, timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: { ...environment(cwd), PM_SWARM_TEST_POLL_HEARTBEAT: '1' }, cwd, timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
       const exit = once(child, 'exit');
       const stream = { output: '', error: '' };
       child.stdout.on('data', chunk => { stream.output += chunk.toString(); });
       child.stderr.on('data', chunk => { stream.error += chunk.toString(); });
       try {
         const deadline = Date.now() + 15000;
-        while (!stream.output.includes(json ? '\n' : '\n\n') && child.exitCode === null && Date.now() < deadline) await delay(30);
+        while ((!stream.output.includes(json ? '\n' : '\n\n') || !stream.error.includes('pm-swarm:test:poll-complete\n')) && child.exitCode === null && Date.now() < deadline) await delay(30);
         assert.doesNotMatch(stream.output + stream.error, /Extension activation failures|Unknown command/);
+        assert.ok(stream.error.includes('pm-swarm:test:poll-complete\n'), stream.output + stream.error);
         const frame = stream.output.split(json ? '\n' : '\n\n')[0];
         const event = (json ? JSON.parse(frame) : decodeToon(frame)) as { event: string; data: { id: string } };
         assert.equal(event.event, 'lane_added'); assert.equal(event.data.id, id);
-        const initial = stream.output; await delay(2300);
+        const initial = stream.output;
+        const polls = stream.error.split('pm-swarm:test:poll-complete\n').length - 1;
+        const pollDeadline = Date.now() + 15000;
+        while (stream.error.split('pm-swarm:test:poll-complete\n').length - 1 < polls + 2 && child.exitCode === null && Date.now() < pollDeadline) await delay(30);
+        assert.ok(stream.error.split('pm-swarm:test:poll-complete\n').length - 1 >= polls + 2, stream.output + stream.error);
         assert.equal(stream.output, initial, 'unchanged packed watch polls are silent');
         child.kill('SIGINT');
         const [code, signal] = await exit;

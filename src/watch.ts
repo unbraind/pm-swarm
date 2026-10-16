@@ -54,6 +54,7 @@ export async function watchStatus(swarm: Swarm, interval: number, signal: AbortS
     const current = await swarm.status();
     for (const event of statusChanges(previous, current)) emit(event);
     previous = current;
+    if (process.env.PM_SWARM_TEST_POLL_HEARTBEAT === '1') process.stderr.write('pm-swarm:test:poll-complete\n');
     if (!signal.aborted) await pause(interval, signal);
   }
 }
