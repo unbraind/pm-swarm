@@ -1,6 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { gitEnvironment } from '../src/git-environment.ts';
 import { test } from 'node:test';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -8,11 +6,11 @@ import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
 import type { CommandHandlerContext, ExtensionApi } from '@unbrained/pm-cli/sdk/authoring';
 import extension from '../index.ts';
 import { runCommand } from '../src/commands.ts';
-import { fixture } from './helpers.ts';
+import { fixture, swarmCli } from './helpers.ts';
 import { assertFixtureRepo, fixtureGit as git } from './git-helpers.ts';
 
 test('registered host commands exercise SDK settings, flags and every command dispatcher', async t => {
-  const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema'] });
+  const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
   /** Run the real host dispatcher with its native bound SDK context. */
   const run = (command: string, options: Record<string, unknown> = {}, args: string[] = []) => ext.runCommand({ command: `swarm ${command}`, pmRoot: f.pmRoot, global: { author: 'swarm-test' }, options, args });
   assert.ok(await run('settings'));
@@ -65,7 +63,7 @@ test('native host context resolves the default author and rejects unknown comman
 
 test('plan hides certified read receipts by default and retains them for full and JSON output', async t => {
   const f = await fixture(t); for (let index = 0; index < 13; index++) await f.item([`src/file-${index}.ts`]);
-  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema'] });
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
   const compact = (await ext.runCommand({ command: 'swarm plan', pmRoot: f.pmRoot, global: { json: false } })).result as Record<string, unknown>;
   assert.equal('complete_list' in compact, false); assert.equal('read_output' in compact, false);
   for (const args of [{ options: { full: true }, global: { json: false } }, { global: { json: true } }]) {
@@ -88,7 +86,7 @@ for (const useAgent of [false, true]) test(`CLI reap and sync ${useAgent ? 'acce
   const f = await fixture(t); const ids = [await f.item(), await f.item()]; f.save();
   /** Exercise real CLI option parsing and SDK ownership against the fixture tracker. */
   const run = (...args: string[]) => {
-    const result = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', ...args, '--json'], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }), encoding: 'utf8' });
+    const result = swarmCli(f, args);
     assert.equal(result.status, 0, result.stderr); return JSON.parse(result.stdout) as { released: string[]; dry_run: boolean };
   };
   for (const [index, id] of ids.entries()) run('start', id, '--agent', index === 0 ? 'lane-agent' : 'foreign-agent');

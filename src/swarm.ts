@@ -12,7 +12,7 @@ import { footprintPath, overlaps, partition } from './planner.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
-import type { Lane, SwarmSettings } from './types.ts';
+import type { Candidate, Lane, SwarmSettings } from './types.ts';
 
 /** Bind all operations to one real repository, tracker, and caller identity. */
 export class Swarm {
@@ -32,25 +32,69 @@ export class Swarm {
   /** Load and certify the entire item corpus; never silently plan a partial tracker. */
   async corpus() { return certifyCompleteListResult(await this.client.listAllComplete()); }
 
-  /** Select open ready unclaimed work through SDK actionability and claim views. */
+  /** Select open ready unclaimed work through SDK actionability and certified ownership. */
   async plan(parent?: string, limit?: number) {
-    const corpus = await this.corpus(); const config = await settings(this.pmRoot, limit === undefined ? {} : { lane_limit: limit });
-    const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = resolveItemTypeRegistry(prefs);
-    const report = computeActionabilityReport(corpus.items, corpus.items, statuses, types);
-    const ready = selectActionableEntries(report, statuses, {}, types).ready;
-    const candidates = [];
-    for (const { item } of ready) {
-      if (item.status !== statuses.open_status || (parent !== undefined && item.parent !== parent)) continue;
-      const view = await this.client.get(item.id, { fields: 'id,assignee,claim_state' });
-      if (view.claim_state?.claimed !== false) continue;
-      candidates.push({ id: item.id, files: (item.files ?? []).map(file => footprintPath(file.path)), dependencies: (item.dependencies ?? []).map(dep => dep.id) });
-    }
+    const config = await settings(this.pmRoot, limit === undefined ? {} : { lane_limit: limit });
+    const { candidates, corpus } = await this.readyCandidates(parent);
     return { ...partition(candidates, config.lane_limit), complete_list: corpus.complete_list, read_output: corpus.read_output };
   }
 
+  /** Use the same certified readiness and ownership rules for plan and next. */
+  private async readyCandidates(parent?: string) {
+    const corpus = await this.corpus();
+    const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = resolveItemTypeRegistry(prefs);
+    const report = computeActionabilityReport(corpus.items, corpus.items, statuses, types);
+    const ready = selectActionableEntries(report, statuses, {}, types).ready;
+    const candidates: (Candidate & { priority: number; created_at: string })[] = [];
+    for (const { item } of ready) {
+      if (item.status !== statuses.open_status || item.swarm_branch || (parent !== undefined && item.parent !== parent)) continue;
+      if (item.assignee?.trim()) continue;
+      candidates.push({ id: item.id, files: (item.files ?? []).map(file => footprintPath(file.path)), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
+    }
+    return { candidates, corpus };
+  }
+
   /** Claim before creating a worktree, and keep its absolute location only in local Git config. */
-  async start(id: string, overrides: Partial<SwarmSettings> = {}) {
-    return this.exclusive(() => this.startLane(id, overrides));
+  async start(id: string, overrides: Partial<SwarmSettings> = {}, strict = false) {
+    return this.exclusive(() => this.startLane(id, overrides, strict));
+  }
+
+  /** Pick and publish under one lease; previews take no lease and perform no mutations. */
+  async next(parent?: string, dryRun = false) {
+    if (dryRun) return this.nextLane(parent, true);
+    return this.exclusive(() => this.nextLane(parent, false));
+  }
+
+  /** Rank ready work, exclude active overlaps, and explain every skipped candidate. */
+  private async nextLane(parent: string | undefined, dryRun: boolean) {
+    const { candidates } = await this.readyCandidates(parent);
+    candidates.sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+    const active = await this.activeFootprints();
+    const evaluated = candidates.map(item => ({ item, overlaps: this.footprintOverlaps(item.files, active) }));
+    const safe = evaluated.find(row => row.item.files.length > 0 && row.overlaps.length === 0);
+    const chosen = safe ?? evaluated.find(row => row.item.files.length === 0);
+    const unknown = chosen !== undefined && chosen.item.files.length === 0;
+    const warnings = unknown ? ['Unknown footprint: no known conflict-free candidate exists; inspect the lane before editing.'] : [];
+    const skipped = evaluated.filter(row => row !== chosen).map(row => ({ id: row.item.id, reasons: row.overlaps.length > 0 ? row.overlaps.map(overlap => `Overlap with lane ${overlap.lane_id} on path ${overlap.path} (${overlap.lane_path})`) : [row.item.files.length === 0 ? 'Unknown footprint deferred' : 'Lower rank: priority, then oldest creation time, then id'], overlaps: row.overlaps }));
+    const reason = chosen === undefined ? 'No ready unclaimed candidate can start safely' : unknown ? 'Unknown footprint fallback after checking all known candidates' : 'Best non-overlapping candidate by priority, then oldest creation time, then id';
+    const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown) : undefined;
+    return { ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
+  }
+
+  /** Combine declared footprints and real branch diffs for nonterminal lanes. */
+  private async activeFootprints() {
+    return (await this.lanes()).filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
+  }
+
+  /** Name every intersecting path and conservatively block unmeasured active lanes. */
+  private footprintOverlaps(files: string[], active: (Lane & { changed: string[] })[]) {
+    const result: { lane_id: string; branch: string; path: string; lane_path: string }[] = [];
+    for (const lane of active) {
+      const paths = [...new Set([...lane.files, ...lane.changed])].sort();
+      if (paths.length === 0 && files.length > 0) result.push({ lane_id: lane.id, branch: lane.branch, path: '*', lane_path: 'unknown footprint' });
+      for (const path of files) for (const lanePath of paths) if (overlaps(path, lanePath)) result.push({ lane_id: lane.id, branch: lane.branch, path, lane_path: lanePath });
+    }
+    return result;
   }
 
   /** Hold a shared-repository SDK lease across claim and worktree publication. */
@@ -61,7 +105,7 @@ export class Swarm {
   }
 
   /** Publish a lane under the repository operation lease. */
-  private async startLane(id: string, overrides: Partial<SwarmSettings>) {
+  private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean) {
     const config = await settings(this.pmRoot, overrides);
     const item = (await this.client.get(id, { depth: 'full' })).item;
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
@@ -70,6 +114,9 @@ export class Swarm {
     if (statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(prefs.schema))) throw new Error('Cannot start a terminal item');
     const view = await this.client.get(id, { fields: 'id,assignee,claim_state' });
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
+    // Full SDK reads materialize file collections, including empty arrays.
+    const overlap_warnings = this.footprintOverlaps(item.files!.map(file => footprintPath(file.path)), await this.activeFootprints());
+    if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     await this.client.claim(item.id, { author: this.author });
     let created = false;
@@ -83,7 +130,7 @@ export class Swarm {
       if (view.claim_state?.claimed === false) await this.client.release(item.id, { author: this.author });
       throw error;
     }
-    return { id: item.id, branch, base, worktree: path, missing_merge_drivers: missingDrivers(path) };
+    return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
   }
 
   /** Discover lanes from certified item fields and existing local branches. */

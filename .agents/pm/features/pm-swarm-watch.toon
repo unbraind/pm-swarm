@@ -1,0 +1,33 @@
+id: pm-swarm-watch
+title: Watch live lane status changes
+description: Stream TOON blocks or JSON lines for lane and conflict changes with bounded polling and SIGINT shutdown.
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-16T13:15:57.486Z"
+updated_at: "2026-10-16T13:57:32.922Z"
+author: codex-agent
+estimated_minutes: 90
+acceptance_criteria: Child-process watch tests observe pushed conflicting commits and graceful shutdown.
+parent: pm-swarm-07o2
+comments[7]{created_at,author,text}:
+  "2026-10-16T13:18:21.789Z",codex-agent,"Design: serial status polling emits only changed lane rows and newly predicted, changed or resolved conflicts; TOON blocks or JSON lines, minimum two seconds, interruptible SIGINT shutdown. No fetch or remote writes."
+  "2026-10-16T13:23:50.786Z",codex-agent,"Both real CLI child watchers pass: unchanged polls emit nothing; a committed and pushed branch change emits lane_changed and conflict_predicted naming the source path; JSON lines and decoded TOON blocks agree; SIGINT exits zero."
+  "2026-10-16T13:26:27.314Z",codex-agent,"Behavioural revert proof: restoring only runCommand from the base branch made the JSON child watcher emit a one-shot status instead of watch events; focused test exited 1 (0 pass, 1 fail) waiting for lane_added. Restored implementation. Source imports require no dist rebuild."
+  "2026-10-16T13:30:21.031Z",codex-agent,"Shutdown regression found and fixed: the host renders undefined JSON or an empty TOON object when a streaming command returns void. Register renderers scoped to swarm status plus its completion marker; preserve native rendering for ordinary status and every other command. Strengthened child assertions reject trailing non-event records. Final focused suite passes 12/12, including renderer ownership boundaries and pair-order invariance."
+  "2026-10-16T13:36:43.765Z",codex-agent,"Strengthened real-push regression: an independent clone creates the conflicting commit; the watched repository stays unchanged and silent before push. Pushing into the watched lane ref emits lane_changed and conflict_predicted. Both TOON and JSON child watchers pass, with zero trailing non-event records and clean SIGINT exits. Focused suite: 12/12."
+  "2026-10-16T13:44:01.161Z",codex-agent,"Coverage-run test synchronization correction: wait for fully decoded framed records for both initial lanes, and a complete conflict record, instead of matching partial pipe text. This removes the initial-output race under load. Focused suite passes 12/12 with independent-clone push, silent polls and clean shutdown."
+  "2026-10-16T13:57:32.146Z",codex-agent,"Final gates: npm run release:check and bun run release:check pass normally and with CI=1, isolated HOME, GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. Each run: 93/93 tests plus 1/1 packed npm/native Bun acceptance, zero failures/skips/cancellations, 21 authored source files at 100 percent statements, branches, functions and lines. Statements/lines 1337/1337; functions 72/72; branches 601/601 for normal npm and 600/600 for the other runs. Identity, types, lint, zero duplication, docstrings, production audit, package allowlist, changelog and publish attestation pass. Three behavioural revert proofs are recorded. Publication remains maintainer-gated."
+files[6]{path,scope}:
+  manifest.json,project
+  package-lock.json,project
+  package.json,project
+  src/commands.ts,project
+  src/watch.ts,project
+  test/next-watch.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"watch\" test/next-watch.test.ts",project,codex-agent,"2026-10-16T13:23:43.640Z",local_mutation,feat/next-and-watch
+docs[1]{path,scope}:
+  README.md,project
+body: ""

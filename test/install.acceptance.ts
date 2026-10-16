@@ -47,7 +47,10 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     const plan = JSON.parse(pm('swarm', 'plan', '--json')) as { suggested_start_set: string[] }; assert.deepEqual(plan.suggested_start_set, [id]); assert.match(pm('swarm', 'plan'), /suggested_start_set/);
     assert.doesNotMatch(pm('swarm', 'plan'), /complete_list|read_output|estimated_tokens/);
     assert.match(pm('swarm', 'plan', '--full'), /complete_list/);
-    const start = JSON.parse(pm('swarm', 'start', id, '--agent', 'install-test', '--json')) as { branch: string }; assert.equal(start.branch, `swarm/${id}`);
+    const next = JSON.parse(pm('swarm', 'next', '--dry-run', '--agent', 'install-test', '--json')) as { selected: string; dry_run: boolean };
+    assert.equal(next.selected, id); assert.equal(next.dry_run, true);
+    const start = JSON.parse(pm('swarm', 'next', '--agent', 'install-test', '--json')) as { branch: string; selected: string };
+    assert.equal(start.branch, `swarm/${id}`); assert.equal(start.selected, id);
     const status = JSON.parse(pm('swarm', 'status', '--json')) as { lanes: unknown[] }; assert.equal(status.lanes.length, 1);
     const detailed = JSON.parse(pm('swarm', 'status', '--full', '--json')) as { predictions: { left_id: string; right_id: string; tree: string }[] };
     assert.equal(detailed.predictions.length, 1); assert.equal(detailed.predictions[0].left_id, id); assert.equal(detailed.predictions[0].right_id, 'base'); assert.match(detailed.predictions[0].tree, /^[a-f0-9]{40,64}$/);

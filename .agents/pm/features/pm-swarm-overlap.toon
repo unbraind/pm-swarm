@@ -1,0 +1,27 @@
+id: pm-swarm-overlap
+title: Warn or refuse overlapping lane starts
+description: Warn with active lane and path evidence before start; strict mode refuses before claiming.
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-16T13:15:56.090Z"
+updated_at: "2026-10-16T13:57:31.369Z"
+author: codex-agent
+estimated_minutes: 45
+acceptance_criteria: Real repo tests verify declared and changed path overlap warnings and strict refusal.
+parent: pm-swarm-07o2
+comments[4]{created_at,author,text}:
+  "2026-10-16T13:18:19.979Z",codex-agent,"Design: check active nonterminal lanes before claiming. Default start returns structured warnings naming lane and both paths; strict refuses before claim/worktree publication."
+  "2026-10-16T13:26:26.111Z",codex-agent,"Behavioural revert proof: restoring only startLane from the base branch made the strict regression fail with Missing expected rejection; focused test exited 1 (0 pass, 1 fail). Restored implementation. Source imports require no dist rebuild."
+  "2026-10-16T13:44:05.193Z",codex-agent,"Full SDK reads materialize files even when empty; removed the redundant fallback from overlap preflight. All 93 tests passed before the stronger watch synchronization check exposed a fixture race, now corrected. Thresholds remain four dimensions at 100 percent."
+  "2026-10-16T13:57:30.536Z",codex-agent,"Final gates: npm run release:check and bun run release:check pass normally and with CI=1, isolated HOME, GIT_CONFIG_GLOBAL=/dev/null and GIT_CONFIG_NOSYSTEM=1. Each run: 93/93 tests plus 1/1 packed npm/native Bun acceptance, zero failures/skips/cancellations, 21 authored source files at 100 percent statements, branches, functions and lines. Statements/lines 1337/1337; functions 72/72; branches 601/601 for normal npm and 600/600 for the other runs. Identity, types, lint, zero duplication, docstrings, production audit, package allowlist, changelog and publish attestation pass. Three behavioural revert proofs are recorded. Publication remains maintainer-gated."
+files[3]{path,scope}:
+  src/commands.ts,project
+  src/swarm.ts,project
+  test/next-watch.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  "node --test --test-name-pattern=\"start warns|CLI next\" test/next-watch.test.ts",project,codex-agent,"2026-10-16T13:23:41.309Z",local_mutation,feat/next-and-watch
+docs[1]{path,scope}:
+  README.md,project
+body: ""
