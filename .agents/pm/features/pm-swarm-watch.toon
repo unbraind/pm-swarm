@@ -3,15 +3,20 @@ title: Watch live lane status changes
 description: Stream TOON blocks or JSON lines for lane and conflict changes with bounded polling and SIGINT shutdown.
 type: Feature
 pm_format_version: 2
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-16T13:15:57.486Z"
-updated_at: "2026-10-16T15:55:04.773Z"
+updated_at: "2026-10-17T08:06:07.156Z"
+closed_at: "2026-10-17T08:06:07.150Z"
+completed_at: "2026-10-16T16:11:17.000Z"
 author: codex-agent
 estimated_minutes: 90
 acceptance_criteria: Child-process watch tests observe pushed conflicting commits and graceful shutdown.
 parent: pm-swarm-07o2
+resolution: "Delivered by https://github.com/unbraind/pm-swarm/pull/5 (merge e635095e4db8, head 6a996a4ff584)"
+expected_result: Child-process watch tests observe pushed conflicting commits and graceful shutdown.
+actual_result: "Merged at 2026-10-16T16:11:17Z; no readable required checks, so every completed head check run had to succeed, be neutral or be skipped; successful checks: CodeQL, CodeRabbit, codeql, test (22), test (26)"
 comments[21]{created_at,author,text}:
   "2026-10-16T13:18:21.789Z",codex-agent,"Design: serial status polling emits only changed lane rows and newly predicted, changed or resolved conflicts; TOON blocks or JSON lines, minimum two seconds, interruptible SIGINT shutdown. No fetch or remote writes."
   "2026-10-16T13:23:50.786Z",codex-agent,"Both real CLI child watchers pass: unchanged polls emit nothing; a committed and pushed branch change emits lane_changed and conflict_predicted naming the source path; JSON lines and decoded TOON blocks agree; SIGINT exits zero."
@@ -63,4 +68,5 @@ tests[2]:
 docs[2]{path,scope}:
   CHANGELOG.md,project
   README.md,project
+close_reason: "{\"pr\":5,\"url\":\"https://github.com/unbraind/pm-swarm/pull/5\",\"merge_commit_sha\":\"e635095e4db86647c70785fdabb3c15692135186\",\"head_sha\":\"6a996a4ff584f757eef305cb1f9ea0d7c9913eb5\",\"merged_at\":\"2026-10-16T16:11:17Z\",\"checks\":[\"CodeQL\",\"CodeRabbit\",\"codeql\",\"test (22)\",\"test (26)\"]}"
 body: ""

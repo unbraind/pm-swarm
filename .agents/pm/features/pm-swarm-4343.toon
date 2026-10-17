@@ -3,15 +3,20 @@ title: Predict conflicts from real git merges
 description: ""
 type: Feature
 pm_format_version: 2
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:34.844Z"
-updated_at: "2026-10-15T21:32:50.533Z"
+updated_at: "2026-10-17T08:06:07.034Z"
+closed_at: "2026-10-17T08:06:07.021Z"
+completed_at: "2026-10-15T21:37:55.000Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Real branch pairs and current base tip merges; drift and ahead behind; prove tracker driver behavior.
 parent: pm-swarm-07o2
+resolution: "Delivered by https://github.com/unbraind/pm-swarm/pull/2 (merge 265d20b5340c, head 4165541d2343)"
+expected_result: Real branch pairs and current base tip merges; drift and ahead behind; prove tracker driver behavior.
+actual_result: "Merged at 2026-10-15T21:37:55Z; no readable required checks, so every completed head check run had to succeed, be neutral or be skipped; successful checks: CodeQL, CodeRabbit, codeql, test (22), test (26)"
 comments[10]{created_at,author,text}:
   "2026-10-15T18:53:26.967Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T18:54:04.606Z",codex-agent,Git merge-tree executes configured pm item and history drivers. Two independently added SDK comments both survive in the merged item and history tree. Replacing the item driver with a failing command yields a tracker-path conflict. Driver receipts precede Git output; the predictor parses the NUL-delimited tree record and retains every unresolved tracker path. No source history is repaired or rewritten by simulation.
@@ -69,4 +74,5 @@ tests[4]:
       source_ref: feat/swarm-r1
 docs[1]{path,scope}:
   README.md,project
+close_reason: "{\"pr\":2,\"url\":\"https://github.com/unbraind/pm-swarm/pull/2\",\"merge_commit_sha\":\"265d20b5340cd7c1d33358489998fbc2848e6525\",\"head_sha\":\"4165541d2343097d5a9c280848d2653f200bb8c3\",\"merged_at\":\"2026-10-15T21:37:55Z\",\"checks\":[\"CodeQL\",\"CodeRabbit\",\"codeql\",\"test (22)\",\"test (26)\"]}"
 body: ""

@@ -2,15 +2,20 @@ id: pm-swarm-next
 title: Pick and start safe ready work automatically
 description: "Add next selection with active footprint and Git change exclusions, deterministic priority ordering and read-only previews."
 type: Feature
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-16T13:15:53.913Z"
-updated_at: "2026-10-16T15:55:03.049Z"
+updated_at: "2026-10-17T08:06:07.114Z"
+closed_at: "2026-10-17T08:06:07.110Z"
+completed_at: "2026-10-16T16:11:17.000Z"
 author: codex-agent
 estimated_minutes: 100
 acceptance_criteria: "Real Git and tracker regressions cover overlap exclusions, readiness, ordering, unknown fallback and dry-run purity."
 parent: pm-swarm-07o2
+resolution: "Delivered by https://github.com/unbraind/pm-swarm/pull/5 (merge e635095e4db8, head 6a996a4ff584)"
+expected_result: "Real Git and tracker regressions cover overlap exclusions, readiness, ordering, unknown fallback and dry-run purity."
+actual_result: "Merged at 2026-10-16T16:11:17Z; no readable required checks, so every completed head check run had to succeed, be neutral or be skipped; successful checks: CodeQL, CodeRabbit, codeql, test (22), test (26)"
 comments[7]{created_at,author,text}:
   "2026-10-16T13:18:18.456Z",codex-agent,"Design: reuse certified SDK readiness; rank priority then creation time then id; hold the shared repository lease across pick and claim/start. Compare declared active footprints plus actual merge-base diffs. Dry-run takes no write lease."
   "2026-10-16T13:23:45.767Z",codex-agent,"Focused integration suite: 11/11 pass, including default and custom agent selection, dependencies, direct parent filtering, own/foreign claims, unknown fallback, priority/age/id ordering and byte-identical dry-run fixture state. Use certified corpus ownership to avoid per-item read usage ledger writes during selection."
@@ -31,4 +36,5 @@ tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
   "node --test --test-name-pattern=\"next\" test/next-watch.test.ts",project,codex-agent,"2026-10-16T13:23:38.544Z",local_mutation,feat/next-and-watch
 docs[1]{path,scope}:
   README.md,project
+close_reason: "{\"pr\":5,\"url\":\"https://github.com/unbraind/pm-swarm/pull/5\",\"merge_commit_sha\":\"e635095e4db86647c70785fdabb3c15692135186\",\"head_sha\":\"6a996a4ff584f757eef305cb1f9ea0d7c9913eb5\",\"merged_at\":\"2026-10-16T16:11:17Z\",\"checks\":[\"CodeQL\",\"CodeRabbit\",\"codeql\",\"test (22)\",\"test (26)\"]}"
 body: ""
