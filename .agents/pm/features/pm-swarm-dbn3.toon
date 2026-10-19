@@ -2,15 +2,20 @@ id: pm-swarm-dbn3
 title: Retire only merged terminal lanes
 description: ""
 type: Feature
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:54.320Z"
-updated_at: "2026-10-15T21:32:52.353Z"
+updated_at: "2026-10-19T09:17:39.126Z"
+closed_at: "2026-10-19T09:17:39.121Z"
+completed_at: "2026-10-15T21:37:55.000Z"
 author: codex-agent
 estimated_minutes: 30
 acceptance_criteria: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
 parent: pm-swarm-07o2
+resolution: "Delivered by https://github.com/unbraind/pm-swarm/pull/2 (merge 265d20b5340c, head 4165541d2343)"
+expected_result: Preserve active or unmerged work; remove safe worktrees and branches; release only own stale claims.
+actual_result: "Merged at 2026-10-15T21:37:55Z; no readable required checks, so every completed head check run had to succeed, be neutral or be skipped; successful checks: CodeQL, CodeRabbit, codeql, test (22), test (26)"
 comments[8]{created_at,author,text}:
   "2026-10-15T18:53:48.064Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:51:44.210Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-dbn3 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
@@ -58,4 +63,5 @@ tests[3]:
       source_ref: feat/swarm-r1
 docs[1]{path,scope}:
   README.md,project
+close_reason: "{\"pr\":2,\"url\":\"https://github.com/unbraind/pm-swarm/pull/2\",\"merge_commit_sha\":\"265d20b5340cd7c1d33358489998fbc2848e6525\",\"head_sha\":\"4165541d2343097d5a9c280848d2653f200bb8c3\",\"merged_at\":\"2026-10-15T21:37:55Z\",\"checks\":[\"CodeQL\",\"CodeRabbit\",\"codeql\",\"test (22)\",\"test (26)\"]}"
 body: ""
