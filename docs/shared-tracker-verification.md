@@ -17,6 +17,7 @@ All proofs ran against real temporary SDK trackers in an isolated source copy us
 - Replacing only `runCommand` with its origin/main implementation: 0/9 no-git regressions pass; process exits 1. Every command in the eight-command matrix exits 2, first line `Error: Command failed`, with `git rev-parse failed` in the detail.
 - Rebuilding with only `runCommand` reverted, then packing and installing that tarball: the packed non-Git acceptance fails at `next` with exit 2 from the host; the test exits 1.
 - Disabling only `SharedTracker.sharedExclusive`: the eight-process contention regression fails, process exits 1, on a real already-claimed race. The SDK still protects individual claim ownership, but the full batch cannot each select and claim its own safe item.
+- Restoring unconditional awaiting in the command dispatcher: the Git refusal regression fails (exit 2 instead of its existing exit 1). Awaiting only shared-mode operations preserves the Git transport and keeps explicit shared-mode exit-2 refusals.
 - Restoring only the initial `repositoryRoot` function: a real Git regression fails when the ceiling equals the current worktree directory. Moving the ceiling check to ancestor traversal makes the same assertion pass while preserving the non-Git parent ceiling.
 - Reverting only the age-independent comparison in `statusChanges`: the no-git watch regression fails, process exits 1, because age advancement emits spurious `lane_changed` events.
 

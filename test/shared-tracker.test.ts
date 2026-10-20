@@ -15,7 +15,7 @@ import { Swarm } from '../src/swarm.ts';
 import { repositoryRoot } from '../src/workspace.ts';
 import { statusChanges, watchStatus } from '../src/watch.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
-import { fixture } from './helpers.ts';
+import { fixture, swarmCli } from './helpers.ts';
 
 /** Create an SDK tracker outside Git, including the actual extension and a Git-free PATH. */
 async function sharedFixture(t: TestContext) {
@@ -266,4 +266,14 @@ test('shared SDK dispatch covers active, terminal, unknown and explicit-file ope
   await assert.rejects(f.shared.land(), /needs a git repository/); await assert.rejects(run('land', { execute: true }), /needs a git repository/);
   await f.client.release(first); await f.client.release(second);
   await run('plan', {}, []);
+});
+
+
+/** Preserve the existing Git error transport while adding expected shared-mode refusals. */
+test('Git refusal exit codes retain the existing dispatcher behavior', async t => {
+  const f = await fixture(t); const id = await f.item(['src']);
+  await f.client.claim(id, { author: 'foreign-worker' });
+  const result = swarmCli(f, ['start', id]);
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /claimed by foreign-worker/);
 });

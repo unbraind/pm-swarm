@@ -43,19 +43,35 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
         const { complete_list: _complete, read_output: _read, ...compact } = result;
         return compact;
       }
-      case 'next': return await swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
-      case 'start': return await swarm.start(id, opts, ctx.options.strict === true);
+      case 'next': {
+        const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
+        return repo === undefined ? await operation : operation;
+      }
+      case 'start': {
+        const operation = swarm.start(id, opts, ctx.options.strict === true);
+        return repo === undefined ? await operation : operation;
+      }
       case 'status': {
         if (ctx.options.watch === true) {
           await runWatch(swarm, watchInterval(textOption(ctx.options.interval)), ctx.global.json === true || ctx.global.outputFormat === 'json');
           return { swarm_watch_complete: true };
         }
         if (ctx.options.interval !== undefined) throw new Error('--interval requires --watch');
-        return await swarm.status(ctx.options.full === true);
+        const operation = swarm.status(ctx.options.full === true);
+        return repo === undefined ? await operation : operation;
       }
-      case 'sync': return await swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()));
-      case 'land': return await swarm.land(ctx.options.execute === true);
-      case 'reap': return await swarm.reap(ctx.options.dryRun === true);
+      case 'sync': {
+        const operation = swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()));
+        return repo === undefined ? await operation : operation;
+      }
+      case 'land': {
+        const operation = swarm.land(ctx.options.execute === true);
+        return repo === undefined ? await operation : operation;
+      }
+      case 'reap': {
+        const operation = swarm.reap(ctx.options.dryRun === true);
+        return repo === undefined ? await operation : operation;
+      }
       case 'settings': {
         const config = await settings(ctx.pm_root, opts);
         if (isAbsolute(config.root) || /^[A-Za-z]:/.test(config.root)) throw new Error('Tracked swarm root setting must be relative; use start --root for local absolute paths');
