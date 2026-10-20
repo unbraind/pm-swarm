@@ -47,7 +47,7 @@ Measured through native human output in a non-Git tracker with no Git executable
 The host's first-line error title remains generic for land; its full diagnostic explicitly says `pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker` and names next, sync with explicit files, status and reap. Sync without explicit files exits 2 and names `--files a,b`.
 
 
-## Final gate receipts
+## Initial feature gate receipts
 
 Both full gates passed on source commit `7a59afa`, using nvm Node 26.12.0, npm 11.20.0 and Bun 1.3.5, with isolated HOME, global/system Git configuration disabled and CI enabled. Coverage inventory, exclusions and thresholds remain unchanged.
 
@@ -85,3 +85,19 @@ Behavioral proofs use an isolated source copy with the final regressions and the
 - `Swarm.sync`: 0/3 pass, exit 1, missing empty-file and foreign-write refusals and returning duplicate normalized paths.
 
 The item remains in progress. Review threads are left untouched. Hosted coordination remains outside the local tracker acceptance boundary.
+
+
+### Review-round release receipts
+
+Both full release gates pass on the application code, tests and package inputs in source commit `856d26a`, with isolated HOME, global/system Git configuration disabled and CI enabled. Node 26.12.0, npm 11.20.0 and Bun 1.3.5 are used. The configured inventory, exclusions and thresholds are unchanged.
+
+| Gate | Suite | Packed acceptance | Statements / lines | Functions | Branches |
+| --- | --- | --- | --- | --- | --- |
+| `npm run release:check` | 122/122 | 3/3 | 1526/1526 | 90/90 | 780/780 |
+| `bun run release:check` | 122/122 | 3/3 | 1526/1526 | 90/90 | 781/781 |
+
+All 24 authored files are measured at 100 percent in every dimension. Both suites have zero failures, skips or cancellations. The eight-process test retained all eight claims and validated nine history files with strict core health; measured claim batches took 25037 ms (npm) and 16147 ms (Bun).
+
+Packed Git npm/npx and native Bun/bunx consumers, the built dependency allowlist, and the non-Git tarball loop pass in both gates. Full strict health passes for the managed non-Git extension under Node and native Bun with Git absent from PATH. No gate needed a timeout retry. Identity/privacy, types, lint, zero duplication, docstrings, production audit, package contents, changelog and release attestation all pass. Both pack dry-runs reported tarball shasum `43becd5976a48522c42577e32638e2f27505d55e`.
+
+The final handoff changes only this verification note and append-only PM receipts; application code, tests and package inputs remain those of `856d26a`. The pre-existing development-tool advisory remains tracked in pm-swarm-zn7m. No new PM CLI/SDK bug was observed; the host still uses generic refusal headings with actionable details. The feature remains in progress with its claim released.
