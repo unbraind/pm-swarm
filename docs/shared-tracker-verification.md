@@ -45,3 +45,21 @@ Measured through native human output in a non-Git tracker with no Git executable
 | settings | 2; `Error: Command failed` | 0; `swarm:` |
 
 The host's first-line error title remains generic for land; its full diagnostic explicitly says `pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker` and names next, sync with explicit files, status and reap. Sync without explicit files exits 2 and names `--files a,b`.
+
+
+## Final gate receipts
+
+Both full gates passed on source commit `7a59afa`, using nvm Node 26.12.0, npm 11.20.0 and Bun 1.3.5, with isolated HOME, global/system Git configuration disabled and CI enabled. Coverage inventory, exclusions and thresholds remain unchanged.
+
+| Gate | Suite | Packed acceptance | Statements / lines | Functions | Branches |
+| --- | --- | --- | --- | --- | --- |
+| `npm run release:check` | 112/112 | 3/3 | 1523/1523 | 90/90 | 753/753 |
+| `bun run release:check` | 112/112 | 3/3 | 1523/1523 | 90/90 | 753/753 |
+
+All 24 authored source files are measured at 100 percent in every dimension. Both gates have zero failures, skips or cancellations, zero duplication and a clean production audit. Typechecking, lint, docstrings, package contents, generated changelog, release attestation and actual packed consumers pass.
+
+The eight-process claim test retained all eight unique claims and validated all nine history files in 24646 ms in the npm gate and 28004 ms in the Bun gate. Strict core health passed for the source fixture; full managed-extension strict health passed in the packed non-Git tracker under Node and native Bun. These timings include process startup and contention under host load.
+
+The packed non-Git smoke uses `pm install ./package.tgz --project`, then next, sync with explicit files, status and terminal stale-claim reap. Git is absent from PATH during that loop. Existing Git-mode test files remain unchanged, and a new regression preserves their existing refusal exit transport.
+
+Node 22 and Node 26 CI passed on the tested source. The final handoff changes only this verification note and append-only PM evidence, with the feature left in progress and its claim released. No merge, tag, release or publication was performed.
