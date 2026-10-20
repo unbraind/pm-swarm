@@ -11,9 +11,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { decodeToon } from '@unbrained/pm-cli/sdk/testing';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
+import { requireBun } from './install-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, async t => {
+  requireBun();
   const root = process.cwd(); const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'swarm-install-')));
   t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
   const decoy = join(scratch, 'decoy'); mkdirSync(decoy); fixtureGit(decoy, ['init', '-b', 'main']);
@@ -135,6 +137,7 @@ test('built artifact has zero runtime dependencies beyond Node and the pm SDK', 
 
 /** Exercise the actual tarball on a plain tracker through Node and native Bun. */
 test('packed tarball coordinates a non-git tracker with explicit files and healthy history', { timeout: 600000 }, async t => {
+  const bun = requireBun();
   const packageRoot = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-shared-install-'));
   t.after(() => rm(scratch, { recursive: true, force: true }));
   const repo = join(scratch, 'project'); mkdirSync(repo);
@@ -155,7 +158,6 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
   invoke(process.execPath, ['init', 'packed-shared', '--defaults', '--agent-guidance', 'skip']);
   invoke(process.execPath, ['install', `./${filename}`, '--project']);
   const nodeBin = join(scratch, 'node-only'); mkdirSync(nodeBin); symlinkSync(process.execPath, join(nodeBin, 'node'));
-  const bun = spawnSync('bun', ['-e', 'process.stdout.write(process.execPath)'], { encoding: 'utf8' }).stdout.trim(); assert.ok(bun);
   env.PATH = nodeBin;
   for (const runtime of [process.execPath, bun]) {
     const id = invoke(runtime, ['create', 'Task', 'Packed shared lane']).id as string;

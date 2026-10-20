@@ -159,7 +159,7 @@ export class Swarm {
     if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
     const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
     const add = files.filter(path => !lane.files.includes(path));
-    if (apply && add.length > 0 && lane.agent !== this.author) throw new Error(`Item claimed by ${lane.agent}`);
+    if (apply && add.length > 0 && lane.agent !== this.author) throw new Error(lane.agent === null ? 'Lane is unclaimed; claim it before applying file links' : `Item claimed by ${lane.agent}`);
     if (apply && add.length > 0) await this.client.files(id, { add, author: this.author });
     return { id, dry_run: !apply, add };
   }

@@ -6,11 +6,13 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-20T20:08:50.765Z"
+updated_at: "2026-10-20T20:53:18.809Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[54]{created_at,author,text}:
+comments[57]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -65,7 +67,10 @@ comments[54]{created_at,author,text}:
   "2026-10-20T19:40:51.113Z",codex-agent,"Final expanded focused command passes 3/3: node --test --test-name-pattern=\"fixture canonicalizes|expired tracker lease\" test/mixed-tracker.test.ts test/shared-tracker.test.ts. Independent immutable-base reverts with final tests: restoring only the Git fixture root fails node --test --test-name-pattern=\"fixture canonicalizes.*Git\" test/mixed-tracker.test.ts (0/1, exit 1); restoring only tooling scratchBase canonicalization fails node --test --test-name-pattern=\"fixture canonicalizes.*coverage\" test/mixed-tracker.test.ts (0/1, exit 1, real c8 source-inventory mismatch). Combined with the two documentation proofs and packed acceptance proof, five independent reversions fail. No SDK responses, thresholds, exclusions, existing timeouts, dependencies or production behavior changed. The corrected full npm gate is running under the same symlinked TMPDIR."
   "2026-10-20T19:47:01.921Z",codex-agent,"Corrected snapshot 672e82c passes CI run https://github.com/unbraind/pm-swarm/actions/runs/39485591970 on both Node 22 and Node 26, including strict tracked-project health. Full Bun release gate passes 148/148 suite and 3/3 packed, zero failures/skips/cancellations, all 24 authored files at four 100 percent coverage metrics. Both CI package dry-runs have shasum c56c1afab98e3e19cf31e3fbcb15e1b260ec61ad. Local corrected npm release gate remains running under symlinked TMPDIR; no failures or timeouts have been reported so far. Latest complete review refresh still contains only the original two unresolved threads and no Outside diff range findings. Origin main remains an ancestor. Core health passes; ignored local pm-github extension host-version skew and six stale-item advisories remain separate. No new PM CLI/SDK defect observed."
   "2026-10-20T20:08:43.543Z",codex-agent,"Final review acceptance for code/tests/package inputs at 672e82c: full local npm run release:check passes 148/148 suite plus 3/3 packed with isolated HOME, disabled global/system Git configuration, CI enabled and symlinked TMPDIR. Full CI bun run release:check on the same source passes 148/148 plus 3/3: https://github.com/unbraind/pm-swarm/actions/runs/39485591970. Both final gates have zero failures/skips/cancellations and no timeout retries or deadline changes. All 24 authored files retain unchanged inventory/exclusions/thresholds and four 100 percent metrics: statements/lines 1548/1548, functions 90/90, branches 804/804. All remaining release checks pass; Node 22/26 CI and strict tracked-project health pass. Local source suite 662553 ms, packed suite 851639 ms. Corrected focused regressions pass 3/3 through the PM runner; five independent behavioral/documentation reverts fail. Initial 140/147 alias-root attempt is explicitly superseded by the fixed tooling fixture. Local npm and CI Bun package shasums match c56c1afab98e3e19cf31e3fbcb15e1b260ec61ad. Final review refresh has only the original two threads, no pagination and no Outside diff range findings; both findings are valid and fixed. Main is an ancestor. Whole-PR same-class review additionally fixed packed Git and coverage-tooling fixture roots. History prefix verified unchanged; final handoff changes only append-only PM evidence and verification docs. Core local health passes; existing ignored extension host skew, six stale advisories and pm-swarm-zn7m remain separate. Finite unfenced lease and hosted coordination limits remain documented. No new PM CLI/SDK bug observed. Release this claim; retain in_progress. No review replies/resolutions, merge or release."
-files[14]{path,scope}:
+  "2026-10-20T20:49:41.349Z",codex-agent,"Review round at fe9dae3: fetched every unresolved review thread and all comments with complete pagination. PRRT_kwDOVLY-P86ugbc8 is valid: Git sync reports claimed by null after release. PRRT_kwDOVLY-P86ugbdL is valid: missing Bun causes stdout.trim TypeError in packed acceptance. Latest CodeRabbit review has no Outside diff range findings; origin/main is already an ancestor. Reuse this item. Add real tracker refusal/history/reclaim coverage and isolated executable-probe regressions; independently revert each changed behavior with final tests, review the full PR for equivalent defects, and run unchanged npm and Bun release gates. No review replies/resolutions, merge or release."
+  "2026-10-20T20:52:12.517Z",codex-agent,"Corrected focused regressions pass 7/7: node --test --test-name-pattern=\"requires reclaiming|Bun prerequisite|reports missing Bun\" test/shared-tracker.test.ts test/install-prerequisites.test.ts. Independent isolated reverts with final tests and pinned SDK at immutable base fe9dae31829fb9020e8d260af6754ec004fa0c9a all exit 1: restore only Swarm.sync, 0/1 passes (claimed by null); restore only the old Bun probe behavior inside requireBun, 1/4 passes and three diagnostic regressions fail (missing, nonzero, empty); restore only the original acceptance functions, 0/2 prerequisite integration passes. Commands use patterns \"requires reclaiming\", \"Bun prerequisite\", and \"reports missing Bun\" respectively. The corrected sync test covers SDK and CLI refusals, unchanged item/history, previews, no-op apply and successful reclaim. Bun regressions launch real executables without SDK mocks and cover both packed scenarios before consumer setup. Initial new fixture execution inherited NODE_TEST_CONTEXT; the test now deletes it for independent child runners. Type annotation corrected after typecheck. Whole-PR same-class review confirms sharedLanes excludes blank assignees, other ownership refusals are claim-state guarded, and command helpers check failure status before parsing stdout. First Git packed scenario now uses the same early Bun prerequisite. No other valid same-class instance found. Thresholds, exclusions, dependencies and timeouts unchanged; dist is ignored and rebuilt by gates."
+  "2026-10-20T20:53:18.809Z",codex-agent,"The linked focused PM runner passes 7/7 with --run --only-last --progress; result persistence is disabled by existing tracker policy, so this comment records the receipt. An accidental unfiltered linked-test invocation was interrupted before proceeding to release gates and is not counted as a passing run. Core strict health passes; typecheck, lint, zero duplication and generated changelog check pass. Commit fixes with append-only tracker evidence, then run the complete local npm release gate with isolated HOME and disabled global/system Git config; use fresh exact-source CI for the full Bun gate. No threshold or timeout changes."
+files[16]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -76,11 +81,13 @@ files[14]{path,scope}:
   src/watch.ts,project
   src/workspace.ts,project
   test/helpers.ts,project
+  test/install-helpers.ts,project
+  test/install-prerequisites.test.ts,project
   test/install.acceptance.ts,project
   test/mixed-tracker.test.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[10]:
+tests[11]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -151,6 +158,13 @@ tests[10]:
     provenance:
       author: codex-agent
       created_at: "2026-10-20T19:21:43.430Z"
+      source_kind: local_mutation
+      source_ref: feat/shared-tracker-coordination
+  - command: "node --test --test-name-pattern=\"requires reclaiming|Bun prerequisite|reports missing Bun\" test/shared-tracker.test.ts test/install-prerequisites.test.ts"
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-20T20:52:11.316Z"
       source_kind: local_mutation
       source_ref: feat/shared-tracker-coordination
 docs[2]{path,scope}:

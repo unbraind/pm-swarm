@@ -265,3 +265,24 @@ Both final gates have zero failures, skips or cancellations. No timeout retry or
 The corrected focused command passes 3/3 through the linked PM runner. All five isolated reversions fail as recorded above. Packed npm/npx, native Bun/bunx, the built import allowlist and the non-Git tarball workflow pass, including the local symlinked temporary-root setup. The local source suite took 662553 ms and packed suite 851639 ms; all results are passing without relaxed thresholds or timeouts. Eight real processes retain eight claims and nine valid histories with strict fixture health; the local claim batch took 30300 ms.
 
 Local npm and CI Bun package dry-runs match shasum `c56c1afab98e3e19cf31e3fbcb15e1b260ec61ad`. Dist is ignored and rebuilt by the gates. Core local tracker health passes; full local health retains the existing ignored pm-github host-version skew and six stale-item advisories. The development-only glob advisory remains tracked by pm-swarm-zn7m. Hosted coordination remains unverified, and the documented finite, non-renewed lease has no tracker fencing token. No new PM CLI/SDK defect was observed. Keep the feature in progress and release its claim; no PR merge or release was performed.
+
+## Unclaimed lane and Bun prerequisite review
+
+Both unresolved findings at `fe9dae31829fb9020e8d260af6754ec004fa0c9a` are valid. The latest CodeRabbit review contains no Outside diff range findings, and all thread/comment pages were fetched.
+
+| Thread | Fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86ugbc8 | Git sync tells an unclaimed lane to claim it before applying file links. Foreign-owner messages, previews and no-op applies retain their behavior. A real tracker regression verifies SDK/CLI refusals, unchanged history/files, and success after reclaiming. |
+| PRRT_kwDOVLY-P86ugbdL | Both packed scenarios check Bun before consumer setup. A shared test helper validates spawn errors, exit status and nonempty executable output before returning the runtime path. Real executable regressions cover missing, failing, empty-output and working probes, plus both acceptance entry points. |
+
+Whole-PR review found the earlier packed Git scenario also lacked an explicit Bun prerequisite; it now uses the same helper. Shared mode excludes blank assignees before constructing lanes, so its owner refusal cannot encounter an unassigned lane. Other owner-specific refusals are guarded by claimed state. Command helpers check failure status before parsing process output. No other same-class instance was found.
+
+Corrected focused command: `node --test --test-name-pattern="requires reclaiming|Bun prerequisite|reports missing Bun" test/shared-tracker.test.ts test/install-prerequisites.test.ts` passes 7/7. Independent isolated reverts retain the final regression tests and pinned SDK:
+
+| Reverted behavior | Exact command | Result |
+| --- | --- | --- |
+| Only `Swarm.sync` from the immutable base above | `node --test --test-name-pattern="requires reclaiming" test/shared-tracker.test.ts` | 0/1 pass, exit 1; reports `Item claimed by null` |
+| Only the old Bun probe expression inside `requireBun` | `node --test --test-name-pattern="Bun prerequisite" test/install-prerequisites.test.ts` | 1/4 pass, exit 1; three diagnostic regressions fail |
+| Only the original packed acceptance functions | `node --test --test-name-pattern="reports missing Bun" test/install-prerequisites.test.ts` | 0/2 pass, exit 1; setup fails before explaining the Bun prerequisite |
+
+Tests import source, so revert proofs require no dist rebuild. Dist remains ignored and the release gates rebuild it. Coverage inventory, exclusions, thresholds, dependencies and timeouts are unchanged. Final full-gate receipts are recorded below after completion.

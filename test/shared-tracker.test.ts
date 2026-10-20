@@ -408,6 +408,22 @@ for (const mode of ['shared', 'Git'] as const) {
   });
 }
 
+test('Git sync requires reclaiming an unassigned lane before applying file links', async t => {
+  const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+  await f.client.release(id);
+  const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8');
+  assert.deepEqual((await f.swarm.sync(id, false, ['new'])).add, ['new']);
+  assert.deepEqual((await f.swarm.sync(id, true, ['existing'])).add, []);
+  await assert.rejects(f.swarm.sync(id, true, ['new']), /Lane is unclaimed; claim it before applying file links/);
+  const refused = swarmCli(f, ['sync', id, '--files', 'new', '--apply']);
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stdout + refused.stderr, /Lane is unclaimed; claim it before applying file links/);
+  assert.equal(readFileSync(history, 'utf8'), before, 'refusal and previews preserve the released lane history');
+  assert.deepEqual((await f.client.get(id, { depth: 'full' })).item.files?.map(file => file.path), ['existing']);
+  await f.client.claim(id);
+  assert.deepEqual((await f.swarm.sync(id, true, ['new'])).add, ['new']);
+});
+
 test('Git sync rejects empty explicit files', async t => {
   const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
   for (const files of [[], [''], ['new', ''], ['   ']]) await assert.rejects(f.swarm.sync(id, true, files), /--files requires nonempty/);
