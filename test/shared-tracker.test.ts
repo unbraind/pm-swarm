@@ -1,0 +1,268 @@
+import assert from 'node:assert/strict';
+import { spawn, spawnSync } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join, dirname } from 'node:path';
+import { test } from 'node:test';
+import type { TestContext } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { PmClient } from '@unbrained/pm-cli/sdk';
+import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
+import extension from '../index.ts';
+import { SharedTracker } from '../src/shared-tracker.ts';
+import { Swarm } from '../src/swarm.ts';
+import { repositoryRoot } from '../src/workspace.ts';
+import { statusChanges, watchStatus } from '../src/watch.ts';
+import { gitEnvironment } from '../src/git-environment.ts';
+import { fixture } from './helpers.ts';
+
+/** Create an SDK tracker outside Git, including the actual extension and a Git-free PATH. */
+async function sharedFixture(t: TestContext) {
+  const repo = mkdtempSync(join(tmpdir(), 'swarm-shared-')); const pmRoot = join(repo, '.agents/pm');
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const original = { ...process.env };
+  process.env.PM_SOURCE_WORKSPACE_ROOT = repo;
+  process.env.GIT_CEILING_DIRECTORIES = dirname(repo);
+  t.after(() => { for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key]; Object.assign(process.env, original); });
+  const client = new PmClient({ cwd: repo, pmRoot, author: 'shared-test', noExtensions: false });
+  await client.init('shared-test', { defaults: true, agentGuidance: 'skip' });
+  const extension = join(pmRoot, 'extensions/pm-swarm'); mkdirSync(extension, { recursive: true });
+  writeFileSync(join(extension, 'manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers'] }));
+  writeFileSync(join(extension, 'entry.js'), `export { default } from '${new URL('../index.ts', import.meta.url).href}';\n`);
+  const bin = join(repo, 'bin'); mkdirSync(bin); symlinkSync(process.execPath, join(bin, 'node'));
+  const env = gitEnvironment({ ...process.env, HOME: repo, PATH: bin, PM_PATH: pmRoot, PM_AUTHOR: 'shared-test', PM_GLOBAL_PATH: join(repo, '.pm-cli'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
+  const host = join(import.meta.dirname, '../node_modules/.bin/pm');
+  /** Invoke real CLI parsing and rendering, with no Git executable available. */
+  const cli = (...args: string[]) => spawnSync(process.execPath, [host, ...args], { cwd: repo, env, encoding: 'utf8' });
+  /** Require a successful real command and decode its JSON response. */
+  const run = (...args: string[]) => { const result = cli(...args, '--json'); assert.equal(result.status, 0, result.stdout + result.stderr); return JSON.parse(result.stdout) as Record<string, unknown>; };
+  /** Create ranked real tasks with declared paths through the SDK. */
+  const item = async (files: string[] = [], priority = 2, id?: string) => (await client.create({ type: 'Task', title: 'Shared work', id, priority, file: files.map(path => `path=${path}`) })).item.id;
+  const shared = new SharedTracker(new Swarm(repo, pmRoot, client, 'shared-test'));
+  return { repo, pmRoot, client, shared, cli, run, item, env, host };
+}
+
+test('no-git settings fully previews and applies while preserving other settings', async t => {
+  const f = await sharedFixture(t);
+  assert.ok(f.run('swarm', 'settings').swarm);
+  f.run('swarm', 'settings', '--limit', '2', '--branch-prefix', 'review/', '--apply');
+  const prefs = JSON.parse(readFileSync(join(f.pmRoot, 'settings.json'), 'utf8')) as { swarm: { lane_limit: number }; id_prefix: string };
+  assert.equal(prefs.swarm.lane_limit, 2); assert.ok(prefs.id_prefix);
+  assert.equal(f.cli('swarm', 'settings', '--limit', '9').status, 2);
+});
+
+test('no-git plan uses readiness, dependencies, claims, parent and active footprints', async t => {
+  const f = await sharedFixture(t);
+  const parent = (await f.client.create({ type: 'Epic', title: 'Shared epic' })).item.id;
+  const active = await f.item(['src']); await f.client.claim(active, { author: 'foreign' });
+  const overlap = await f.item(['src/code.ts']); const unknown = await f.item();
+  const a = await f.item(['docs']); const b = await f.item(['test']); const blocked = await f.item(['blocked']);
+  for (const id of [active, overlap, unknown, a, b, blocked]) await f.client.update(id, { parent });
+  await f.client.update(blocked, { blockedBy: active });
+  const plan = f.run('swarm', 'plan', '--parent', parent, '--limit', '2') as { mode: string; suggested_start_set: string[]; blocked: { id: string }[] };
+  assert.equal(plan.mode, 'shared-tracker'); assert.deepEqual(plan.suggested_start_set.sort(), [a, b].sort());
+  assert.deepEqual(plan.blocked.map(row => row.id).sort(), [overlap, unknown].sort());
+  assert.doesNotMatch(JSON.stringify(plan), new RegExp(blocked));
+  assert.deepEqual((await f.shared.plan('absent')).suggested_start_set, []);
+  assert.match(f.cli('swarm', 'plan').stdout, /^mode: "?shared-tracker/);
+});
+
+test('no-git next ranks safely, previews without mutation and publishes no branch/base fields', async t => {
+  const f = await sharedFixture(t); const active = await f.item(['src']); await f.client.claim(active, { author: 'foreign' });
+  const overlap = await f.item(['src/a.ts'], 0); const unknown = await f.item([], 0); const safe = await f.item(['docs'], 4);
+  const history = join(f.pmRoot, 'history', `${safe}.jsonl`); const before = readFileSync(history, 'utf8');
+  const preview = f.run('swarm', 'next', '--agent', 'worker', '--dry-run') as { selected: string; skipped: { id: string; overlaps: unknown[] }[] };
+  assert.equal(preview.selected, safe); assert.equal(readFileSync(history, 'utf8'), before);
+  assert.ok(preview.skipped.find(row => row.id === overlap)!.overlaps.length > 0);
+  const result = f.run('swarm', 'next', '--agent', 'worker'); assert.equal(result.selected, safe); assert.equal(result.mode, 'shared-tracker');
+  for (const key of ['branch', 'base', 'worktree']) assert.equal(key in result, false);
+  const item = (await f.client.get(safe, { depth: 'full' })).item;
+  assert.equal(item.assignee, 'worker'); for (const key of ['swarm_branch', 'swarm_base', 'swarm_base_ref']) assert.equal(key in item, false);
+  assert.equal((await f.shared.next(undefined, true)).selected, unknown);
+  const fallback = await f.shared.next(); assert.equal(fallback.selected, unknown); assert.match(fallback.warnings.join(' '), /Unknown/);
+  assert.equal((await f.shared.next()).selected, null);
+});
+
+test('no-git start warns, strict refuses overlaps, and terminal/foreign claims stay protected', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['src']); f.run('swarm', 'start', id, '--agent', 'worker');
+  const second = await f.item(['src/a.ts']);
+  const strict = f.cli('swarm', 'start', second, '--strict', '--json'); assert.equal(strict.status, 2, strict.stdout + strict.stderr); assert.match(strict.stdout + strict.stderr, /Overlapping start refused/);
+  assert.equal((await f.client.get(second)).claim_state?.claimed, false);
+  const started = f.run('swarm', 'start', second) as { overlap_warnings: unknown[] }; assert.equal(started.overlap_warnings.length, 1);
+  assert.equal(f.cli('swarm', 'start', id, '--json').status, 2);
+  await f.client.update(second, { status: 'closed', message: 'Fixture complete' });
+  assert.equal(f.cli('swarm', 'start', second, '--json').status, 2);
+  const empty = await f.item(); assert.deepEqual((await f.shared.start(empty)).overlap_warnings, []);
+  assert.equal((await f.shared.start(empty)).id, empty, 'own claim is idempotent');
+});
+
+test('no-git status reports claim age and declared overlaps, omitting Git measurements', async t => {
+  const f = await sharedFixture(t); const a = await f.item(['src']); const b = await f.item(['src/a.ts']);
+  const unknown = await f.item(); const terminal = await f.item(['done']);
+  for (const id of [a, b, unknown, terminal]) await f.client.claim(id);
+  await f.client.update(terminal, { status: 'closed', message: 'Fixture complete' });
+  // Status must also tolerate assignments lacking a claim history event.
+  const assigned = await f.item(['assigned']); await f.client.update(assigned, { assignee: 'assigned-worker' });
+  const status = f.run('swarm', 'status', '--full') as { lanes: { id: string; agent: string; claim_age_seconds: number | null; claimed_at: string | null }[]; overlaps: unknown[]; note: string };
+  assert.equal((await f.shared.status()).lanes.length, 4);
+  assert.equal(status.lanes.length, 4); assert.ok(status.lanes.some(row => row.id === a && row.agent === 'shared-test' && row.claim_age_seconds !== null && row.claim_age_seconds >= 0));
+  assert.equal(status.lanes.find(row => row.id === assigned)!.claimed_at, null);
+  assert.ok(status.overlaps.length >= 3); assert.match(status.note, /unavailable/);
+  for (const key of ['ahead', 'behind', 'predictions', 'clean_pairs', 'branch', 'sha', 'missing_merge_drivers']) assert.doesNotMatch(JSON.stringify(status), new RegExp(`"${key}"`));
+});
+
+test('no-git sync requires explicit safe files and applies only when requested', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['existing']); await f.client.claim(id);
+  const refused = f.cli('swarm', 'sync', id, '--json'); assert.equal(refused.status, 2, refused.stdout + refused.stderr); assert.match(refused.stdout + refused.stderr, /--files/);
+  for (const files of ['a,', '../escape', '/absolute', 'C:/absolute']) assert.equal(f.cli('swarm', 'sync', id, '--files', files, '--json').status, 2);
+  assert.deepEqual(f.run('swarm', 'sync', id, '--files', 'a,b,a,existing', '--apply', '--dry-run').add, ['a', 'b']);
+  assert.deepEqual((await f.client.get(id, { depth: 'full' })).item.files?.map(file => file.path), ['existing']);
+  assert.deepEqual(f.run('swarm', 'sync', id, '--files', 'a,b', '--apply').add, ['a', 'b']);
+  assert.deepEqual(f.run('swarm', 'sync', id, '--files', 'a', '--apply').add, []);
+  const unclaimed = await f.item(); assert.equal(f.cli('swarm', 'sync', unclaimed, '--files', 'a', '--json').status, 2);
+  await assert.rejects(f.shared.sync(id, false, []), /--files/);
+});
+
+test('no-git land clearly refuses branch merging and names usable tracker commands', async t => {
+  const f = await sharedFixture(t);
+  for (const flags of [[], ['--execute']]) {
+    const result = f.cli('swarm', 'land', ...flags, '--json'); assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /needs a git repository.*already on the shared tracker/);
+    assert.match(result.stdout + result.stderr, /sync --files/);
+    assert.doesNotMatch(result.stdout + result.stderr, /git rev-parse failed/);
+  }
+});
+
+test('no-git reap previews and releases own terminal claims, preserving active and foreign claims', async t => {
+  const f = await sharedFixture(t); const own = await f.item(); const foreign = await f.item(); const active = await f.item();
+  for (const id of [own, foreign]) { await f.client.update(id, { status: 'closed', message: 'Fixture complete' }); await f.client.claim(id, { force: true, author: id === own ? 'shared-test' : 'foreign' }); }
+  await f.client.claim(active);
+  const preview = f.run('swarm', 'reap', '--dry-run'); assert.deepEqual(preview.released, [own]); assert.equal((await f.client.get(own)).claim_state?.claimed, true);
+  assert.deepEqual(f.run('swarm', 'reap').released, [own]);
+  assert.equal((await f.client.get(own)).claim_state?.claimed, false);
+  assert.equal((await f.client.get(active)).claim_state?.claimed, true);
+  assert.equal((await f.client.get(foreign)).claim_state?.assignee, 'foreign');
+  assert.deepEqual(f.run('swarm', 'reap', '--agent', 'foreign').released, [foreign]);
+});
+
+test('no-git watch emits lanes and overlap changes, ignores age-only changes and exits on SIGINT', { timeout: 30000 }, async t => {
+  const f = await sharedFixture(t); const a = await f.item(['src']); const b = await f.item(['src/a.ts']);
+  await f.client.claim(a); await f.client.claim(b);
+  const before = await f.shared.status();
+  assert.deepEqual(statusChanges(before, { ...before, lanes: before.lanes.map(row => ({ ...row, claim_age_seconds: 99 })) }), []);
+  assert.ok(statusChanges(undefined, before).some(row => row.event === 'overlap_detected'));
+  await f.client.files(b, { add: ['src/b.ts'] });
+  const changed = await f.shared.status(); assert.ok(statusChanges(before, changed).some(row => row.event === 'overlap_changed'));
+  await f.client.release(b);
+  assert.ok(statusChanges(changed, await f.shared.status()).some(row => row.event === 'overlap_resolved'));
+  const controller = new AbortController(); await watchStatus(f.shared, 2000, controller.signal, () => controller.abort());
+  const child = spawn(process.execPath, [f.host, 'swarm', 'status', '--watch', '--json'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => child.kill('SIGKILL')); const exit = once(child, 'exit'); let output = ''; let error = '';
+  child.stdout.setEncoding('utf8').on('data', (data: string) => { output += data; });
+  child.stderr.setEncoding('utf8').on('data', (data: string) => { error += data; });
+  const deadline = Date.now() + 15000;
+  while (!output.includes('lane_added') && child.exitCode === null && Date.now() < deadline) await delay(20);
+  assert.match(output, /lane_added/); const initial = output; await delay(2300); assert.equal(output, initial);
+  child.kill('SIGINT'); const [code, signal] = await exit; assert.equal(code, 0, error); assert.equal(signal, null);
+});
+
+test('real eight-process next contention keeps every claim and history valid without git', { timeout: 120000 }, async t => {
+  const f = await sharedFixture(t); const ids = [];
+  for (let i = 0; i < 8; i++) ids.push(await f.item([`src/lane-${i}.ts`], 2, `lane-${i}`));
+  const started = performance.now();
+  const results = await Promise.all(ids.map(async (_, i) => {
+    const child = spawn(process.execPath, [f.host, 'swarm', 'next', '--agent', `worker-${i}`, '--json'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 90000 });
+    const complete = once(child, 'close');
+    const stdout: Buffer[] = []; const stderr: Buffer[] = [];
+    child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
+    const [code] = await complete;
+    const output = Buffer.concat(stdout).toString();
+    assert.equal(code, 0, output + Buffer.concat(stderr).toString());
+    return JSON.parse(output) as { selected: string; agent: string; mode: string };
+  }));
+  const elapsed = performance.now() - started;
+  assert.equal(new Set(results.map(row => row.selected)).size, 8);
+  assert.deepEqual(results.map(row => row.selected).sort(), ids.sort());
+  for (const row of results) { const claim = (await f.client.get(row.selected)).claim_state; assert.equal(claim?.assignee, row.agent); assert.equal(claim?.claimed, true); assert.equal(row.mode, 'shared-tracker'); }
+  let historyFiles = 0;
+  for (const file of readdirSync(join(f.pmRoot, 'history')).filter(file => file.endsWith('.jsonl'))) {
+    historyFiles++; for (const line of readFileSync(join(f.pmRoot, 'history', file), 'utf8').trim().split('\n')) assert.doesNotThrow(() => JSON.parse(line));
+  }
+  const health = f.run('--no-extensions', 'health', '--strict-exit'); assert.equal(health.ok, true);
+  t.diagnostic(`8 processes, 8 distinct retained claims, ${historyFiles} valid history files, health ok; ${elapsed.toFixed(0)} ms`);
+});
+
+test('workspace detection respects Git ceilings, nested worktrees and a filesystem root without git', async t => {
+  const f = await fixture(t); assert.equal(repositoryRoot(f.repo), f.repo); assert.equal(repositoryRoot(f.pmRoot), f.repo);
+  const old = process.env.GIT_CEILING_DIRECTORIES; process.env.GIT_CEILING_DIRECTORIES = f.repo;
+  assert.equal(repositoryRoot(f.pmRoot), undefined);
+  delete process.env.GIT_CEILING_DIRECTORIES;
+  assert.equal(repositoryRoot(dirname(tmpdir())), undefined);
+  if (old !== undefined) process.env.GIT_CEILING_DIRECTORIES = old;
+});
+
+/** Keep a concise human-output receipt for the audited eight-command surface. */
+test('no-git command matrix records exit codes and first lines', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['src']);
+  const commands = [
+    ['plan'], ['next', '--agent', 'matrix-worker', '--dry-run'],
+    ['start', id, '--agent', 'matrix-worker'], ['status'],
+    ['sync', id, '--files', 'src,docs', '--apply', '--agent', 'matrix-worker'],
+    ['land'], ['reap', '--dry-run'], ['settings'],
+  ];
+  const codes = [];
+  for (const args of commands) {
+    const result = f.cli('swarm', ...args); codes.push(result.status);
+    t.diagnostic(`${args[0]} | ${result.status} | ${(result.stdout || result.stderr).trim().split('\n')[0]}`);
+  }
+  assert.deepEqual(codes, [0, 0, 0, 0, 0, 2, 0, 0]);
+});
+
+
+test('shared planning retains unknown solitary waves and ignores stale Git fields; Git sync accepts explicit files', async t => {
+  const f = await sharedFixture(t); const id = await f.item();
+  await f.client.update(id, { field: ['swarm_branch=swarm/previous'] });
+  const plan = await f.shared.plan(); assert.deepEqual(plan.suggested_start_set, [id]);
+  assert.equal(plan.lanes[0].items[0].footprint, 'unknown');
+  assert.equal((await f.shared.next()).selected, id);
+  const g = await fixture(t); const gitId = await g.item(['declared']); g.save();
+  await g.swarm.start(gitId);
+  assert.deepEqual((await g.swarm.sync(gitId, true, ['explicit'])).add, ['explicit']);
+});
+
+
+/** Measure host-bound shared dispatch as well as real CLI subprocess behavior. */
+test('shared SDK dispatch covers active, terminal, unknown and explicit-file operations', async t => {
+  const f = await sharedFixture(t);
+  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  /** Call the registered handler with the real host SDK and complete tracker context. */
+  const run = async (verb: string, options: Record<string, unknown> = {}, args: string[] = []) => (await harness.runCommand({ command: `swarm ${verb}`, pmRoot: f.pmRoot, options, args, global: { author: 'shared-test' } })).result;
+  await run('settings', { limit: '3', apply: true });
+  const a = await f.item(['src']); const b = await f.item(['src/a.ts']); const terminal = await f.item(['done']);
+  await run('plan'); await run('plan', { full: true, limit: '2' });
+  await run('next', { dryRun: true }); await run('next');
+  const first = (await f.client.get(a)).claim_state?.claimed ? a : b;
+  const second = first === a ? b : a;
+  await assert.rejects(run('start', { strict: true }, [second]), /Overlapping/);
+  await run('start', {}, [second]);
+  await assert.rejects(run('start', { agent: 'foreign' }, [first]), /claimed/);
+  const assigned = await f.item(['assignment']); await f.client.update(assigned, { assignee: 'foreign' });
+  await run('status', { full: true });
+  await assert.rejects(run('sync', {}, [first]), /--files/);
+  await run('sync', { files: 'src, docs,docs', apply: true, dryRun: true }, [first]);
+  await run('sync', { files: 'src, docs,docs', apply: true }, [first]);
+  await run('sync', { files: 'docs', apply: true }, [first]);
+  await assert.rejects(run('sync', { files: 'a,' }, [first]), /--files/);
+  await assert.rejects(run('sync', { files: 'docs' }, [terminal]), /No active/);
+  await f.client.update(terminal, { status: 'closed', message: 'Fixture complete' });
+  await assert.rejects(run('start', {}, [terminal]), /terminal/);
+  await f.client.claim(terminal, { author: 'shared-test', force: true });
+  await f.client.update(assigned, { status: 'closed', message: 'Fixture complete' });
+  await f.client.claim(assigned, { author: 'foreign', force: true });
+  await run('reap', { dryRun: true }); await run('reap'); await run('reap');
+  await assert.rejects(f.shared.land(), /needs a git repository/); await assert.rejects(run('land', { execute: true }), /needs a git repository/);
+  await f.client.release(first); await f.client.release(second);
+  await run('plan', {}, []);
+});

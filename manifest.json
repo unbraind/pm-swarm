@@ -1,7 +1,7 @@
 {
   "name": "pm-swarm",
   "version": "2026.10.15",
-  "description": "Git worktree lanes and real conflict prediction for parallel pm agents",
+  "description": "Coordinate parallel agents on a shared tracker with optional Git worktree lanes",
   "author": "@unbraind",
   "entry": "./dist/index.js",
   "pm_min_version": "2026.10.15",

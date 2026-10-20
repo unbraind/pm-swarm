@@ -1,0 +1,46 @@
+id: pm-swarm-shared-tracker
+title: Coordinate parallel agents on a shared tracker without git
+description: "Make tracker coordination primary and Git worktree lanes optional, with real concurrent-process acceptance."
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-20T09:59:13.604Z"
+updated_at: "2026-10-20T10:27:58.052Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
+parent: pm-swarm-07o2
+comments[10]{created_at,author,text}:
+  "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
+  "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
+  "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
+  "2026-10-20T10:10:29.579Z",codex-agent,"Focused refusal regressions now pass 3/3 after awaiting dispatcher operations. Contention run: eight processes, eight distinct claims retained, nine JSONL histories parse cleanly, strict health (source-extension discovery disabled only for this unmanaged fixture) passes; contention elapsed 26462 ms under concurrent host load. Managed packed acceptance runs next-to-sync-to-status-to-terminal-reap under Node and native Bun with Git absent from PATH."
+  "2026-10-20T10:12:29.261Z",codex-agent,"Packed tarball acceptance passed under both Node and native Bun: pm install ./package.tgz --project in a non-Git tracker, then next, sync --files --apply, status, terminal stale-claim reap, and full managed-extension pm health --strict-exit. Git was absent from PATH for the loop; total targeted acceptance elapsed 136738 ms. Initial coverage exposed that source-loaded CLI extension code is not fully attributed to authored TypeScript by c8; adding direct registered-handler SDK coverage with real trackers alongside process acceptance, without changing source inventory or thresholds."
+  "2026-10-20T10:13:15.840Z",codex-agent,"Behavioral revert proofs in an isolated source copy with the same pinned SDK and real trackers: restoring only runCommand to origin/main makes 9/9 no-git regressions fail (exit 1), including the matrix where all eight commands exit 2 with first line Error: Command failed and git rev-parse in the detail. Disabling only SharedTracker.sharedExclusive makes the eight-process test fail (exit 1) on an already-claimed race. Reverting only the age-independent watch comparison makes the watch regression fail (exit 1) with spurious lane_changed events. Current implementations retained; source-import tests require no dist rebuild."
+  "2026-10-20T10:20:23.240Z",codex-agent,"Additional artifact revert proof: rebuilt an isolated source copy with only runCommand reverted to origin/main, packed it, installed the tarball in a real non-Git tracker, and ran the new packed acceptance. Build passed; acceptance failed at next with host exit 2 and test exit 1. This independently proves the compiled installed artifact test detects the original Git prerequisite."
+  "2026-10-20T10:24:39.306Z",codex-agent,"Native human-output matrix passes: plan, next, start, status, sync with explicit files, reap and settings exit 0. Coordination results begin mode: shared-tracker; settings begins swarm:. Land deliberately exits 2 with the explicit branch-merge requirement in its detail; the host retains first-line title Error: Command failed. The old dispatcher proof exits 2 with that generic first line for every command. docs/shared-tracker-verification.md records exact before/after lines and the artifact revert proof."
+  "2026-10-20T10:25:56.388Z",codex-agent,"Registered PM test run passed 14/14 regressions, zero failures/skips/cancellations: pm test pm-swarm-shared-tracker --run --progress --only-index 1 --timeout 600 --workspace-context source --override-linked-workspace-context --pm-context tracker --override-linked-pm-context. Contention elapsed 50093 ms; eight unique retained claims, nine valid histories and strict integrity/history health. Full coverage run: 110/111 pass, with one existing TOON watch deadline failure under host load; new shared-tracker source reaches all four 100 percent metrics. Serial release gates will rerun the unchanged watch test and full inventory."
+  "2026-10-20T10:27:58.051Z",codex-agent,"Repository health boundary: the live package tracker reports pre-existing stale_in_progress_items:6 plus an ignored local pm-github extension host-version skew (pinned host 2026.10.15 versus extension host 2026.10.20). Integrity and history drift checks are clean. These are separate from passing non-Git fixture health and from release:check; no existing item histories or dependency pins were rewritten."
+files[11]{path,scope}:
+  index.ts,project
+  manifest.json,project
+  package.json,project
+  src/commands.ts,project
+  src/selection.ts,project
+  src/shared-tracker.ts,project
+  src/swarm.ts,project
+  src/watch.ts,project
+  src/workspace.ts,project
+  test/install.acceptance.ts,project
+  test/shared-tracker.test.ts,project
+tests[4]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  node --test test/shared-tracker.test.ts,project,codex-agent,"2026-10-20T10:06:08.083Z",local_mutation,feat/shared-tracker-coordination
+  "npm run release:check",project,codex-agent,"2026-10-20T10:10:17.265Z",local_mutation,feat/shared-tracker-coordination
+  "bun run release:check",project,codex-agent,"2026-10-20T10:10:21.531Z",local_mutation,feat/shared-tracker-coordination
+  "node --test --test-name-pattern=\"packed tarball coordinates\" test/install.acceptance.ts",project,codex-agent,"2026-10-20T10:10:25.195Z",local_mutation,feat/shared-tracker-coordination
+docs[2]{path,scope}:
+  docs/shared-tracker-verification.md,project
+  README.md,project
+body: ""

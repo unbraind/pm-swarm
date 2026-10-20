@@ -1,8 +1,9 @@
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
 import type { Swarm } from './swarm.ts';
+import type { SharedTracker } from './shared-tracker.ts';
 
 /** The measured status shape shared with the normal status command. */
-type Status = Awaited<ReturnType<Swarm['status']>>;
+type Status = Awaited<ReturnType<Swarm['status'] | SharedTracker['status']>>;
 /** A portable change record emitted once when its measured state changes. */
 export interface StatusEvent {
   event: string;
@@ -12,21 +13,31 @@ export interface StatusEvent {
 /** Compare observable lane state and conflicts, ignoring simulation object identities. */
 export function statusChanges(previous: Status | undefined, current: Status): StatusEvent[] {
   const events: StatusEvent[] = [];
+  /** Claim age advances without a state change; claim provenance remains observable. */
+  const stableLane = (lane: Status['lanes'][number] | undefined) => {
+    if (lane === undefined || !('claim_age_seconds' in lane)) return lane;
+    const { claim_age_seconds: _age, ...stable } = lane; return stable;
+  };
   const oldLanes = new Map(previous?.lanes.map(row => [row.id, row]));
   const newLanes = new Map(current.lanes.map(row => [row.id, row]));
   for (const row of current.lanes) {
     const old = oldLanes.get(row.id);
-    if (JSON.stringify(old) !== JSON.stringify(row)) events.push({ event: old === undefined ? 'lane_added' : 'lane_changed', data: row });
+    if (JSON.stringify(stableLane(old)) !== JSON.stringify(stableLane(row))) events.push({ event: old === undefined ? 'lane_added' : 'lane_changed', data: row });
   }
   for (const row of oldLanes.values()) if (!newLanes.has(row.id)) events.push({ event: 'lane_removed', data: row });
   /** Retain only meaningful conflict evidence, with stable pair keys. */
-  const conflicts = (status: Status | undefined) => new Map(status?.predictions.filter(row => !row.clean).map(row => {
+  const conflicts = (status: Status | undefined) => new Map((status !== undefined && 'predictions' in status ? status.predictions : []).filter(row => !row.clean).map(row => {
     const [left_id, right_id] = [row.left_id, row.right_id].sort();
     return [JSON.stringify([left_id, right_id]), { left_id, right_id, conflicts: [...row.conflicts].sort(), messages: [...row.messages].sort() }];
   }));
   const before = conflicts(previous); const after = conflicts(current);
   for (const [key, row] of after) if (JSON.stringify(before.get(key)) !== JSON.stringify(row)) events.push({ event: before.has(key) ? 'conflict_changed' : 'conflict_predicted', data: row });
   for (const [key, row] of before) if (!after.has(key)) events.push({ event: 'conflict_resolved', data: row });
+  /** Compare declared overlaps separately from measured Git merge conflicts. */
+  const sharedOverlaps = (status: Status | undefined) => new Map(status !== undefined && 'overlaps' in status ? status.overlaps.map(row => [JSON.stringify([row.left_id, row.right_id]), row]) : []);
+  const oldOverlaps = sharedOverlaps(previous); const newOverlaps = sharedOverlaps(current);
+  for (const [key, row] of newOverlaps) if (JSON.stringify(oldOverlaps.get(key)) !== JSON.stringify(row)) events.push({ event: oldOverlaps.has(key) ? 'overlap_changed' : 'overlap_detected', data: row });
+  for (const [key, row] of oldOverlaps) if (!newOverlaps.has(key)) events.push({ event: 'overlap_resolved', data: row });
   return events;
 }
 
@@ -48,7 +59,7 @@ async function pause(interval: number, signal: AbortSignal): Promise<void> {
 }
 
 /** Poll serially and emit only changes; an aborted signal releases a pending delay. */
-export async function watchStatus(swarm: Swarm, interval: number, signal: AbortSignal, emit: (event: StatusEvent) => void): Promise<void> {
+export async function watchStatus(swarm: Swarm | SharedTracker, interval: number, signal: AbortSignal, emit: (event: StatusEvent) => void): Promise<void> {
   let previous: Status | undefined;
   while (!signal.aborted) {
     const current = await swarm.status();
@@ -60,7 +71,7 @@ export async function watchStatus(swarm: Swarm, interval: number, signal: AbortS
 }
 
 /** Stream native TOON blocks or JSON lines and restore the process signal listener. */
-export async function runWatch(swarm: Swarm, interval: number, json: boolean): Promise<void> {
+export async function runWatch(swarm: Swarm | SharedTracker, interval: number, json: boolean): Promise<void> {
   const controller = new AbortController();
   /** Stop polling on SIGINT without leaving a timer or swallowing status errors. */
   const stop = () => controller.abort();

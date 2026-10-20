@@ -3,7 +3,8 @@ import { isAbsolute } from 'node:path';
 import { createPmCliExpectedError, readSettings, resolveAuthor } from '@unbrained/pm-cli/sdk';
 import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
-import { git } from './git.ts';
+import { repositoryRoot } from './workspace.ts';
+import { SharedTracker } from './shared-tracker.ts';
 import { settings } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
@@ -27,11 +28,12 @@ function overrides(options: Record<string, unknown>): Partial<SwarmSettings> {
 export async function runCommand(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
   try {
     if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
-    const repo = git(ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root, ['rev-parse', '--show-toplevel']);
+    const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
+    const repo = command === 'settings' ? undefined : repositoryRoot(workspace);
     const client = ctx.sdk.client;
     const opts = overrides(ctx.options);
     const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
-    const swarm = new Swarm(repo, ctx.pm_root, client, author);
+    const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
     const id = ctx.args[0];
     if (['start', 'sync'].includes(command) && id === undefined) throw new Error('An item id is required');
     switch (command) {
@@ -41,19 +43,19 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
         const { complete_list: _complete, read_output: _read, ...compact } = result;
         return compact;
       }
-      case 'next': return swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
-      case 'start': return swarm.start(id, opts, ctx.options.strict === true);
+      case 'next': return await swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
+      case 'start': return await swarm.start(id, opts, ctx.options.strict === true);
       case 'status': {
         if (ctx.options.watch === true) {
           await runWatch(swarm, watchInterval(textOption(ctx.options.interval)), ctx.global.json === true || ctx.global.outputFormat === 'json');
           return { swarm_watch_complete: true };
         }
         if (ctx.options.interval !== undefined) throw new Error('--interval requires --watch');
-        return swarm.status(ctx.options.full === true);
+        return await swarm.status(ctx.options.full === true);
       }
-      case 'sync': return swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true);
-      case 'land': return swarm.land(ctx.options.execute === true);
-      case 'reap': return swarm.reap(ctx.options.dryRun === true);
+      case 'sync': return await swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()));
+      case 'land': return await swarm.land(ctx.options.execute === true);
+      case 'reap': return await swarm.reap(ctx.options.dryRun === true);
       case 'settings': {
         const config = await settings(ctx.pm_root, opts);
         if (isAbsolute(config.root) || /^[A-Za-z]:/.test(config.root)) throw new Error('Tracked swarm root setting must be relative; use start --root for local absolute paths');
@@ -76,15 +78,15 @@ export function register(api: ExtensionApi): void {
   const definitions = {
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
     next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
-    start: { description: 'Claim an item and create a private worktree lane', flags: ['agent', 'base', 'root', 'strict'], id: true },
-    status: { description: 'Predict branch conflicts and report footprint drift', flags: ['full', 'watch', 'interval'], id: false },
-    sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply'], id: true },
+    start: { description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'strict'], id: true },
+    status: { description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
+    sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
     reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
     settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'apply'], id: false },
   };
   for (const [name, definition] of Object.entries(definitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
-    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: derive safe parallel work from pm and Git', arguments: definition.id ? [{ name: 'id', required: true }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
+    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id ? [{ name: 'id', required: true }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }
