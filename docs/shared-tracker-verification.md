@@ -203,3 +203,20 @@ Three real non-Git tracker regressions cover direct `sharedLanes`, status and th
 The focused command is `node --test --test-name-pattern="skips terminal claim reads" test/shared-tracker.test.ts`: corrected code passes 3/3. Restoring only the previous `sharedLanes` method in an isolated source copy, with final tests and pinned SDK unchanged, fails all 3 regressions, exit 1. Direct lanes expose the unwanted terminal claim timestamp; status performs 4 rather than 2 reads; three watch polls perform 12 rather than 6 reads. Tests import source, so no dist rebuild is needed for the proof.
 
 Whole-PR self-review checked all claim-history reads and their callers, including selection, planning, sync, reap, status/watch, Git lane projection and workspace dispatch. No additional instance of this defect class was found: non-status shared operations already disable claim reads, and direct claim ownership checks remain necessary. Dist is ignored and rebuilt by release gates. Review threads remain untouched.
+
+### Terminal claim-read release receipts
+
+Main advanced during validation with Dependabot commit `3663759`. It was merged in `c30c4dc`, bringing the pinned PM CLI and pm-ops to `2026.10.17`. Application code and tests remain those of `b77154c`. The corrected 3/3 regressions and the isolated 3/3 failing behavioral revert were repeated successfully with the new pinned SDK. Earlier passing gates on the previous dependency graph are superseded by these merged-head receipts.
+
+| Gate | Evidence | Suite | Packed acceptance | Coverage |
+| --- | --- | --- | --- | --- |
+| `npm run release:check` | Local Node 26.12.0/npm 11.20.0, isolated HOME and Git configuration, CI enabled | 145/145 | 3/3 | All 24 authored files; four 100 percent metrics |
+| `bun run release:check` | [CI Node 26 on c30c4dc](https://github.com/unbraind/pm-swarm/actions/runs/39475928529) | 145/145 | 3/3 | All 24 authored files; four 100 percent metrics |
+
+Both gates have zero failures, skips and cancellations; no timeout retry or threshold change was needed. Local coverage measures statements/lines 1548/1548, functions 90/90 and branches 804/804. Inventory and exclusions are unchanged. Identity/privacy, types, lint, zero duplication, docstrings, clean production audit, package contents, changelog and publish attestation pass. CI also passes the Node 22 matrix and strict tracked-project health.
+
+Packed npm/npx, native Bun/bunx, the built import allowlist and non-Git tarball workflows pass. Local npm and CI Bun package dry-runs match shasum `71dc782b8703792557ce5f509f80c5936b0763f5`. The local eight-process test retains eight distinct claims and nine valid history files with strict fixture health; its claim batch took 39321 ms.
+
+The final fetch still contains only PRRT_kwDOVLY-P86ucxhK, with no remaining thread/comment/review pagination and no Outside diff range findings. No thread was replied to or resolved. The final handoff changes only append-only PM evidence and this verification note; application, tests and package inputs remain those of `c30c4dc`.
+
+Core local tracker health passes. Full local health retains the existing ignored pm-github host-version mismatch (pinned host 2026.10.17 versus extension requirement 2026.10.20) and six stale-item advisories. The development-only glob advisory remains in pm-swarm-zn7m; hosted coordination remains unverified. No new PM CLI/SDK bug was observed. The feature remains in progress with its claim released.
