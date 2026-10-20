@@ -133,3 +133,21 @@ The focused commands are `node --test --test-name-pattern="PATTERN" test/mixed-t
 A final adjacent-case check found the symlink ceiling issue after the first npm gate had passed on `feab75b`. The superseded Bun gate was deliberately stopped to complete that correction and is not counted as a passing release gate. Six targeted ceiling tests pass, including relative entries, symlink aliases, the empty-entry sentinel, physical workspace paths and nonexistent paths. The full final regression file has 17 tests.
 
 The additional isolated revert command is `node --test --test-name-pattern="workspace detection canonicalizes ceiling symlinks" test/mixed-tracker.test.ts`. Restoring only `repositoryRoot` from `feab75b` fails 1/1 with exit 1. The corrected 17-test file passes through `pm test --run --only-last --progress`.
+
+
+### Final assignment and cross-mode release receipts
+
+Both full gates pass on application code, tests and package inputs in `b3339c3`, using isolated HOME, disabled global/system Git configuration and CI enabled, under Node 26.12.0/npm 11.20.0/Bun 1.3.5.
+
+| Gate | Suite | Packed acceptance | Statements / lines | Functions | Branches |
+| --- | --- | --- | --- | --- | --- |
+| `npm run release:check` | 139/139 | 3/3 | 1546/1546 | 90/90 | 802/802 |
+| `bun run release:check` | 139/139 | 3/3 | 1546/1546 | 90/90 | 802/802 |
+
+All 24 authored files retain four 100 percent metrics with unchanged inventory, exclusions and thresholds. Both final runs have zero failures, skips, cancellations and timeout retries. Identity/privacy, types, lint, zero duplication, docstrings, production audit, package contents, changelog and release attestation pass.
+
+Packed Git npm/npx and native Bun/bunx consumers pass. The non-Git tarball workflow passes under Node and native Bun with Git absent from PATH and full managed-extension strict health. Eight real processes retain eight claims and nine valid history files with strict fixture health: 21903 ms (npm), 46153 ms (Bun).
+
+Both package dry-runs have shasum `0d6760e7519595b4c83b27331f216d770544749d`. Dist is ignored rather than committed, and both gates rebuild it. The final handoff commit changes only append-only PM evidence and verification documentation; application code, tests and package inputs remain those of `b3339c3`. A preliminary Bun run was deliberately stopped to finish the extra ceiling fix; it is superseded by these complete final gates.
+
+Core package tracker health passes with clean integrity/history and the previously documented six stale-item advisories. Full local health still reports the ignored pm-github extension host-version skew; no dependency pin or existing history was rewritten. Hosted coordination remains unverified. The feature stays in progress with its claim released. No new PM CLI/SDK bug was observed. Review threads remain untouched.
