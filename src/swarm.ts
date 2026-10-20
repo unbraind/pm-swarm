@@ -9,6 +9,7 @@ import type { PmClient, TestResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
 import { branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
 import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts';
+import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
@@ -40,14 +41,14 @@ export class Swarm {
   }
 
   /** Use the same certified readiness and ownership rules for plan and next. */
-  private async readyCandidates(parent?: string) {
+  async readyCandidates(parent?: string, gitLanes = true) {
     const corpus = await this.corpus();
     const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = resolveItemTypeRegistry(prefs);
     const report = computeActionabilityReport(corpus.items, corpus.items, statuses, types);
     const ready = selectActionableEntries(report, statuses, {}, types).ready;
     const candidates: (Candidate & { priority: number; created_at: string })[] = [];
     for (const { item } of ready) {
-      if (item.status !== statuses.open_status || item.swarm_branch || (parent !== undefined && item.parent !== parent)) continue;
+      if (item.status !== statuses.open_status || (gitLanes && item.swarm_branch) || (parent !== undefined && item.parent !== parent)) continue;
       if (item.assignee?.trim()) continue;
       candidates.push({ id: item.id, files: itemFootprint(item), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
     }
@@ -68,40 +69,30 @@ export class Swarm {
   /** Rank ready work, exclude active overlaps, and explain every skipped candidate. */
   private async nextLane(parent: string | undefined, dryRun: boolean) {
     const { candidates } = await this.readyCandidates(parent);
-    candidates.sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
-    const active = await this.activeFootprints();
-    const evaluated = candidates.map(item => ({ item, overlaps: this.footprintOverlaps(item.files, active) }));
-    const safe = evaluated.find(row => row.item.files.length > 0 && row.overlaps.length === 0);
-    const chosen = safe ?? evaluated.find(row => row.item.files.length === 0);
-    const unknown = chosen !== undefined && chosen.item.files.length === 0;
-    const warnings = unknown ? ['Unknown footprint: no known conflict-free candidate exists; inspect the lane before editing.'] : [];
-    const skipped = evaluated.filter(row => row !== chosen).map(row => ({ id: row.item.id, reasons: row.overlaps.length > 0 ? row.overlaps.map(overlap => `Overlap with lane ${overlap.lane_id} on path ${overlap.path} (${overlap.lane_path})`) : [row.item.files.length === 0 ? 'Unknown footprint deferred' : 'Lower rank: priority, then oldest creation time, then id'], overlaps: row.overlaps }));
-    const reason = chosen === undefined ? 'No ready unclaimed candidate can start safely' : unknown ? 'Unknown footprint fallback after checking all known candidates' : 'Best non-overlapping candidate by priority, then oldest creation time, then id';
+    const { chosen, unknown, reason, warnings, skipped } = selectNext(candidates, await this.activeFootprints());
     const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown) : undefined;
     return { ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
   }
 
-  /** Combine declared footprints and real branch diffs for nonterminal lanes. */
+  /** Include every assigned tracker item, measuring changes for local Git lanes. */
   private async activeFootprints() {
-    return (await this.lanes()).filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
+    const corpus = await this.corpus();
+    const lanes = await this.lanes(corpus);
+    const localIds = new Set(lanes.map(lane => lane.id));
+    const gitLanes = lanes.filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
+    const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
+    const assigned = corpus.items.filter(item => item.assignee?.trim() && !statusIsTerminal(item.status, statuses) && !localIds.has(item.id));
+    return [...gitLanes, ...assigned.map(item => ({ id: item.id, files: itemFootprint(item) }))];
   }
 
-  /** Name every intersecting path and conservatively block unmeasured active lanes. */
-  private footprintOverlaps(files: string[], active: (Lane & { changed: string[] })[]) {
-    const result: { lane_id: string; branch: string; path: string; lane_path: string }[] = [];
-    for (const lane of active) {
-      const paths = [...new Set([...lane.files, ...lane.changed])].sort();
-      if (paths.length === 0 && files.length > 0) result.push({ lane_id: lane.id, branch: lane.branch, path: '*', lane_path: 'unknown footprint' });
-      for (const path of files) for (const lanePath of paths) if (overlaps(path, lanePath)) result.push({ lane_id: lane.id, branch: lane.branch, path, lane_path: lanePath });
-    }
-    return result;
-  }
-
-  /** Hold a shared-repository SDK lease across claim and worktree publication. */
+  /** Hold the tracker lease outside the repository lease across Git operations. */
   private async exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-    const release = await acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author);
-    try { return await operation(); } finally { await release(); }
+    const releaseTracker = await acquireLock(this.pmRoot, 'swarm-operation', 1800, this.author, false, false, 60000);
+    try {
+      const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+      const release = await acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author);
+      try { return await operation(); } finally { await release(); }
+    } finally { await releaseTracker(); }
   }
 
   /** Publish a lane under the repository operation lease. */
@@ -114,7 +105,7 @@ export class Swarm {
     if (statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(prefs.schema))) throw new Error('Cannot start a terminal item');
     const view = await this.client.get(id, { fields: 'id,assignee,claim_state' });
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
-    const overlap_warnings = this.footprintOverlaps(itemFootprint(item), await this.activeFootprints());
+    const overlap_warnings = footprintOverlaps(itemFootprint(item), (await this.activeFootprints()).filter(lane => lane.id !== id));
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     await this.client.claim(item.id, { author: this.author });
@@ -133,8 +124,8 @@ export class Swarm {
   }
 
   /** Discover lanes from certified item fields and existing local branches. */
-  async lanes(): Promise<Lane[]> {
-    const corpus = await this.corpus(); const config = await settings(this.pmRoot);
+  async lanes(corpus?: Awaited<ReturnType<Swarm['corpus']>>): Promise<Lane[]> {
+    corpus ??= await this.corpus(); const config = await settings(this.pmRoot);
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
     const lanes: Lane[] = [];
     for (const item of corpus.items) {
@@ -162,11 +153,13 @@ export class Swarm {
   }
 
   /** Preview footprint updates by default; apply through the SDK files mutation. */
-  async sync(id: string, apply = false) {
+  async sync(id: string, apply = false, explicitFiles?: string[]) {
     const lane = (await this.lanes()).find(row => row.id === id);
     if (lane === undefined) throw new Error('No active lane for item');
-    const files = changedFiles(this.repo, commit(this.repo, lane.target), lane.sha).map(footprintPath);
+    if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
+    const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
     const add = files.filter(path => !lane.files.includes(path));
+    if (apply && add.length > 0 && lane.agent !== this.author) throw new Error(lane.agent === null ? 'Lane is unclaimed; claim it before applying file links' : `Item claimed by ${lane.agent}`);
     if (apply && add.length > 0) await this.client.files(id, { add, author: this.author });
     return { id, dry_run: !apply, add };
   }

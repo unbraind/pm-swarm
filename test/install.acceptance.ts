@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, symlinkSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,10 +11,12 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { decodeToon } from '@unbrained/pm-cli/sdk/testing';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
+import { requireBun } from './install-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, async t => {
-  const root = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-install-'));
+  requireBun();
+  const root = process.cwd(); const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'swarm-install-')));
   t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
   const decoy = join(scratch, 'decoy'); mkdirSync(decoy); fixtureGit(decoy, ['init', '-b', 'main']);
   writeFileSync(join(decoy, 'sentinel'), 'preserve decoy contents\n'); fixtureGit(decoy, ['add', 'sentinel']);
@@ -130,4 +132,47 @@ test('built artifact has zero runtime dependencies beyond Node and the pm SDK', 
       assert.ok(specifier.startsWith('./') || specifier.startsWith('../') || (specifier.startsWith('node:') && isBuiltin(specifier)) || /^@unbrained\/pm-cli\/sdk(?:\/|$)/.test(specifier), `${file}: forbidden runtime import ${specifier}`);
     }
   }
+});
+
+
+/** Exercise the actual tarball on a plain tracker through Node and native Bun. */
+test('packed tarball coordinates a non-git tracker with explicit files and healthy history', { timeout: 600000 }, async t => {
+  const bun = requireBun();
+  const packageRoot = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-shared-install-'));
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  const repo = join(scratch, 'project'); mkdirSync(repo);
+  const pmRoot = join(repo, '.agents/pm');
+  const host = join(packageRoot, 'node_modules/.bin/pm');
+  const env = gitEnvironment({ ...process.env, HOME: scratch, GIT_CEILING_DIRECTORIES: scratch, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PM_PATH: pmRoot, PM_SOURCE_WORKSPACE_ROOT: repo, PM_SOURCE_PM_PATH: pmRoot, PM_GLOBAL_PATH: join(scratch, 'global-pm'), PM_AUTHOR: 'packed-worker' });
+  /** Run the real pinned host and reject extension activation or command failures. */
+  const invoke = (runtime: string, args: string[]) => {
+    const result = spawnSync(runtime, [host, ...args, '--json'], { cwd: repo, env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.doesNotMatch(result.stdout + result.stderr, /Extension activation failures/);
+    return JSON.parse(result.stdout) as Record<string, unknown>;
+  };
+  const packed = spawnSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: packageRoot, encoding: 'utf8' });
+  assert.equal(packed.status, 0, packed.stderr);
+  const filename = (JSON.parse(packed.stdout) as { filename: string }[])[0].filename;
+  const tarball = join(repo, filename); writeFileSync(tarball, readFileSync(join(scratch, filename)));
+  invoke(process.execPath, ['init', 'packed-shared', '--defaults', '--agent-guidance', 'skip']);
+  invoke(process.execPath, ['install', `./${filename}`, '--project']);
+  const nodeBin = join(scratch, 'node-only'); mkdirSync(nodeBin); symlinkSync(process.execPath, join(nodeBin, 'node'));
+  env.PATH = nodeBin;
+  for (const runtime of [process.execPath, bun]) {
+    const id = invoke(runtime, ['create', 'Task', 'Packed shared lane']).id as string;
+    invoke(runtime, ['files', id, '--add', 'src/work.ts']);
+    const selected = invoke(runtime, ['swarm', 'next', '--agent', 'packed-worker']);
+    assert.equal(selected.selected, id); assert.equal(selected.mode, 'shared-tracker'); assert.equal('branch' in selected, false);
+    const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply']);
+    assert.deepEqual(synced.add, ['test/work.test.ts']);
+    const status = invoke(runtime, ['swarm', 'status']); assert.equal((status.lanes as unknown[]).length, 1);
+    invoke(runtime, ['update', id, '--status', 'closed', '--message', 'Packed work verified']);
+    // A terminal item can retain a stale claim after import or explicit override.
+    invoke(runtime, ['claim', id, '--force']);
+    assert.deepEqual(invoke(runtime, ['swarm', 'reap', '--dry-run']).released, [id]);
+    assert.deepEqual(invoke(runtime, ['swarm', 'reap']).released, [id]);
+    assert.equal(invoke(runtime, ['health', '--strict-exit']).ok, true);
+  }
+  assert.equal(existsSync(join(repo, '.git')), false);
 });

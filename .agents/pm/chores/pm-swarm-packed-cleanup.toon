@@ -1,0 +1,19 @@
+id: pm-swarm-packed-cleanup
+title: Harden packed non-Git fixture cleanup against Bun cache races
+description: "Fresh handoff CI run 39497758293 on e68da81 reports ENOTEMPTY while removing the non-Git packed acceptance fixture Bun cache. Both review fixes pass the full local npm release gate and the earlier full CI Bun gate; Node 22 also passes the handoff run. The Git packed fixture already awaits recursive fs.rm with bounded retries, following the same historical cleanup race recorded on pm-swarm-watch. Investigate child/cache quiescence and extend bounded cleanup handling to the non-Git fixture without hiding command failures. Keep this separate from the unclaimed-lane and Bun-prerequisite review fixes."
+type: Chore
+status: open
+priority: 2
+tags: []
+created_at: "2026-10-20T21:12:15.689Z"
+updated_at: "2026-10-20T21:16:06.242Z"
+author: codex-agent
+acceptance_criteria: "Non-Git packed acceptance reliably removes disposable Bun cache state under concurrent cache cleanup; preserve original command assertions, full npm and Bun gates and unchanged thresholds/timeouts."
+parent: pm-swarm-shared-tracker
+comments[1]{created_at,author,text}:
+  "2026-10-20T21:16:06.241Z",codex-agent,"Deduplicated against ENOTEMPTY and Bun cleanup tracker searches. The historical Git packed fixture cleanup correction is recorded on closed pm-swarm-watch; this new item tracks the equivalent non-Git fixture, which currently lacks bounded retries. Handoff CI run 39497758293 on e68da81 first passed Node 22 but failed Node 26 packed acceptance 2/3 solely at recursive scratch Bun-cache cleanup. The unchanged-code retry passes Node 22/26, including Node 26 packed acceptance and the complete Bun release gate, 155/155 source plus 3/3 packed. This is a real intermittent fixture cleanup failure, not a timeout or a passing first attempt. No source, test, deadline or threshold was changed for the retry. Leave this follow-up open for separate cleanup hardening."
+files[1]{path,scope}:
+  test/install.acceptance.ts,project
+docs[1]{path,scope}:
+  docs/shared-tracker-verification.md,project
+body: ""

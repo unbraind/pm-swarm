@@ -1,7 +1,7 @@
 {
   "name": "pm-swarm",
   "version": "2026.10.15",
-  "description": "Git worktree lanes and real conflict prediction for parallel pm agents",
+  "description": "Coordinate parallel agents on a shared tracker with optional Git worktree lanes",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/unbraind/pm-swarm.git"
@@ -83,7 +83,7 @@
     "catalog": {
       "display_name": "pm-swarm",
       "category": "workflow",
-      "summary": "Git worktree lanes and real conflict prediction for parallel pm agents",
+      "summary": "Coordinate parallel agents on a shared tracker with optional Git worktree lanes",
       "tags": [
         "git",
         "worktrees",

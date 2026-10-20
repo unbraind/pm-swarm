@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, appendFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, appendFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import type { TestContext } from 'node:test';
@@ -11,7 +11,7 @@ import { Swarm } from '../src/swarm.ts';
 
 /** Create a real Git repository and SDK tracker with isolated fixture identity. */
 export async function fixture(t: TestContext) {
-  const root = mkdtempSync(join(tmpdir(), 'pm-swarm-test-')); const repo = join(root, 'repo'); mkdirSync(repo);
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'pm-swarm-test-'))); const repo = join(root, 'repo'); mkdirSync(repo);
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const sourceEnv = { ...process.env };
   const clean = gitEnvironment();

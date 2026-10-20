@@ -1,8 +1,8 @@
 # pm-swarm
 
-Parallel agents need a claimed item, a separate branch, and evidence that their work can land. pm-swarm joins pm's context and claims with Git worktrees and real merge simulations. It never pushes.
+Coordinate many agents on one pm tracker. pm-swarm uses SDK readiness, atomic claims, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
-Install with a current pm host (Node 22.18 or later, Git with `merge-tree --write-tree`). This new package stays unreleased until maintainer approval. After publication:
+Install with a current pm host (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. This new package stays unreleased until maintainer approval. After publication:
 
 ```sh
 pm install pm-swarm --project
@@ -12,33 +12,55 @@ npx pm install pm-swarm --project
 bunx --bun pm install pm-swarm --project
 ```
 
-For local review, build and pack this checkout, then `pm install ./pm-swarm-2026.10.15.tgz --project` in a scratch repository. npm and Bun dependencies alone do not activate project extensions; use `pm install` to register it.
+For local review, build and pack this checkout, then `pm install ./pm-swarm-2026.10.15.tgz --project` in a scratch pm project, with or without Git. npm and Bun dependencies alone do not activate project extensions; use `pm install` to register it.
 
 | Command | Example | Behavior |
 | --- | --- | --- |
 | plan | `pm swarm plan --parent project-id --limit 3` | Certified full corpus, SDK readiness and claim view, safe parallel waves |
-| next | `pm swarm next --agent worker --parent project-id` | Pick the best safe ready item and claim/create its lane; `--dry-run` previews the choice and makes no changes |
-| start | `pm swarm start task-id --agent worker --base main --root ../lanes` | Claim, create worktree and branch, record portable fields; warn on overlaps, or refuse with `--strict` |
-| status | `pm swarm status` | Conflicting pairs and clean pair count; `--full` includes every SHA/tree; active branches, ahead/behind current target, changed files, drift, pair and base-tip predictions |
+| next | `pm swarm next --agent worker --parent project-id` | Pick the best safe ready item and claim its lane; `--dry-run` previews the choice and makes no changes |
+| start | `pm swarm start task-id --agent worker --base main --root ../lanes` | Claim a shared lane; in Git, also create a worktree and branch; warn on overlaps, or refuse with `--strict` |
+| status | `pm swarm status` | Assigned lanes and declared overlaps without Git; in Git, conflicting pairs and clean pair count; `--full` includes every SHA/tree; active branches, ahead/behind current target, changed files, drift, pair and base-tip predictions |
 | status --watch | `pm swarm status --watch --interval 2 --json` | Stream lane and conflict changes as JSON lines (TOON blocks by default); stop with Ctrl-C |
-| sync | `pm swarm sync task-id --dry-run` | Preview changed-file links; `--apply` writes through the SDK |
+| sync | `pm swarm sync task-id --files src/a.ts,src/b.ts --dry-run` | Preview explicit changed-file links, or derive them from Git; `--apply` writes through the SDK |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
-| reap | `pm swarm reap --dry-run` | Preview cleanup; omit flag to remove merged terminal lanes |
+| reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
 
-The agent loop is `next` → work → `sync` → `land`:
+## Without git
+
+The primary agent loop is `next` → work → `sync --files` → `status` → finish → `reap`. Run `pm init` in a plain directory and install the extension there. Mode is detected once per invocation; non-Git workspaces return `mode: shared-tracker`. `settings` works without repository detection. The tracker commands do not start Git in this mode, including when Git is absent from PATH.
 
 ```sh
-pm swarm next --agent worker --parent project-id --dry-run
+pm swarm plan
+pm swarm next --agent worker --dry-run
+pm swarm next --agent worker
+# Edit and test in the shared workspace.
+pm swarm sync task-id --agent worker --files src/a.ts,test/a.test.ts --apply
+pm swarm status --watch --interval 2
+pm close task-id "Tests pass"
+pm swarm reap --agent worker --dry-run
+pm swarm reap --agent worker
+```
+
+Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm. Assigned-only items also block overlapping selection. `start` records the SDK claim and linked footprint, without branch or base fields. Selection holds a tracker-local SDK lease across readiness, footprint checks and claiming, so concurrent swarm processes serialize their decisions while the lease remains valid. The 1800-second lease is finite and is not renewed during the operation; a stalled process can continue after expiry, and distinct overlapping explicit `start` calls can then both succeed because `PmClient.claim` has no tracker fencing token. Ordinary SDK claims still enforce item ownership. Plan excludes candidates overlapping active assigned items and places unknown footprints in solitary waves; unknown work is deferred when active lanes prevent a safe planning recommendation. `next` retains its explicit unknown-footprint fallback. Claims made by tools outside swarm do not participate in its multi-item footprint lease; recheck status before editing.
+
+`status` lists nonterminal assigned items with their agent, linked files, claim timestamp and age in seconds. Assignments without claim provenance have null age. It shows declared overlaps, including unknown footprints, and a one-line note explaining that Git ahead/behind and merge predictions are unavailable. Watch adds `overlap_detected`, `overlap_changed` and `overlap_resolved` events. Age advancing alone emits no change.
+
+`sync` requires `--files a,b` without Git. Paths must be relative to the project; `--apply` links them through the SDK and `--dry-run` always previews. `reap` releases terminal claims belonging to the invoking principal; it reports foreign terminal claims with guidance to use their `--agent` principal. Active claims are preserved. `land` exits 2 and explains that it merges Git branches; shared-tracker work already lives on the shared tracker. Shared directory concurrency is tested with eight real CLI processes and a strict tracker health check. Hosted Postgres/MCP coordination is not certified by that local-process test.
+
+## Optional Git worktree lanes
+
+Inside a Git worktree, existing lane behavior is retained. Use `next` → work and commit in the printed worktree → `sync --apply` → `status` → `land`. Git-specific settings and flags control this optional isolation layer.
+
+```sh
 pm swarm next --agent worker --parent project-id
-# Use the printed worktree and branch, edit, test, and commit your work.
 pm swarm sync task-id --agent worker --apply
 pm swarm status --watch --interval 2
 pm swarm land --json
 pm swarm land --execute
 ```
 
-`next` uses the same certified corpus and SDK dependency readiness as `plan`, excluding existing lanes and both own and foreign claims. It selects known footprints that do not intersect any nonterminal lane's declared footprint or actual changed paths, measured with Git from the current target's merge base. Priority sorts ascending (0 first), then creation time ascending (oldest first), then item ID. A lower priority safe item beats a higher priority overlapping item. Output includes the selection reason and skipped candidates with overlapping lane IDs and paths. `--parent` selects direct children. Selection and start share a repository operation lease; the SDK claim is the final ownership check.
+`next` uses the same certified corpus and SDK dependency readiness as `plan`, excluding existing lanes and both own and foreign claims. It selects known footprints that do not intersect any nonterminal lane's declared footprint or actual changed paths, measured with Git from the current target's merge base. Priority sorts ascending (0 first), then creation time ascending (oldest first), then item ID. A lower priority safe item beats a higher priority overlapping item. Output includes the selection reason and skipped candidates with overlapping lane IDs and paths. `--parent` selects direct children. Both modes share a tracker operation lease; Git operations acquire the repository lease inside it. Git selection also checks assigned items without a local branch, including assigned-only items; the SDK claim is the final ownership check.
 
 Unknown candidate footprints are deferred until no known safe item exists, then started with an explicit warning. An active lane with neither linked nor changed paths cannot establish safety and blocks known candidates conservatively. When no eligible item remains, `selected` is null and no lane is created. `--dry-run` makes no claim, item/history edit, branch, worktree, or local Git configuration change. Normal host SDK read caches may still be refreshed. `next` uses the configured base, root and branch prefix, just as `start` does.
 
@@ -54,7 +76,7 @@ Absolute worktree paths live only in repository-local Git config (`swarm.lane.<i
 
 All package Git operations strip inherited Git location variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, and `GIT_PREFIX`). The explicit repository directory determines the target, including linked worktrees; hook environment variables cannot redirect operations to a parent or unrelated repository. Other Git configuration and identity variables remain available.
 
-Git's low-level configured pm merge drivers participate in `merge-tree --write-tree` on the tested Git version. The real-repository regression merges two SDK comments into the same item and history; both survive in the resulting tree. Replacing the item driver with a failing command produces an item-path conflict. Tracker conflicts are retained as `tracker_conflicts`, never silently waived. `start` and `status` warn via `missing_merge_drivers` when required config is absent. Install drivers with `pm merge install`. Predictions execute configured repository merge drivers, as normal Git merges do; run only in repositories you trust.
+Git simulations use configured repository merge drivers; `missing_merge_drivers` reports missing pm configuration, and unresolved tracker paths remain visible in `tracker_conflicts`. Run predictions only in repositories you trust.
 
 Status compares each lane with its current target tip and each other lane. Each prediction includes `left_id`, `left_branch`, `right_id`, `right_branch`, conflicting files, an explicit `clean` result from Git's exit status, and informational `messages`; the current target is identified as `base`. Conflicts with no individual paths remain visible with their messages. Default output shows conflicting pairs plus `clean_pairs`; `pm swarm status --full` includes all pairs, commit SHAs, and merge trees. Changed files are measured from the merge base of the current target tip and lane tip, so inherited base updates do not become agent footprints. The recorded starting SHA preserves lane provenance. Drift means a changed path has no linked equal or containing footprint. Git simulations write unreferenced objects, without changing branches, index, or worktree files.
 
@@ -74,4 +96,4 @@ pm swarm status --full
 pm swarm land --json
 ```
 
-`status` reports conflicts without failing the process; `land` supplies the conflict exit gate. For package development, run `npm run release:check` and `bun run release:check` with isolated HOME and Git configuration. CI verifies tracker health, commit identity, TypeScript, lint, duplication, docstrings, four 100% coverage dimensions, production audit, package allowlist, generated changelog, release attestation and packed npm/native Bun consumers. Packed acceptance extracts `npm pack`, installs the directory with `pm install <dir> --project` into fresh Git repositories and trackers, and checks real host commands through Node, npx, Bun and bunx, including TOON/JSON watch shutdown. A built artifact import check rejects dependencies outside Node built-ins and the pm SDK. Release has only a manual trigger plus an approval variable; scheduled publication stays disabled.
+`status` reports conflicts without failing the process; `land` supplies the conflict exit gate. For package development, run `npm run release:check` and `bun run release:check` with isolated HOME and Git configuration. CI verifies tracker health, commit identity, TypeScript, lint, duplication, docstrings, four 100% coverage dimensions, production audit, package allowlist, generated changelog, release attestation and packed npm/native Bun consumers. Packed acceptance also installs the tarball into a non-Git tracker and runs the shared loop. Git acceptance extracts `npm pack`, installs the directory with `pm install <dir> --project` into fresh Git repositories and trackers, and checks real host commands through Node, npx, Bun and bunx, including TOON/JSON watch shutdown. A built artifact import check rejects dependencies outside Node built-ins and the pm SDK. Release has only a manual trigger plus an approval variable; scheduled publication stays disabled.
