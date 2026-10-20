@@ -243,3 +243,5 @@ Independent isolated reverts retain final tests and the pinned SDK:
 | Only the previous `fixture` function | `node --test --test-name-pattern="fixture canonicalizes" test/mixed-tracker.test.ts` | 0/1 pass, 1 fail, exit 1: lexical and physical roots differ |
 
 The corrected focused command is `node --test --test-name-pattern="fixture canonicalizes|expired tracker lease" test/mixed-tracker.test.ts test/shared-tracker.test.ts`. Tests import source; these proofs do not require a dist rebuild. Review threads remain untouched and the feature remains in progress.
+
+The additional packed-fixture proof uses a symlinked `TMPDIR` with only the Git acceptance fixture's root canonicalization reverted. `node --test --test-name-pattern="packed npm/npx" test/install.acceptance.ts` fails 0/1, exit 1, at the returned `start.worktree` comparison: Git returns the physical temporary root while the old fixture expects its symlink alias. The reverted run took 245200 ms. The corrected fixture is exercised under the same symlinked temporary root by the full release gate.
