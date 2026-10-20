@@ -189,3 +189,17 @@ The local Bun attempt reported 140 passes, one failure and one cancellation: the
 Eight-process coordination retained eight claims and nine valid histories with strict fixture health in 43555 ms (local npm), 82490 ms (local Bun attempt) and 2147 ms (CI Bun). Packed npm/npx, native Bun/bunx, the built import allowlist and non-Git tarball workflows all pass in the successful gates.
 
 The final handoff changes only append-only PM evidence and this verification note. The feature remains in progress with its claim released. The existing ignored local extension version skew, six stale-item advisories and development-only glob advisory in pm-swarm-zn7m remain separate; hosted coordination remains unverified. No new PM CLI/SDK bug was observed. No review thread was replied to or resolved.
+
+## Terminal claim-read review round
+
+At head `576c9a5`, all unresolved threads and all their comments were fetched with no remaining pagination. The latest CodeRabbit review contains no Outside diff range findings.
+
+| Thread | Verified correction |
+| --- | --- |
+| PRRT_kwDOVLY-P86ucxhK | Compute terminal status before loading claim provenance; terminal lanes retain metadata with null `claimed_at`, and only active assigned items incur claim reads. |
+
+Three real non-Git tracker regressions cover direct `sharedLanes`, status and three serial watch polls. Each includes active claimed and assigned-only items, terminal claimed and assigned-only items, and unassigned work. They count delegated real SDK reads, retain active timestamps, verify claim-disabled callers perform no reads, and confirm all observed histories remain unchanged.
+
+The focused command is `node --test --test-name-pattern="skips terminal claim reads" test/shared-tracker.test.ts`: corrected code passes 3/3. Restoring only the previous `sharedLanes` method in an isolated source copy, with final tests and pinned SDK unchanged, fails all 3 regressions, exit 1. Direct lanes expose the unwanted terminal claim timestamp; status performs 4 rather than 2 reads; three watch polls perform 12 rather than 6 reads. Tests import source, so no dist rebuild is needed for the proof.
+
+Whole-PR self-review checked all claim-history reads and their callers, including selection, planning, sync, reap, status/watch, Git lane projection and workspace dispatch. No additional instance of this defect class was found: non-status shared operations already disable claim reads, and direct claim ownership checks remain necessary. Dist is ignored and rebuilt by release gates. Review threads remain untouched.

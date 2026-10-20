@@ -6,11 +6,13 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-20T17:37:02.970Z"
+updated_at: "2026-10-20T18:14:14.422Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[39]{created_at,author,text}:
+comments[41]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -50,6 +52,8 @@ comments[39]{created_at,author,text}:
   "2026-10-20T17:13:46.565Z",codex-agent,"Full npm release gate PASSED on application code, tests and package inputs in 7babaf5. Command: env HOME=$(mktemp -d) GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 CI=true npm run release:check; Node 26.12.0/npm 11.20.0/Bun 1.3.5. Suite 142/142, packed acceptance 3/3, zero failures/skips/cancellations and no timeout retries. All 24 authored files retain unchanged four 100 percent thresholds: statements/lines 1547/1547, functions 90/90, branches 802/802. Identity/privacy, typecheck, lint, zero duplication, docstrings, clean production audit, package allowlist, generated changelog and release attestation pass. Packed Git npm/npx/native Bun/bunx and non-Git Node/native Bun tarball loops pass. Eight-process claim batch retained all eight claims and nine valid histories with strict core health in 43555 ms. Package dry-run shasum 5e45e0cf295a3502d59ce8c4516a14528a673316. Starting full Bun gate on identical application code, tests and package inputs. Development audit confirms only the existing three-package glob advisory tracked by pm-swarm-zn7m."
   "2026-10-20T17:28:35.135Z",codex-agent,"Local Bun gate has reported watch timing failures under host load while the same tests passed in the complete npm gate on identical application code. The TOON watch case reached its 60-second timeout; final diagnostics and isolated retries remain pending. Source commit 7babaf5 is pushed; CI is running at https://github.com/unbraind/pm-swarm/actions/runs/39466254083 to validate both Node matrices and the full Bun release gate in an isolated runner. The branch remains zero commits behind origin/main. No thresholds or test timeouts were changed."
   "2026-10-20T17:36:55.209Z",codex-agent,"FINAL review-round verification: one unresolved finding PRRT_kwDOVLY-P86uau2z was valid and fixed in 7babaf5; full-diff review also fixed the symlink ancestor ceiling bypass. Final review fetch still has that single thread, no remaining pagination and no Outside diff range findings. Independent behavioral reverts fail 3/3 for the original Git cwd and 1/1 for lexical ancestor traversal, all exit 1. Corrected mixed-tracker suite passes 20/20; workspace cases pass 9/9. Full local npm release gate passes 142/142 plus packed acceptance 3/3. CI https://github.com/unbraind/pm-swarm/actions/runs/39466254083 passes both Node 22/26 jobs and the full Bun release gate on 7babaf5: 142/142 suite, 3/3 packed, four 100 percent metrics across all 24 authored files with unchanged inventory/exclusions/thresholds. Local npm counts: statements/lines 1547/1547, functions 90/90, branches 802/802. CI strict tracker health, identity/privacy, types, lint, zero duplication, docstrings, clean production audit, package allowlist, changelog and attestation pass. npm and CI Bun package shasums match 5e45e0cf295a3502d59ce8c4516a14528a673316. The local Bun attempt is not counted as passed: 140 passes, one JSON watch initial-output deadline failure and one TOON 60-second timeout cancellation. Both unchanged watch cases pass 2/2 on isolated local retry through the newly linked command and PM test runner, and both pass in the complete CI gate. Eight retained claims and nine valid histories pass strict fixture health in local npm, local Bun attempt and CI Bun. No timeout or threshold was changed. Final handoff changes only PM evidence and verification documentation; code/tests/package inputs remain 7babaf5. Existing local extension host-version skew, six stale-item advisories and development-only glob advisory in pm-swarm-zn7m remain separate. No new PM CLI/SDK bug observed; hosted coordination is not certified. Release the claim, keep the feature in progress, and leave all review threads untouched. No merge or release."
+  "2026-10-20T18:13:00.911Z",codex-agent,"Review round at 576c9a5: all unresolved threads and comments fetched with no remaining pagination. PRRT_kwDOVLY-P86ucxhK is valid: sharedLanes reads terminal claim history before status filters it, repeated by watch. Latest CodeRabbit review has no Outside diff range findings. Branch contains origin/main. Reuse this item; compute terminal status first and skip terminal claim reads while retaining active provenance and terminal lane metadata. Add real non-Git tracker regressions for sharedLanes, status and repeated watch polls, behavioral revert proof, whole-PR same-class review, and unchanged npm/Bun release gates."
+  "2026-10-20T18:14:14.420Z",codex-agent,"Behavioral proof: node --test --test-name-pattern=\"skips terminal claim reads\" test/shared-tracker.test.ts passes 3/3 on corrected code. In an isolated source copy with final tests and pinned SDK, restoring only sharedLanes from 576c9a5 fails 3/3, exit 1: direct lane metadata contains a terminal timestamp instead of null, status reads four rather than two items, and three watch polls read twelve rather than six. Real SDK instrumentation substitutes no responses. Fixtures cover terminal forced claims and assigned-only terminal items, active claims/assignments, unassigned items, claim-disabled callers, and unchanged histories. Initial fixture setup was corrected because closing items automatically releases assignments. Whole-PR review of every claim read and caller found no other same-class instance: non-status shared operations disable claim reads, and selected-item ownership reads remain required. Source imports require no dist rebuild; dist is ignored. Full release gates will use Node 26.12.0 with unchanged thresholds."
 files[12]{path,scope}:
   index.ts,project
   manifest.json,project
@@ -63,7 +67,7 @@ files[12]{path,scope}:
   test/install.acceptance.ts,project
   test/mixed-tracker.test.ts,project
   test/shared-tracker.test.ts,project
-tests[8]:
+tests[9]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -119,6 +123,13 @@ tests[8]:
     provenance:
       author: codex-agent
       created_at: "2026-10-20T17:34:24.766Z"
+      source_kind: local_mutation
+      source_ref: feat/shared-tracker-coordination
+  - command: "node --test --test-name-pattern=\"skips terminal claim reads\" test/shared-tracker.test.ts"
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-20T18:14:02.119Z"
       source_kind: local_mutation
       source_ref: feat/shared-tracker-coordination
 docs[2]{path,scope}:

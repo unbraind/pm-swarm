@@ -21,8 +21,9 @@ export class SharedTracker {
     const lanes = [];
     for (const item of corpus.items) {
       if (!item.assignee?.trim()) continue;
-      const claim = withClaims ? (await this.engine.client.get(item.id, { fields: 'claim_state' })).claim_state : undefined;
-      lanes.push({ id: item.id, agent: item.assignee, files: itemFootprint(item), terminal: statusIsTerminal(item.status, statuses), claimed_at: claim?.last_claim?.ts ?? null });
+      const terminal = statusIsTerminal(item.status, statuses);
+      const claim = withClaims && !terminal ? (await this.engine.client.get(item.id, { fields: 'claim_state' })).claim_state : undefined;
+      lanes.push({ id: item.id, agent: item.assignee, files: itemFootprint(item), terminal, claimed_at: claim?.last_claim?.ts ?? null });
     }
     return lanes.sort((left, right) => left.id.localeCompare(right.id));
   }

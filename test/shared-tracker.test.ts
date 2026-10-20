@@ -112,6 +112,53 @@ test('no-git status reports claim age and declared overlaps, omitting Git measur
   for (const key of ['ahead', 'behind', 'predictions', 'clean_pairs', 'branch', 'sha', 'missing_merge_drivers']) assert.doesNotMatch(JSON.stringify(status), new RegExp(`"${key}"`));
 });
 
+for (const operation of ['sharedLanes', 'status', 'watch'] as const) {
+  test(`shared ${operation} skips terminal claim reads and retains active provenance`, async t => {
+    const f = await sharedFixture(t);
+    const active = await f.item(['active']); await f.client.claim(active);
+    const assigned = await f.item(['assigned']); await f.client.update(assigned, { assignee: 'assigned-worker' });
+    const completed = await f.item(['completed']); await f.client.claim(completed);
+    await f.client.update(completed, { status: 'closed', message: 'Fixture complete' });
+    await f.client.claim(completed, { force: true });
+    const terminalAssigned = await f.item(['terminal-assigned']);
+    await f.client.update(terminalAssigned, { status: 'closed', message: 'Fixture complete' });
+    await f.client.update(terminalAssigned, { assignee: 'assigned-worker' });
+    await f.item(['unassigned']);
+    const claimedAt = (await f.client.get(active)).claim_state!.last_claim!.ts;
+    const history = [active, assigned, completed, terminalAssigned].map(id => join(f.pmRoot, 'history', `${id}.jsonl`));
+    const before = history.map(path => readFileSync(path, 'utf8'));
+    const reads: string[] = []; const get = f.client.get.bind(f.client);
+    // Count actual SDK reads without replacing tracker responses.
+    f.client.get = new Proxy(get, { apply: (target, receiver, args: unknown[]) => { reads.push(String(args[0])); return Reflect.apply(target, receiver, args); } });
+    const polls = operation === 'watch' ? 3 : 1;
+    if (operation === 'sharedLanes') {
+      const lanes = await f.shared.sharedLanes();
+      assert.deepEqual(lanes.filter(lane => lane.terminal).map(lane => [lane.id, lane.claimed_at]).sort(), [[completed, null], [terminalAssigned, null]].sort());
+      assert.equal(lanes.find(lane => lane.id === active)!.claimed_at, claimedAt);
+      assert.equal(lanes.find(lane => lane.id === assigned)!.claimed_at, null);
+    } else {
+      const controller = new AbortController(); const status = f.shared.status.bind(f.shared); let measured = 0;
+      // Exercise the real status implementation on each serial watch poll.
+      f.shared.status = async () => {
+        const result = await status(); measured++;
+        assert.deepEqual(result.lanes.map(lane => lane.id).sort(), [active, assigned].sort());
+        assert.equal(result.lanes.find(lane => lane.id === active)!.claimed_at, claimedAt);
+        assert.equal(result.lanes.find(lane => lane.id === assigned)!.claimed_at, null);
+        if (measured === polls) controller.abort();
+        return result;
+      };
+      if (operation === 'watch') await watchStatus(f.shared, 1, controller.signal, () => {});
+      else await f.shared.status();
+      assert.equal(measured, polls);
+    }
+    assert.deepEqual(reads.sort(), Array.from({ length: polls }, () => [active, assigned]).flat().sort());
+    reads.length = 0;
+    assert.ok((await f.shared.sharedLanes(undefined, false)).every(lane => lane.claimed_at === null));
+    assert.deepEqual(reads, [], 'claim-disabled callers perform no claim reads');
+    assert.deepEqual(history.map(path => readFileSync(path, 'utf8')), before, 'observational operations preserve history');
+  });
+}
+
 test('no-git sync requires explicit safe files and applies only when requested', async t => {
   const f = await sharedFixture(t); const id = await f.item(['existing']); await f.client.claim(id);
   const refused = f.cli('swarm', 'sync', id, '--json'); assert.equal(refused.status, 2, refused.stdout + refused.stderr); assert.match(refused.stdout + refused.stderr, /--files/);
