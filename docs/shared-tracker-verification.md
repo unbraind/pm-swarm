@@ -60,6 +60,6 @@ All 24 authored source files are measured at 100 percent in every dimension. Bot
 
 The eight-process claim test retained all eight unique claims and validated all nine history files in 24646 ms in the npm gate and 28004 ms in the Bun gate. Strict core health passed for the source fixture; full managed-extension strict health passed in the packed non-Git tracker under Node and native Bun. These timings include process startup and contention under host load.
 
-The packed non-Git smoke uses `pm install ./package.tgz --project`, then next, sync with explicit files, status and terminal stale-claim reap. Git is absent from PATH during that loop. Existing Git-mode test files remain unchanged, and a new regression preserves their existing refusal exit transport.
+The packed non-Git smoke uses `pm install ./package.tgz --project`, then next, sync with explicit files, status and terminal stale-claim reap. Git is absent from PATH during that loop. Existing Git-mode test cases remain unchanged, and a new regression preserves their existing refusal exit transport.
 
 Node 22 and Node 26 CI passed on the tested source. The final handoff changes only this verification note and append-only PM evidence, with the feature left in progress and its claim released. No merge, tag, release or publication was performed.
