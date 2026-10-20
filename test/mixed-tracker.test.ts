@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync, mkdirSync, symlinkSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { delimiter, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
@@ -10,6 +10,7 @@ import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { repositoryRoot } from '../src/workspace.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
+import { fixtureGit as git } from './git-helpers.ts';
 
 test('concurrent Git and non-Git CLI selections coordinate on the same tracker', { timeout: 60000 }, async t => {
   const f = await fixture(t); const sharedWorkspace = join(f.root, 'shared'); mkdirSync(sharedWorkspace);
@@ -119,6 +120,24 @@ test('workspace detection ignores nonexistent absolute ceilings and accepts miss
   assert.equal(repositoryRoot(f.pmRoot), f.repo);
   assert.equal(repositoryRoot(join(f.root, 'missing-workspace')), undefined);
 });
+
+for (const kind of ['repository', 'symlink', 'linked worktree'] as const) {
+  test(`workspace detection resolves missing descendants of a ${kind}`, async t => {
+    const f = await fixture(t); let workspace = f.repo; let expected = f.repo;
+    if (kind === 'symlink') { workspace = join(f.root, 'alias'); symlinkSync(f.repo, workspace); }
+    if (kind === 'linked worktree') {
+      workspace = join(f.root, 'linked'); expected = workspace;
+      git(f.repo, ['worktree', 'add', '--detach', workspace, 'HEAD']);
+    }
+    const missing = join(workspace, 'missing', 'nested');
+    assert.equal(existsSync(missing), false);
+    process.env.GIT_CEILING_DIRECTORIES = f.root;
+    assert.equal(repositoryRoot(missing), expected);
+    assert.equal(existsSync(missing), false, 'discovery must not create the requested path');
+    process.env.GIT_CEILING_DIRECTORIES = workspace;
+    assert.equal(repositoryRoot(missing), undefined, 'a ceiling still excludes the repository ancestor');
+  });
+}
 
 test('shared assigned-only lanes block selection and are documented as assigned items', async t => {
   const f = await fixture(t); const active = await f.item(['src']); const ready = await f.item(['src/code.ts']);

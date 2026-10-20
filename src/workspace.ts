@@ -18,8 +18,9 @@ export function repositoryRoot(directory: string): string | undefined {
   let current = resolve(directory);
   if (existsSync(current)) current = realpathSync(current);
   while (true) {
-    if (existsSync(join(current, '.git'))) return git(directory, ['rev-parse', '--show-toplevel']);
-    const parent = dirname(current);
+    if (existsSync(join(current, '.git'))) return git(current, ['rev-parse', '--show-toplevel']);
+    const ancestor = dirname(current);
+    const parent = existsSync(ancestor) ? realpathSync(ancestor) : ancestor;
     if (parent === current || ceilings.includes(parent)) break;
     current = parent;
   }
