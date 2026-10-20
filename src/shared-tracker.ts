@@ -14,7 +14,7 @@ export class SharedTracker {
   readonly engine: Swarm;
   /** Reuse the host-bound SDK engine without invoking its Git operations. */
   constructor(engine: Swarm) { this.engine = engine; }
-  /** Read claimed items from the certified corpus, retaining claim provenance. */
+  /** Read assigned items from the certified corpus, retaining available claim provenance. */
   async sharedLanes(corpus?: Awaited<ReturnType<Swarm['corpus']>>, withClaims = true) {
     corpus ??= await this.engine.corpus();
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
@@ -33,7 +33,7 @@ export class SharedTracker {
     try { return await operation(); } finally { await release(); }
   }
 
-  /** Plan waves excluding ready work that overlaps an existing nonterminal claim. */
+  /** Plan waves excluding ready work that overlaps a nonterminal assigned item. */
   async plan(parent?: string, limit?: number) {
     const config = await settings(this.engine.pmRoot, limit === undefined ? {} : { lane_limit: limit });
     const { candidates, corpus } = await this.engine.readyCandidates(parent, false);

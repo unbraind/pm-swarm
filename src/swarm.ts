@@ -74,16 +74,25 @@ export class Swarm {
     return { ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
   }
 
-  /** Combine declared footprints and real branch diffs for nonterminal lanes. */
+  /** Include every assigned tracker item, measuring changes for local Git lanes. */
   private async activeFootprints() {
-    return (await this.lanes()).filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
+    const corpus = await this.corpus();
+    const lanes = await this.lanes(corpus);
+    const localIds = new Set(lanes.map(lane => lane.id));
+    const gitLanes = lanes.filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
+    const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
+    const assigned = corpus.items.filter(item => item.assignee?.trim() && !statusIsTerminal(item.status, statuses) && !localIds.has(item.id));
+    return [...gitLanes, ...assigned.map(item => ({ id: item.id, files: itemFootprint(item) }))];
   }
 
-  /** Hold a shared-repository SDK lease across claim and worktree publication. */
+  /** Hold the tracker lease outside the repository lease across Git operations. */
   private async exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-    const release = await acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author);
-    try { return await operation(); } finally { await release(); }
+    const releaseTracker = await acquireLock(this.pmRoot, 'swarm-operation', 1800, this.author, false, false, 60000);
+    try {
+      const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+      const release = await acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author);
+      try { return await operation(); } finally { await release(); }
+    } finally { await releaseTracker(); }
   }
 
   /** Publish a lane under the repository operation lease. */
@@ -96,7 +105,7 @@ export class Swarm {
     if (statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(prefs.schema))) throw new Error('Cannot start a terminal item');
     const view = await this.client.get(id, { fields: 'id,assignee,claim_state' });
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
-    const overlap_warnings = footprintOverlaps(itemFootprint(item), await this.activeFootprints());
+    const overlap_warnings = footprintOverlaps(itemFootprint(item), (await this.activeFootprints()).filter(lane => lane.id !== id));
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     await this.client.claim(item.id, { author: this.author });
@@ -115,8 +124,8 @@ export class Swarm {
   }
 
   /** Discover lanes from certified item fields and existing local branches. */
-  async lanes(): Promise<Lane[]> {
-    const corpus = await this.corpus(); const config = await settings(this.pmRoot);
+  async lanes(corpus?: Awaited<ReturnType<Swarm['corpus']>>): Promise<Lane[]> {
+    corpus ??= await this.corpus(); const config = await settings(this.pmRoot);
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
     const lanes: Lane[] = [];
     for (const item of corpus.items) {

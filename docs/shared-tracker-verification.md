@@ -6,9 +6,9 @@ The feature is tracked in [pm-swarm-shared-tracker](https://github.com/unbraind/
 
 The command dispatcher checks workspace mode once. It traverses worktree markers before resolving a Git root, so a non-Git tracker path does not spawn Git. Settings bypasses repository detection entirely. Existing Git lanes retain their branch/worktree, diff, merge-prediction and cleanup behavior.
 
-SharedTracker reuses the host-bound Swarm SDK client and certified readiness. A tracker-local SDK operation lease covers selection and claim publication. Both modes use the same priority/age/id ranking, footprint containment checks and unknown-footprint fallback. Shared lanes are claimed items with linked files and claim provenance. They do not persist branch or base fields.
+SharedTracker reuses the host-bound Swarm SDK client and certified readiness. A tracker-local SDK operation lease covers selection and claim publication. Both modes use the same priority/age/id ranking, footprint containment checks and unknown-footprint fallback. Shared lanes are all items with a nonblank assignee, including assigned-only items and items with SDK claims. Linked files define their footprints; claim provenance is included when available. They do not persist branch or base fields.
 
-Shared status reports nonterminal claims and declared overlaps, with null claim age where no claim history exists. Git measurements are omitted with an explanatory note. Watch compares claim provenance rather than elapsed age and emits separate overlap events. Sync requires explicit portable files without Git, preserving preview/apply precedence. Land refuses with the Git requirement and the available shared-tracker commands. Reap preserves active and foreign claims and releases terminal claims for the invoking principal.
+Shared status reports nonterminal assigned items and declared overlaps, with null claim age where no claim history exists. Git measurements are omitted with an explanatory note. Watch compares claim provenance rather than elapsed age and emits separate overlap events. Sync requires explicit portable files without Git, preserving preview/apply precedence. Land refuses with the Git requirement and the available shared-tracker commands. Reap preserves active and foreign claims and releases terminal claims for the invoking principal.
 
 ## Behavioral revert evidence
 
@@ -101,3 +101,30 @@ All 24 authored files are measured at 100 percent in every dimension. Both suite
 Packed Git npm/npx and native Bun/bunx consumers, the built dependency allowlist, and the non-Git tarball loop pass in both gates. Full strict health passes for the managed non-Git extension under Node and native Bun with Git absent from PATH. No gate needed a timeout retry. Identity/privacy, types, lint, zero duplication, docstrings, production audit, package contents, changelog and release attestation all pass. Both pack dry-runs reported tarball shasum `43becd5976a48522c42577e32638e2f27505d55e`.
 
 The final handoff changes only this verification note and append-only PM receipts; application code, tests and package inputs remain those of `856d26a`. The pre-existing development-tool advisory remains tracked in pm-swarm-zn7m. No new PM CLI/SDK bug was observed; the host still uses generic refusal headings with actionable details. The feature remains in progress with its claim released.
+
+## Assignment and cross-mode lease review round
+
+At pre-round head `b1f30c2`, every unresolved thread and every comment were fetched with no remaining pagination. The latest CodeRabbit review had no Outside diff range findings. All four findings were valid.
+
+| Thread | Correction |
+| --- | --- |
+| PRRT_kwDOVLY-P86uYd_6 | README and verification text define shared lanes as all items with a nonblank assignee, including assigned-only items and SDK claims. |
+| PRRT_kwDOVLY-P86uYeAB | Git operations acquire the same tracker lease as shared operations, outside the existing repository lease. Both release on success and failure. |
+| PRRT_kwDOVLY-P86uYeAP | Git selection and strict start include assigned tracker footprints without a local Git lane, including unavailable local branches and unknown footprints. Terminal and unassigned items do not block. |
+| PRRT_kwDOVLY-P86uYeAq | Absolute Git ceiling entries are normalized; empty entries remain present and relative entries remain ignored. |
+
+Whole-diff review also covered assignments with stale Git metadata and conversion of one's own shared claim into a strict Git lane. Conversion excludes its own item from overlap checks. Git footprint projection reuses its certified corpus rather than reading it twice. Existing Git lane diffs remain measured.
+
+The regressions use real temporary trackers and Git repositories. Lease instrumentation probes the actual SDK lease during real SDK reads; it substitutes no tracker responses. A separate concurrent Git/non-Git CLI test targets the same tracker with overlapping candidates and requires exactly one retained claim.
+
+Behavioral reverts restore only the named pre-round function in an isolated source copy with the final tests. Source imports need no dist rebuild:
+
+| Revert | Failing regressions | Process exit |
+| --- | --- | --- |
+| `Swarm.exclusive` | 1/1: tracker lease absent during Git selection | 1 |
+| `Swarm.activeFootprints` | 4/4: claim, assignment, unavailable branch, unknown footprint | 1 |
+| `Swarm.startLane` | 1/1: own shared claim falsely overlaps itself | 1 |
+| `repositoryRoot` | 3/3: trailing separator, parent component, dot component | 1 |
+| Lane documentation | 1/1: assigned-only behavior/documentation contract | 1 |
+
+The focused commands are `node --test --test-name-pattern="PATTERN" test/mixed-tracker.test.ts`, with patterns `Git operations hold`, `Git selection includes shared (claim|assignment|missing-branch|unknown)`, `Git strict start can convert`, `workspace detection normalizes absolute`, and `shared assigned-only lanes`, respectively.
