@@ -11,7 +11,7 @@
 
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -31,7 +31,7 @@ import fleetConfig from "../eslint.config.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 const scriptsDirectory = join(repositoryRoot, "scripts");
-const scratchBase = mkdtempSync(join(tmpdir(), "pm-swarm-tooling-"));
+const scratchBase = realpathSync(mkdtempSync(join(tmpdir(), "pm-swarm-tooling-")));
 
 /** Run one of this package's scripts as a real child process with captured streams. */
 function runScript(name: string, args: readonly string[] = [], cwd: string = repositoryRoot) {

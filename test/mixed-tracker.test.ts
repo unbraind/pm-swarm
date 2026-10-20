@@ -12,7 +12,7 @@ import { repositoryRoot } from '../src/workspace.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { fixtureGit as git } from './git-helpers.ts';
 
-test('fixture canonicalizes a symlinked temporary root before deriving paths', async t => {
+for (const kind of ['Git', 'coverage'] as const) test(`fixture canonicalizes a symlinked temporary root for ${kind}`, async t => {
   const f = await fixture(t); const alias = join(f.root, 'temporary-alias'); symlinkSync(f.root, alias);
   const script = `
     import assert from 'node:assert/strict';
@@ -32,7 +32,8 @@ test('fixture canonicalizes a symlinked temporary root before deriving paths', a
     });
   `;
   const env = gitEnvironment({ ...process.env, TMPDIR: alias, TMP: alias, TEMP: alias }); delete env.NODE_TEST_CONTEXT;
-  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' });
+  const args = kind === 'Git' ? ['--input-type=module', '-e', script] : ['--test', '--test-name-pattern=coverage gate measures repository-root sources', join(import.meta.dirname, 'tooling.test.ts')];
+  const child = spawnSync(process.execPath, args, { env, encoding: 'utf8' });
   assert.equal(child.status, 0, child.stdout + child.stderr);
 });
 
