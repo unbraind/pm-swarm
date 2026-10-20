@@ -6,10 +6,10 @@ import { git } from './git.ts';
 export function repositoryRoot(directory: string): string | undefined {
   const ceilings = (process.env.GIT_CEILING_DIRECTORIES ?? '').split(delimiter);
   let current = resolve(directory);
-  while (!ceilings.includes(current)) {
+  while (true) {
     if (existsSync(join(current, '.git'))) return git(directory, ['rev-parse', '--show-toplevel']);
     const parent = dirname(current);
-    if (parent === current) break;
+    if (parent === current || ceilings.includes(parent)) break;
     current = parent;
   }
   return undefined;

@@ -198,6 +198,7 @@ test('workspace detection respects Git ceilings, nested worktrees and a filesyst
   const f = await fixture(t); assert.equal(repositoryRoot(f.repo), f.repo); assert.equal(repositoryRoot(f.pmRoot), f.repo);
   const old = process.env.GIT_CEILING_DIRECTORIES; process.env.GIT_CEILING_DIRECTORIES = f.repo;
   assert.equal(repositoryRoot(f.pmRoot), undefined);
+  assert.equal(repositoryRoot(f.repo), f.repo, 'Git ceilings exclude parents, not the current directory');
   delete process.env.GIT_CEILING_DIRECTORIES;
   assert.equal(repositoryRoot(dirname(tmpdir())), undefined);
   if (old !== undefined) process.env.GIT_CEILING_DIRECTORIES = old;
