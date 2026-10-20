@@ -111,7 +111,7 @@ At pre-round head `b1f30c2`, every unresolved thread and every comment were fetc
 | PRRT_kwDOVLY-P86uYd_6 | README and verification text define shared lanes as all items with a nonblank assignee, including assigned-only items and SDK claims. |
 | PRRT_kwDOVLY-P86uYeAB | Git operations acquire the same tracker lease as shared operations, outside the existing repository lease. Both release on success and failure. |
 | PRRT_kwDOVLY-P86uYeAP | Git selection and strict start include assigned tracker footprints without a local Git lane, including unavailable local branches and unknown footprints. Terminal and unassigned items do not block. |
-| PRRT_kwDOVLY-P86uYeAq | Absolute Git ceiling entries are normalized; empty entries remain present and relative entries remain ignored. |
+| PRRT_kwDOVLY-P86uYeAq | Absolute Git ceiling entries are normalized and canonicalized through symlinks until an empty entry disables further ceiling symlink resolution. Relative and unresolvable absolute entries are ignored. Workspace symlinks use the physical working directory. |
 
 Whole-diff review also covered assignments with stale Git metadata and conversion of one's own shared claim into a strict Git lane. Conversion excludes its own item from overlap checks. Git footprint projection reuses its certified corpus rather than reading it twice. Existing Git lane diffs remain measured.
 
@@ -126,5 +126,10 @@ Behavioral reverts restore only the named pre-round function in an isolated sour
 | `Swarm.startLane` | 1/1: own shared claim falsely overlaps itself | 1 |
 | `repositoryRoot` | 3/3: trailing separator, parent component, dot component | 1 |
 | Lane documentation | 1/1: assigned-only behavior/documentation contract | 1 |
+| Absolute-only `repositoryRoot` from `feab75b` | 1/1: symlink ceiling and empty-entry semantics | 1 |
 
 The focused commands are `node --test --test-name-pattern="PATTERN" test/mixed-tracker.test.ts`, with patterns `Git operations hold`, `Git selection includes shared (claim|assignment|missing-branch|unknown)`, `Git strict start can convert`, `workspace detection normalizes absolute`, and `shared assigned-only lanes`, respectively.
+
+A final adjacent-case check found the symlink ceiling issue after the first npm gate had passed on `feab75b`. The superseded Bun gate was deliberately stopped to complete that correction and is not counted as a passing release gate. Six targeted ceiling tests pass, including relative entries, symlink aliases, the empty-entry sentinel, physical workspace paths and nonexistent paths. The full final regression file has 17 tests.
+
+The additional isolated revert command is `node --test --test-name-pattern="workspace detection canonicalizes ceiling symlinks" test/mixed-tracker.test.ts`. Restoring only `repositoryRoot` from `feab75b` fails 1/1 with exit 1. The corrected 17-test file passes through `pm test --run --only-last --progress`.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { delimiter, join, relative } from 'node:path';
 import { test } from 'node:test';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
@@ -100,6 +100,24 @@ test('workspace detection ignores relative ceiling entries', async t => {
   const f = await fixture(t); const workspace = join(f.repo, 'nested', 'workspace'); mkdirSync(workspace, { recursive: true });
   process.env.GIT_CEILING_DIRECTORIES = [relative(process.cwd(), f.repo), '../..', '.'].join(delimiter);
   assert.equal(repositoryRoot(workspace), f.repo);
+});
+
+test('workspace detection canonicalizes ceiling symlinks until an empty entry', async t => {
+  const f = await fixture(t); const workspace = join(f.repo, 'nested', 'workspace'); mkdirSync(workspace, { recursive: true });
+  const alias = join(f.root, 'alias'); symlinkSync(f.repo, alias);
+  process.env.GIT_CEILING_DIRECTORIES = alias;
+  assert.equal(repositoryRoot(workspace), undefined);
+  process.env.GIT_CEILING_DIRECTORIES = `${delimiter}${alias}`;
+  assert.equal(repositoryRoot(workspace), f.repo, 'an empty entry disables subsequent ceiling symlink resolution');
+  process.env.GIT_CEILING_DIRECTORIES = f.repo;
+  assert.equal(repositoryRoot(join(alias, 'nested', 'workspace')), undefined, 'workspace symlinks use the physical working directory');
+});
+
+test('workspace detection ignores nonexistent absolute ceilings and accepts missing workspace paths', async t => {
+  const f = await fixture(t);
+  process.env.GIT_CEILING_DIRECTORIES = join(f.root, 'missing-ceiling');
+  assert.equal(repositoryRoot(f.pmRoot), f.repo);
+  assert.equal(repositoryRoot(join(f.root, 'missing-workspace')), undefined);
 });
 
 test('shared assigned-only lanes block selection and are documented as assigned items', async t => {
