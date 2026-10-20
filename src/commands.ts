@@ -4,7 +4,7 @@ import { createPmCliExpectedError, readSettings, resolveAuthor } from '@unbraine
 import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
 import { repositoryRoot } from './workspace.ts';
-import { SharedTracker } from './shared-tracker.ts';
+import { SharedTracker, SHARED_LAND_REFUSAL } from './shared-tracker.ts';
 import { settings } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
@@ -65,8 +65,8 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
         return repo === undefined ? await operation : operation;
       }
       case 'land': {
-        const operation = swarm.land(ctx.options.execute === true);
-        return repo === undefined ? await operation : operation;
+        if (repo === undefined) throw new Error(SHARED_LAND_REFUSAL);
+        return swarm.land(ctx.options.execute === true);
       }
       case 'reap': {
         const operation = swarm.reap(ctx.options.dryRun === true);

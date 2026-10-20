@@ -5,6 +5,9 @@ import { settings } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import type { SwarmSettings } from './types.ts';
 
+/** Explain the Git requirement consistently in CLI and embedded shared mode. */
+export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
+
 /** Coordinate claims on the host-bound tracker without branches or worktrees. */
 export class SharedTracker {
   /** Host-bound engine supplying certified reads and SDK operations. */
@@ -94,7 +97,7 @@ export class SharedTracker {
 
   /** Explain why branch landing is unnecessary for work already on the shared tracker. */
   async land(_execute = false): Promise<never> {
-    throw new Error('pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.');
+    throw new Error(SHARED_LAND_REFUSAL);
   }
 
   /** Release this principal's terminal claims; preserve active and foreign ownership. */
