@@ -63,3 +63,25 @@ The eight-process claim test retained all eight unique claims and validated all 
 The packed non-Git smoke uses `pm install ./package.tgz --project`, then next, sync with explicit files, status and terminal stale-claim reap. Git is absent from PATH during that loop. Existing Git-mode test cases remain unchanged, and a new regression preserves their existing refusal exit transport.
 
 Node 22 and Node 26 CI passed on the tested source. The final handoff changes only this verification note and append-only PM evidence, with the feature left in progress and its claim released. No merge, tag, release or publication was performed.
+
+
+## PR 10 review round
+
+Every unresolved review thread and all of its comments were read at review head `8f7a850`. The latest CodeRabbit review contained no Outside diff range section. All three findings were valid.
+
+| Thread | Verified correction |
+| --- | --- |
+| PRRT_kwDOVLY-P86uUldH | Shared planning and selection reuse one certified corpus. Start, sync and reap skip unrelated claim-history reads; start and next retain the selected item's direct ownership read. Status retains claim timestamps and age. |
+| PRRT_kwDOVLY-P86uUldZ | Shared sync refuses new links on a foreign lane before writing. Preview and no-op apply remain permitted; refusal preserves files and history. |
+| PRRT_kwDOVLY-P86uUldf | Git sync rejects empty explicit lists and empty entries, including whitespace-only direct SDK input, then deduplicates normalized paths. Git-derived changes remain available when files are omitted. |
+
+Whole-diff self-review found the same foreign-write gap in Git sync; it now has the same guard and real-tracker regression as shared sync. Both sync entry points reject whitespace-only direct SDK paths. Regression instrumentation delegates every read to the real SDK, counting calls without substituting tracker responses.
+
+Behavioral proofs use an isolated source copy with the final regressions and the pinned SDK. Only the named pre-review function is restored in each run; source imports need no dist rebuild:
+
+- `sharedLanes`: 0/6 pass, exit 1, due to redundant corpus reads or unrelated per-lane ownership reads.
+- `SharedTracker.next`: 0/1 pass, exit 1, due to redundant corpus reads.
+- `SharedTracker.sync`: 0/1 pass, exit 1, missing the expected foreign-ownership rejection.
+- `Swarm.sync`: 0/3 pass, exit 1, missing empty-file and foreign-write refusals and returning duplicate normalized paths.
+
+The item remains in progress. Review threads are left untouched. Hosted coordination remains outside the local tracker acceptance boundary.

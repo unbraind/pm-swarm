@@ -15,13 +15,13 @@ export class SharedTracker {
   /** Reuse the host-bound SDK engine without invoking its Git operations. */
   constructor(engine: Swarm) { this.engine = engine; }
   /** Read claimed items from the certified corpus, retaining claim provenance. */
-  async sharedLanes() {
-    const corpus = await this.engine.corpus();
+  async sharedLanes(corpus?: Awaited<ReturnType<Swarm['corpus']>>, withClaims = true) {
+    corpus ??= await this.engine.corpus();
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     const lanes = [];
     for (const item of corpus.items) {
       if (!item.assignee?.trim()) continue;
-      const claim = (await this.engine.client.get(item.id, { fields: 'claim_state' })).claim_state;
+      const claim = withClaims ? (await this.engine.client.get(item.id, { fields: 'claim_state' })).claim_state : undefined;
       lanes.push({ id: item.id, agent: item.assignee, files: itemFootprint(item), terminal: statusIsTerminal(item.status, statuses), claimed_at: claim?.last_claim?.ts ?? null });
     }
     return lanes.sort((left, right) => left.id.localeCompare(right.id));
@@ -37,7 +37,7 @@ export class SharedTracker {
   async plan(parent?: string, limit?: number) {
     const config = await settings(this.engine.pmRoot, limit === undefined ? {} : { lane_limit: limit });
     const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
-    const active = (await this.sharedLanes()).filter(lane => !lane.terminal);
+    const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
     const blocked = candidates.map(item => ({ id: item.id, unknown: item.files.length === 0, overlaps: footprintOverlaps(item.files, active) })).filter(row => row.overlaps.length > 0 || (active.length > 0 && row.unknown));
     return { mode: 'shared-tracker', ...partition(candidates.filter(item => !blocked.some(row => row.id === item.id)), config.lane_limit), blocked, complete_list: corpus.complete_list, read_output: corpus.read_output };
   }
@@ -48,12 +48,12 @@ export class SharedTracker {
   }
 
   /** Validate terminal status, ownership and declared overlap before claiming. */
-  private async claimLane(id: string, strict: boolean) {
+  private async claimLane(id: string, strict: boolean, corpus?: Awaited<ReturnType<Swarm['corpus']>>) {
     const view = await this.engine.client.get(id, { depth: 'full' }); const item = view.item;
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot start a terminal item');
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.engine.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
-    const active = (await this.sharedLanes()).filter(lane => !lane.terminal && lane.id !== id);
+    const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== id);
     const overlap_warnings = footprintOverlaps(itemFootprint(item), active);
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     await this.engine.client.claim(id, { author: this.engine.author });
@@ -64,10 +64,10 @@ export class SharedTracker {
   async next(parent?: string, dryRun = false) {
     /** Keep the read/claim decision inside a single bounded operation. */
     const choose = async () => {
-      const { candidates } = await this.engine.readyCandidates(parent, false);
-      const active = (await this.sharedLanes()).filter(lane => !lane.terminal);
+      const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
+      const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
       const { chosen, unknown, warnings, skipped, reason } = selectNext(candidates, active);
-      const lane = chosen !== undefined && !dryRun ? await this.claimLane(chosen.item.id, !unknown) : undefined;
+      const lane = chosen !== undefined && !dryRun ? await this.claimLane(chosen.item.id, !unknown, corpus) : undefined;
       return { mode: 'shared-tracker', ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
     };
     return dryRun ? choose() : this.sharedExclusive(choose);
@@ -87,10 +87,11 @@ export class SharedTracker {
 
   /** Require explicit portable changed paths and retain the normal preview/apply contract. */
   async sync(id: string, apply = false, explicitFiles?: string[]) {
-    if (explicitFiles === undefined || explicitFiles.length === 0 || explicitFiles.some(path => path === '')) throw new Error('Without git, sync requires --files a,b; add --apply to link them.');
-    const lane = (await this.sharedLanes()).find(row => row.id === id && !row.terminal);
+    if (explicitFiles === undefined || explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === '')) throw new Error('Without git, sync requires --files a,b; add --apply to link them.');
+    const lane = (await this.sharedLanes(undefined, false)).find(row => row.id === id && !row.terminal);
     if (lane === undefined) throw new Error('No active lane for item');
     const add = [...new Set(explicitFiles.map(footprintPath))].filter(path => !lane.files.includes(path));
+    if (apply && add.length > 0 && lane.agent !== this.engine.author) throw new Error(`Item claimed by ${lane.agent}`);
     if (apply && add.length > 0) await this.engine.client.files(id, { add, author: this.engine.author });
     return { mode: 'shared-tracker', id, dry_run: !apply, add };
   }
@@ -104,7 +105,7 @@ export class SharedTracker {
   async reap(dryRun = false) {
     return this.sharedExclusive(async () => {
       const released: string[] = []; const refused: { id: string; reason: string }[] = [];
-      for (const lane of await this.sharedLanes()) {
+      for (const lane of await this.sharedLanes(undefined, false)) {
         if (!lane.terminal) continue;
         if (lane.agent !== this.engine.author) { refused.push({ id: lane.id, reason: 'Terminal claim belongs to another agent; use reap --agent with its principal' }); continue; }
         if (!dryRun) await this.engine.client.release(lane.id, { author: this.engine.author });

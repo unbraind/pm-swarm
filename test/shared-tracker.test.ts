@@ -277,3 +277,70 @@ test('Git refusal exit codes retain the existing dispatcher behavior', async t =
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /claimed by foreign-worker/);
 });
+
+
+for (const operation of ['plan', 'preview', 'next', 'start', 'sync', 'reap'] as const) {
+  test(`shared ${operation} reuses one corpus without per-lane claim reads`, async t => {
+    const f = await sharedFixture(t);
+    const active = await f.item(['active']); await f.client.claim(active);
+    const ready = await f.item(['ready']);
+    const engine = f.shared.engine; const corpus = engine.corpus.bind(engine); const get = f.client.get.bind(f.client);
+    let corpusReads = 0; const itemReads: string[] = [];
+    // Instrument real SDK calls without substituting tracker responses.
+    engine.corpus = async () => { corpusReads++; return corpus(); };
+    f.client.get = new Proxy(get, { apply: (target, receiver, args: unknown[]) => { itemReads.push(String(args[0])); return Reflect.apply(target, receiver, args); } });
+    switch (operation) {
+      case 'plan': await f.shared.plan(); break;
+      case 'preview': await f.shared.next(undefined, true); break;
+      case 'next': assert.equal((await f.shared.next()).selected, ready); break;
+      case 'start': await f.shared.start(ready); break;
+      case 'sync': await f.shared.sync(active, true, ['extra']); break;
+      case 'reap': await f.shared.reap(); break;
+    }
+    assert.equal(corpusReads, 1, 'one certified corpus per operation');
+    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready] : [], 'only the selected item needs a direct ownership read');
+  });
+}
+
+for (const mode of ['shared', 'Git'] as const) {
+  test(`${mode} sync protects foreign footprints while preserving previews and no-op applies`, async t => {
+    const f = mode === 'shared' ? await sharedFixture(t) : await fixture(t);
+    const id = await f.item(['existing']);
+    const engine = 'shared' in f ? f.shared : f.swarm;
+    if ('swarm' in f) { f.save(); await f.swarm.start(id); await f.client.release(id); }
+    await f.client.claim(id, { author: 'foreign' });
+    const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8');
+    assert.deepEqual((await engine.sync(id, false, ['new'])).add, ['new']);
+    assert.deepEqual((await engine.sync(id, true, ['existing'])).add, []);
+    await assert.rejects(engine.sync(id, true, ['new']), /Item claimed by foreign/);
+    if ('cli' in f) {
+      const refused = f.cli('swarm', 'sync', id, '--files', 'new', '--apply', '--json');
+      assert.equal(refused.status, 2); assert.match(refused.stdout + refused.stderr, /Item claimed by foreign/);
+    }
+    assert.equal(readFileSync(history, 'utf8'), before, 'refused foreign writes preserve history');
+    const item = (await f.client.get(id, { depth: 'full' })).item;
+    assert.deepEqual(item.files?.map(file => file.path), ['existing']);
+    if ('run' in f) assert.deepEqual(f.run('swarm', 'sync', id, '--files', 'new', '--apply', '--agent', 'foreign').add, ['new']);
+    await assert.rejects(engine.sync(id, true, ['   ']), /--files/);
+  });
+}
+
+test('Git sync rejects empty explicit files', async t => {
+  const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+  for (const files of [[], [''], ['new', ''], ['   ']]) await assert.rejects(f.swarm.sync(id, true, files), /--files requires nonempty/);
+  for (const files of ['new,', ',new', 'new, ,other']) {
+    const refused = swarmCli(f, ['sync', id, '--files', files, '--apply']);
+    assert.notEqual(refused.status, 0); assert.match(refused.stdout + refused.stderr, /--files requires nonempty/);
+  }
+});
+
+test('Git sync deduplicates normalized explicit paths', async t => {
+  const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+  const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8');
+  const paths = ['new/file.ts', 'new/./file.ts', 'new/file.ts', 'existing'];
+  assert.deepEqual((await f.swarm.sync(id, false, paths)).add, ['new/file.ts']);
+  assert.equal(readFileSync(history, 'utf8'), before);
+  assert.deepEqual((await f.swarm.sync(id, true, paths)).add, ['new/file.ts']);
+  assert.deepEqual((await f.swarm.sync(id, true, paths)).add, []);
+  assert.deepEqual((await f.client.get(id, { depth: 'full' })).item.files?.map(file => file.path), ['existing', 'new/file.ts']);
+});

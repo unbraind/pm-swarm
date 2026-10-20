@@ -147,8 +147,10 @@ export class Swarm {
   async sync(id: string, apply = false, explicitFiles?: string[]) {
     const lane = (await this.lanes()).find(row => row.id === id);
     if (lane === undefined) throw new Error('No active lane for item');
-    const files = (explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath);
+    if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
+    const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
     const add = files.filter(path => !lane.files.includes(path));
+    if (apply && add.length > 0 && lane.agent !== this.author) throw new Error(`Item claimed by ${lane.agent}`);
     if (apply && add.length > 0) await this.client.files(id, { add, author: this.author });
     return { id, dry_run: !apply, add };
   }
