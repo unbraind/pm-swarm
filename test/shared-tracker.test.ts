@@ -97,6 +97,42 @@ test('no-git start warns, strict refuses overlaps, and terminal/foreign claims s
   assert.equal((await f.shared.start(empty)).id, empty, 'own claim is idempotent');
 });
 
+test('expired tracker lease permits overlapping starts and documents the boundary', { timeout: 60000 }, async t => {
+  const f = await sharedFixture(t); const first = await f.item(['src']); const second = await f.item(['src/code.ts']);
+  let enter = () => {}; let resume = () => {};
+  const entered = new Promise<void>(resolve => { enter = resolve; });
+  const resumed = new Promise<void>(resolve => { resume = resolve; });
+  const corpus = f.shared.engine.corpus.bind(f.shared.engine);
+  // Pause after the real certified read, retaining its pre-expiry snapshot.
+  f.shared.engine.corpus = async () => {
+    const snapshot = await corpus(); enter(); await resumed; return snapshot;
+  };
+  const stalled = f.shared.start(first, {}, true);
+  try {
+    await Promise.race([entered, stalled.then(() => assert.fail('the first operation must pause'))]);
+    const path = join(f.pmRoot, 'locks', 'swarm-operation.lock');
+    const lease = JSON.parse(readFileSync(path, 'utf8')) as { ttl_seconds: number; created_at: string };
+    assert.equal(lease.ttl_seconds, 1800);
+    // Age only the disposable tracker's lease; no clock or SDK response is mocked.
+    lease.created_at = new Date(Date.now() - 1801_000).toISOString(); writeFileSync(path, JSON.stringify(lease));
+    const successor = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'lease-successor'));
+    assert.equal((await successor.start(second, {}, true)).id, second);
+  } finally { resume(); await stalled; f.shared.engine.corpus = corpus; }
+  assert.equal((await f.client.get(first)).claim_state?.claimed, true);
+  assert.equal((await f.client.get(second)).claim_state?.claimed, true);
+  assert.equal((await f.shared.status()).overlaps.length, 1);
+  for (const path of ['README.md', 'docs/shared-tracker-verification.md']) {
+    const prefix = path === 'README.md' ? 'Shared lanes are' : 'SharedTracker reuses';
+    const body = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').split('\n\n').find(paragraph => paragraph.startsWith(prefix)) ?? '';
+    assert.match(body, /while the lease remains valid/);
+    assert.match(body, /1800-second lease is finite and is not renewed/);
+    assert.match(body, /stalled process can continue after expiry/);
+    assert.match(body, /overlapping explicit `start` calls can then both succeed/);
+    assert.match(body, /`PmClient.claim` has no tracker fencing token/);
+    assert.doesNotMatch(body, /serialize their decisions\./);
+  }
+});
+
 test('no-git status reports claim age and declared overlaps, omitting Git measurements', async t => {
   const f = await sharedFixture(t); const a = await f.item(['src']); const b = await f.item(['src/a.ts']);
   const unknown = await f.item(); const terminal = await f.item(['done']);

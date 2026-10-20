@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, symlinkSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,7 +14,7 @@ import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, async t => {
-  const root = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-install-'));
+  const root = process.cwd(); const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'swarm-install-')));
   t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
   const decoy = join(scratch, 'decoy'); mkdirSync(decoy); fixtureGit(decoy, ['init', '-b', 'main']);
   writeFileSync(join(decoy, 'sentinel'), 'preserve decoy contents\n'); fixtureGit(decoy, ['add', 'sentinel']);

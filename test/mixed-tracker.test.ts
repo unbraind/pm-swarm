@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, readFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { delimiter, join, relative } from 'node:path';
@@ -11,6 +11,30 @@ import { Swarm } from '../src/swarm.ts';
 import { repositoryRoot } from '../src/workspace.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { fixtureGit as git } from './git-helpers.ts';
+
+test('fixture canonicalizes a symlinked temporary root before deriving paths', async t => {
+  const f = await fixture(t); const alias = join(f.root, 'temporary-alias'); symlinkSync(f.root, alias);
+  const script = `
+    import assert from 'node:assert/strict';
+    import { realpathSync } from 'node:fs';
+    import { join } from 'node:path';
+    import { test } from 'node:test';
+    import { fixture } from ${JSON.stringify(new URL('./helpers.ts', import.meta.url).href)};
+    import { repositoryRoot } from ${JSON.stringify(new URL('../src/workspace.ts', import.meta.url).href)};
+    test('physical fixture paths', async t => {
+      const f = await fixture(t);
+      assert.equal(f.root, realpathSync(f.root));
+      assert.equal(f.repo, realpathSync(f.repo));
+      assert.equal(f.pmRoot, realpathSync(f.pmRoot));
+      assert.equal(repositoryRoot(join(f.repo, 'missing', 'nested')), f.repo);
+      process.env.GIT_CEILING_DIRECTORIES = f.repo;
+      assert.equal(repositoryRoot(f.pmRoot), undefined);
+    });
+  `;
+  const env = gitEnvironment({ ...process.env, TMPDIR: alias, TMP: alias, TEMP: alias }); delete env.NODE_TEST_CONTEXT;
+  const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' });
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+});
 
 test('concurrent Git and non-Git CLI selections coordinate on the same tracker', { timeout: 60000 }, async t => {
   const f = await fixture(t); const sharedWorkspace = join(f.root, 'shared'); mkdirSync(sharedWorkspace);

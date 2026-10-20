@@ -6,7 +6,7 @@ The feature is tracked in [pm-swarm-shared-tracker](https://github.com/unbraind/
 
 The command dispatcher checks workspace mode once. It traverses worktree markers before resolving a Git root, so a non-Git tracker path does not spawn Git. Settings bypasses repository detection entirely. Existing Git lanes retain their branch/worktree, diff, merge-prediction and cleanup behavior.
 
-SharedTracker reuses the host-bound Swarm SDK client and certified readiness. A tracker-local SDK operation lease covers selection and claim publication. Both modes use the same priority/age/id ranking, footprint containment checks and unknown-footprint fallback. Shared lanes are all items with a nonblank assignee, including assigned-only items and items with SDK claims. Linked files define their footprints; claim provenance is included when available. They do not persist branch or base fields.
+SharedTracker reuses the host-bound Swarm SDK client and certified readiness. A tracker-local SDK operation lease covers selection and claim publication while the lease remains valid. The 1800-second lease is finite and is not renewed during the operation; a stalled process can continue after expiry, and distinct overlapping explicit `start` calls can then both succeed because `PmClient.claim` has no tracker fencing token. Both modes use the same priority/age/id ranking, footprint containment checks and unknown-footprint fallback. Shared lanes are all items with a nonblank assignee, including assigned-only items and items with SDK claims. Linked files define their footprints; claim provenance is included when available. They do not persist branch or base fields.
 
 Shared status reports nonterminal assigned items and declared overlaps, with null claim age where no claim history exists. Git measurements are omitted with an explanatory note. Watch compares claim provenance rather than elapsed age and emits separate overlap events. Sync requires explicit portable files without Git, preserving preview/apply precedence. Land refuses with the Git requirement and the available shared-tracker commands. Reap preserves active and foreign claims and releases terminal claims for the invoking principal.
 
@@ -220,3 +220,26 @@ Packed npm/npx, native Bun/bunx, the built import allowlist and non-Git tarball 
 The final fetch still contains only PRRT_kwDOVLY-P86ucxhK, with no remaining thread/comment/review pagination and no Outside diff range findings. No thread was replied to or resolved. The final handoff changes only append-only PM evidence and this verification note; application, tests and package inputs remain those of `c30c4dc`.
 
 Core local tracker health passes. Full local health retains the existing ignored pm-github host-version mismatch (pinned host 2026.10.17 versus extension requirement 2026.10.20) and six stale-item advisories. The development-only glob advisory remains in pm-swarm-zn7m; hosted coordination remains unverified. No new PM CLI/SDK bug was observed. The feature remains in progress with its claim released.
+
+## Lease guarantee and physical fixture paths review round
+
+At head `2f98a3b`, both unresolved threads and all their comments were fetched with complete thread/comment pagination. The latest CodeRabbit review has no Outside diff range findings. Both findings are valid.
+
+| Thread | Correction |
+| --- | --- |
+| PRRT_kwDOVLY-P86uetj1 | README and this design document limit serialization to the valid, finite, non-renewed 1800-second lease. They explain that a stalled process can continue after expiry and overlapping explicit starts can both succeed without a tracker fencing token. |
+| PRRT_kwDOVLY-P86uetkM | The shared Git fixture canonicalizes its temporary root before deriving repository and tracker paths, matching Git's physical root on symlinked temporary directories. |
+
+Whole-PR self-review found another lexical-root comparison in packed Git acceptance; its fixture root is now canonicalized too. Production coordination and workspace discovery behavior remain unchanged. Other temporary roots do not compare lexical paths with Git's physical root. Dist is ignored and rebuilt by the release gates.
+
+The new lease regression uses a real non-Git tracker and pinned SDK. It pauses after a certified corpus snapshot, ages only that disposable tracker's operation lease, and lets a successor strict start finish before resuming the first operation. Both overlapping claims persist, demonstrating the documented boundary without waiting thirty minutes or mocking SDK results. The same regression checks both documentation surfaces. The physical-path regression runs a real Git fixture in a child with a symlinked temporary directory, then verifies discovery and ceiling behavior.
+
+Independent isolated reverts retain final tests and the pinned SDK:
+
+| Reverted change | Exact command | Result |
+| --- | --- | --- |
+| README lease qualification only | `node --test --test-name-pattern="expired tracker lease" test/shared-tracker.test.ts` | 0/1 pass, 1 fail, exit 1: missing lease qualification |
+| Design paragraph qualification only | `node --test --test-name-pattern="expired tracker lease" test/shared-tracker.test.ts` | 0/1 pass, 1 fail, exit 1: missing lease qualification |
+| Only the previous `fixture` function | `node --test --test-name-pattern="fixture canonicalizes" test/mixed-tracker.test.ts` | 0/1 pass, 1 fail, exit 1: lexical and physical roots differ |
+
+The corrected focused command is `node --test --test-name-pattern="fixture canonicalizes|expired tracker lease" test/mixed-tracker.test.ts test/shared-tracker.test.ts`. Tests import source; these proofs do not require a dist rebuild. Review threads remain untouched and the feature remains in progress.
