@@ -1,20 +1,14 @@
 import assert from 'node:assert/strict';
 import { fork } from 'node:child_process';
-import type { ChildProcess } from 'node:child_process';
-import { once } from 'node:events';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { certifyCompleteListResult } from '@unbrained/pm-cli/sdk/query';
 import { PmClient } from '@unbrained/pm-cli/sdk';
 import { runProcess } from './process-helpers.ts';
+import { monitorScaleWorker, verifyScaleHistories } from './scale-helpers.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
-
-/** Durable write receipt reported by a real CLI process agent. */
-interface Completed { id: string; agent: string; marker: string; token: string }
-/** Explicit worker state for deterministic kill and survivor barriers. */
-interface Agent { child: ChildProcess; exit: Promise<unknown[]>; ready: Promise<{ id: string; agent: string }>; done: Promise<Completed[]> }
 
 /** Spawn a command without blocking the driver's worker and heartbeat event loops. */
 async function command(executable: string, args: string[], cwd: string, env: NodeJS.ProcessEnv) {
@@ -47,24 +41,12 @@ test('50 real CLI agents retain every fenced write and reclaim 13 SIGKILL owners
   for (let i = 0; i < 87; i++) ids.push((await client.create({ id: `scale-${String(i).padStart(3, '0')}`, type: 'Task', title: `Parallel work ${i}`, file: [`path=src/item-${i}.ts`] })).item.id);
   const setupMs = performance.now() - start; process.stderr.write(`scale: setup complete (${Math.round(setupMs)} ms), starting 50 agents\n`);
   /** Launch an actual process agent whose individual mutations are actual CLI invocations. */
-  const agent = (index: number, iterations: number, barrier: boolean): Agent => {
+  const agent = (index: number, iterations: number, barrier: boolean) => {
     const child = fork(new URL('./scale-worker.ts', import.meta.url), [], { env, execArgv: [], detached: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     t.after(() => { if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid!, 'SIGKILL'); });
-    const exit = once(child, 'exit');
-    let readyResolve: (value: { id: string; agent: string }) => void;
-    let doneResolve: (value: Completed[]) => void; let reject: (error: Error) => void;
-    const ready = new Promise<{ id: string; agent: string }>(resolve => { readyResolve = resolve; });
-    const done = new Promise<Completed[]>((resolve, fail) => { doneResolve = resolve; reject = fail; });
-    // Attach a handler immediately: intentionally killed workers do not send completion.
-    void done.catch(() => {});
-    child.on('message', (message: { event: string; id: string; agent: string; completed: Completed[]; message: string; phase: string }) => {
-      if (message.event === 'phase') phases.set(message.agent, message.phase);
-      if (message.event === 'ready') readyResolve(message);
-      if (message.event === 'done') { phases.set(`agent-${index}`, 'done'); doneResolve(message.completed); }
-      if (message.event === 'failed') reject(new Error(message.message));
-    });
+    const state = monitorScaleWorker(child, (agent, phase) => phases.set(agent, phase));
     child.send({ repo, host, env, agent: `agent-${index}`, iterations, barrier });
-    return { child, exit, ready: barrier ? Promise.race([ready, done.then(() => { throw new Error('agent completed before barrier'); })]) : ready, done };
+    return state;
   };
   const contentionStart = performance.now(); const workers = Array.from({ length: 50 }, (_, index) => agent(index, 2, true));
   const ready = await Promise.all(workers.map(row => row.ready));
@@ -73,7 +55,7 @@ test('50 real CLI agents retain every fenced write and reclaim 13 SIGKILL owners
   for (const row of ready) assert.equal(assigned.get(row.id), row.agent, 'no overwritten claim');
   const claimedMs = performance.now() - contentionStart; process.stderr.write(`scale: 50 distinct owners have heartbeaten (${Math.round(claimedMs)} ms)\n`);
   const killed = workers.slice(0, 13); const survivors = workers.slice(13);
-  for (const row of killed) row.child.kill('SIGKILL');
+  for (const row of killed) row.killAfterReady();
   for (const row of killed) { const [code, signal] = await row.exit; assert.equal(code, null); assert.equal(signal, 'SIGKILL'); }
   for (const row of survivors) row.child.send('continue');
   const completed = (await Promise.all(survivors.map(row => row.done))).flat();
@@ -97,10 +79,7 @@ test('50 real CLI agents retain every fenced write and reclaim 13 SIGKILL owners
     assert.ok(item.files?.some(file => file.path === row.marker), 'zero lost sync writes');
     assert.equal(item.close_reason, `Verified ${row.marker}`, 'zero lost close evidence');
   }
-  let histories = 0;
-  for (const file of readdirSync(join(pmRoot, 'history')).filter(file => file.endsWith('.jsonl'))) {
-    histories++; for (const line of readFileSync(join(pmRoot, 'history', file), 'utf8').trim().split('\n')) assert.doesNotThrow(() => JSON.parse(line));
-  }
+  const histories = verifyScaleHistories(pmRoot, ids.length + 1);
   assert.equal((await pm(['health', '--strict-exit'])).ok, true, 'managed extension and strict health');
   assert.equal(existsSync(join(repo, '.git')), false);
   verified = true;

@@ -30,7 +30,7 @@ async function run(config: Configuration): Promise<void> {
     await cli(config, ['close', id, '--token', token, '--note', `Verified ${marker}`]);
     completed.push({ id, token, marker, agent: config.agent });
   }
-  process.send!({ event: 'done', completed }); process.disconnect!();
+  process.send!({ event: 'done', agent: config.agent, completed }); process.disconnect!();
 }
 
 process.once('message', (config: Configuration) => { run(config).catch((error: unknown) => { process.send!({ event: 'failed', message: String(error) }); process.exitCode = 1; process.disconnect!(); }); });

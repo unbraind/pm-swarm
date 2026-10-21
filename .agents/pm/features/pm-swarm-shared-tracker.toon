@@ -6,11 +6,13 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-21T16:33:29.836Z"
+updated_at: "2026-10-21T17:35:02.954Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[70]{created_at,author,text}:
+comments[74]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -81,7 +83,11 @@ comments[70]{created_at,author,text}:
   "2026-10-21T15:54:03.173Z",codex-agent,"Committed-source scale repetition passed via the registered PM runner: 1/1, exit 0, runner elapsed 587564 ms. Application proof totals: 50 agents; 13 SIGKILL owners reclaimed; 87 original tasks completed exactly once; all file markers and close reasons retained; 88 valid histories; zero double ownership; zero lost writes; full managed-extension strict health clean. Timings ms: setup 11763; initial claims and heartbeats 112582; survivor phase 346170 after that barrier; reclaim 9848; recovery and final verification 103456 after reclaim; total 583821. CI on the initial source passed 165/165 behaviors on Node 26 but missed handoff parent/mismatched-context branches; a new real-tracker regression passes. Node 22 exposed transient ENOTEMPTY during disposable Git fixture cleanup; bounded cleanup retries added. Source runtime is unchanged by these CI test corrections."
   "2026-10-21T15:58:34.559Z",codex-agent,"CI coverage gap is covered by a passing parent-scope and mismatched-context regression. A subsequent Node 22 run exposed a timing assumption in the queued-liveness test: its fixed 150 ms observation window was shorter than the randomized queue poll. The test now waits for an actual heartbeat change with a bounded deadline and always releases its holder in finally. Runtime source remains unchanged; no thresholds, source inventory or product semantics changed."
   "2026-10-21T16:33:24.304Z",codex-agent,"Final gates: isolated-home npm run release:check passed 166/166 behavioral tests plus 3/3 packed consumers, zero failures/skips/cancellations; 25 authored files measure 1809/1809 statements and lines, 112/112 functions, 978/978 branches. Production audit reports zero vulnerabilities. Same-head CI on cdb895e passes Node 22 and Node 26, including complete bun run release:check with 166/166 plus 3/3 and all four 100 percent dimensions. The redundant local Bun repetition was stopped after complete CI acceptance was verified; it is not a pass receipt. The final PM-run fencing suite passes 11/11 in 104373 ms. Six behavioral reverts fail as expected. Automated review is unavailable: CodeRabbit skips automatic review by repository policy, Sourcery is quota-limited, Cubic is neutral, and no review approval is claimed. Follow-up pm-swarm-packed-latency records the passing local packed test at 599323 ms near its unchanged 600000 ms deadline. Runtime source remains unchanged since the successful 50-agent proof. No merge or release."
-files[22]{path,scope}:
+  "2026-10-21T17:25:36.224Z",codex-agent,"Review round at 6c0c050: fetched all four unresolved threads and every comment with complete pagination. Latest CodeRabbit review has no separate Outside diff range findings; its history-count nitpick is included. Origin main is an ancestor and the remote branch is current. Validate optional transfer comments, parsed reclaim heartbeat selection with fail-closed reporting, scale worker exit/error settlement and complete history-count enforcement. Add real non-Git SDK and process regressions, independently remove each corrected behavior for failing revert proofs, and self-review the full PR for the same defect classes. Preserve dependency pins, deadlines and release thresholds. Run npm and Bun release gates and record exact counts. No thread replies/resolutions, merge or release."
+  "2026-10-21T17:30:36.294Z",codex-agent,"Verification narrows PRRT_kwDOVLY-P86u3W9K to an invalid finding for current callers: the pinned SDK normalizes depth full to deep, and projectItemForDepth returns comments: item.comments ?? []. Both handoff (through fence) and reclaim fetch depth full before transfer; reclaim never passes its corpus row directly. Real legacy-record tests exercise omitted durable comments and actual full SDK reads without mocks. Retain transfer behavior and record this refusal with code evidence. Three remaining findings are valid: reclaim now chooses the newest finite timestamp and reports refused items when neither parses; scale lifecycle barriers reject on errors and unexpected exits while explicit post-readiness SIGKILL remains expected; scale history verification asserts task count plus project. Same-class review also corrects embedded status NaN ages to null. Initial regression runs exposed two fixture assumptions (SDK comments normalize to [], and reclaim renews its own principal); corrected the fixtures rather than production semantics."
+  "2026-10-21T17:32:20.307Z",codex-agent,"Corrected node --test test/review-r4.test.ts passes 13/13, zero failures/skips/cancellations. Registered runner node_modules/.bin/pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 180 also passes 13/13 (37560 ms runner elapsed). Typecheck, lint, zero duplication (46 sources) and docstrings (25 authored files, 74 declarations) pass. Real canonical item reads confirm absent durable comments, while full SDK reads return []; both unmodified transfer paths succeed. Whole-PR same-class review inspected every comments slice, Date.parse use, worker fork/exit barrier, and history-count loop; additional invalid status age is corrected, other process helpers await close/exit or use bounded loops and do not retain an unresolved readiness promise. Full release gates remain pending; dist is ignored and will be rebuilt."
+  "2026-10-21T17:35:02.954Z",codex-agent,"Final independent behavioral reverts retain corrected tests and the pinned SDK. All five exit 1 with ordinary assertion failures and zero cancellations: previous reclaim method 0/1, previous status method 0/1, unexpected-exit settlement removed 0/3 (early failure, early clean exit, post-ready failure), process-error settlement removed 0/1, history-count assertion removed 0/1. Exact commands: node --test --test-name-pattern=\"reclaim selects the newest\" test/review-r4.test.ts; node --test --test-name-pattern=\"status reports an unknown\" test/review-r4.test.ts; node --test --test-name-pattern=\"scale worker settles barriers on early failure|scale worker settles barriers on early clean exit|scale worker settles barriers on after ready\" test/review-r4.test.ts; node --test --test-name-pattern=\"scale worker settles barriers on spawn error\" test/review-r4.test.ts; node --test --test-name-pattern=\"scale history proof\" test/review-r4.test.ts. Corrected focused suite passes 13/13. Early proof experiments reached expected pending-promise cancellations; lifecycle assertions were strengthened to race the process-exit receipt, and final proofs fail immediately by assertion. Tests import source; no rebuild is required for these isolated proofs. Existing tracked history is an unchanged prefix. Isolated-home npm release gate is running; scale and full Bun validation remain pending."
+files[24]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -99,12 +105,14 @@ files[22]{path,scope}:
   test/install.acceptance.ts,project
   test/mixed-tracker.test.ts,project
   test/process-helpers.ts,project
+  test/review-r4.test.ts,project
+  test/scale-helpers.ts,project
   test/scale-worker.ts,project
   test/scale.acceptance.ts,project
   test/shared-helpers.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[13]:
+tests[14]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -196,6 +204,13 @@ tests[13]:
     provenance:
       author: codex-agent
       created_at: "2026-10-21T14:57:46.792Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+  - command: node --test test/review-r4.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-21T17:30:31.054Z"
       source_kind: local_mutation
       source_ref: feat/fenced-leases-handoff
 docs[3]{path,scope}:

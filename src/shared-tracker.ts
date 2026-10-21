@@ -85,7 +85,10 @@ export class SharedTracker {
   /** Report ownership, claim age and declared overlaps without inventing Git measurements. */
   async status(_full = false) {
     const active = (await this.sharedLanes()).filter(lane => !lane.terminal);
-    const lanes = active.map(({ terminal: _terminal, ...lane }) => ({ ...lane, claim_age_seconds: lane.claimed_at === null ? null : Math.max(0, Math.floor((Date.now() - Date.parse(lane.claimed_at)) / 1000)) }));
+    const lanes = active.map(({ terminal: _terminal, ...lane }) => {
+      const claimed = lane.claimed_at === null ? NaN : Date.parse(lane.claimed_at);
+      return { ...lane, claim_age_seconds: Number.isFinite(claimed) ? Math.max(0, Math.floor((Date.now() - claimed) / 1000)) : null };
+    });
     const overlaps = [];
     for (const [i, left] of active.entries()) for (const right of active.slice(i + 1)) {
       const paths = footprintOverlaps(left.files, [right]);
@@ -199,19 +202,19 @@ export class SharedTracker {
     if (!Number.isFinite(staleAfter) || staleAfter <= 0 || (to !== undefined && !to.trim())) throw new Error('reclaim requires --stale-after as positive seconds and a nonempty optional --to');
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      const recovered = [];
+      const recovered = []; const refused: { id: string; reason: string }[] = [];
       for (const row of (await this.engine.corpus()).items) {
         if (!row.assignee?.trim() || statusIsTerminal(row.status, statuses)) continue;
         const recorded = typeof row.swarm_claimed_at === 'string' ? row.swarm_claimed_at : row.updated_at;
         const observed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
-        const live = observed ?? recorded;
-        const heartbeat = Date.parse(live) > Date.parse(recorded) ? live : recorded;
-        if (Date.now() - Date.parse(heartbeat) < staleAfter * 1000) continue;
+        const times = [recorded, observed].map(value => value === undefined ? NaN : Date.parse(value)).filter(Number.isFinite);
+        if (times.length === 0) { refused.push({ id: row.id, reason: 'No valid claim or heartbeat timestamp; repair liveness evidence before reclaiming' }); continue; }
+        if (Date.now() - Math.max(...times) < staleAfter * 1000) continue;
         const item = (await this.engine.client.get(row.id, { depth: 'full' })).item;
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
         recovered.push(await this.transfer(item, to, note, lease));
       }
-      return { recovered };
+      return { recovered, refused };
     });
   }
 
