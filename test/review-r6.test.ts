@@ -5,14 +5,21 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import type { TestContext } from 'node:test';
 import { StaleFenceError, withSwarmLease } from '../src/lease.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { fixture, swarmCli } from './helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 
-test('Git sync fences round-trip ownership, missing tokens, explicit no-ops and terminal writes', async t => {
+/** Publish a real Git lane with an existing linked footprint. */
+async function gitLaneFixture(t: TestContext) {
   const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+  return { ...f, id };
+}
+
+test('Git sync fences round-trip ownership, missing tokens, explicit no-ops and terminal writes', async t => {
+  const f = await gitLaneFixture(t); const { id } = f;
   const shared = new SharedTracker(f.swarm); const first = await shared.start(id);
   await shared.handoff(id, 'receiver', 'Continue');
   const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
@@ -35,7 +42,7 @@ test('Git sync fences round-trip ownership, missing tokens, explicit no-ops and 
 
 for (const assignee of ['foreign-worker', '']) {
   test(`Git sync checks fresh ownership after lane discovery: ${assignee || 'unassigned'}`, async t => {
-    const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+    const f = await gitLaneFixture(t); const { id } = f;
     const lanes = f.swarm.lanes.bind(f.swarm); let before = '';
     const history = join(f.pmRoot, 'history', `${id}.jsonl`);
     // Change real storage after the corpus snapshot; never replace SDK responses.
@@ -50,7 +57,7 @@ for (const assignee of ['foreign-worker', '']) {
 }
 
 test('Git sync pins discovery and the real SDK file write against handoff', async t => {
-  const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+  const f = await gitLaneFixture(t); const { id } = f;
   const lanes = f.swarm.lanes.bind(f.swarm); const files = f.client.files.bind(f.client); let checks = 0;
   /** Probe the coordination boundary without substituting tracker data. */
   const pinned = async () => {
@@ -64,7 +71,7 @@ test('Git sync pins discovery and the real SDK file write against handoff', asyn
 });
 
 test('Git sync refuses an expired operation before the SDK file mutation', async t => {
-  const f = await fixture(t); const id = await f.item(['existing']); f.save(); await f.swarm.start(id);
+  const f = await gitLaneFixture(t); const { id } = f;
   const get = f.client.get.bind(f.client); const history = join(f.pmRoot, 'history', `${id}.jsonl`);
   const before = readFileSync(history, 'utf8');
   f.client.get = async (...args) => {
