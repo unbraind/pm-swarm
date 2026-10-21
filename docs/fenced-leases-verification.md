@@ -178,3 +178,23 @@ Independent disposable source copies retain the final tests and reuse the pinned
 | Existing `claimLane` ownership guard removed, to validate the declined finding's protection | `node --test --test-name-pattern="start preserves a foreign assignment" test/review-r5.test.ts` | Exit 1, 0/2 passing, both fail with missing expected rejection |
 
 All three proofs fail by assertion with zero cancellations. They change only the stated behavior in their own copies and never modify the package worktree. CI release receipts follow after completion.
+
+### Release receipts for the beb4d62 review round
+
+Application head `1ec0e7c` passes [CI run 39665163625](https://github.com/unbraind/pm-swarm/actions/runs/39665163625). The Node 26 job succeeds on the unchanged second attempt; Node 22 succeeds on its first attempt.
+
+| Execution | Source suite | Packed acceptance | Coverage |
+| --- | --- | --- | --- |
+| Node 22 npm release steps | 184/184 | 3/3 | 100/100/100/100 percent |
+| Node 26 npm release steps, attempt 2 | 184/184 | 3/3 | 100/100/100/100 percent |
+| Complete `bun run release:check`, Node 26, attempt 2 | 184/184 | 3/3 | 100/100/100/100 percent |
+
+All successful suites report zero failures, skips and cancellations. All 25 authored files remain measured at unchanged thresholds; 74 declarations have docstrings. Clean-clone strict tracker health, identity/privacy, typecheck, lint, zero duplication, build, production audit, package contents, changelog and publish attestation pass. Production audit reports zero vulnerabilities. Every package dry-run has shasum `573c122d9b0583f413a6fa5fbf23cde8fdbdfcf4`.
+
+Attempt 1 is failed evidence: Node 26 passes 184/184 source tests, then packed acceptance reports 2/3 because its non-Git fixture disposal encounters `ENOTEMPTY` in the disposable global tracker locks directory. This is not a timeout; the full Bun gate is not reached in that attempt. The existing [pm-swarm-packed-cleanup](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-packed-cleanup.toon) item records this recurrence and remains open. No source changes or relaxed deadlines precede the successful retry.
+
+The PM-selected focused suite also passes 5/5, zero failures/skips/cancellations, in 12753 ms of test time. Its exact invocation is `pm test pm-swarm-shared-tracker --run --match review-r5.test.ts --progress`, using the repo-pinned CLI and the registered `node --test test/review-r5.test.ts` command. Existing project policy disables automatic test-result tracking, so the result is retained in a PM comment. Changelog generation and checking pass after PM writes, and existing history records remain an unchanged byte prefix. No local test timeout occurs in this round.
+
+Local strict health with the ignored managed `pm-github` installation enabled reports host-version skew: that installation was built with 2026.10.21 while the package pins 2026.10.17. Core strict health with extensions disabled and required merge drivers passes, including integrity and history drift, with six existing stale-item advisories. Both clean CI matrices pass strict health with extensions enabled. The local managed installation, dependency pins and telemetry settings remain untouched. No new PM CLI/SDK defect is observed.
+
+The final handoff adds only PM evidence, claim release and this verification note. Package source and tarball inputs remain identical to `1ec0e7c`; the final head is independently checked by CI. The shared-tracker feature remains in progress and the cleanup follow-up remains open, with both claims released. Review threads remain untouched. Prior scale measurements retain their historical source-head provenance; no new local scale or full release workload is run under the host-load constraint.
