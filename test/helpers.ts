@@ -12,7 +12,7 @@ import { Swarm } from '../src/swarm.ts';
 /** Create a real Git repository and SDK tracker with isolated fixture identity. */
 export async function fixture(t: TestContext) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'pm-swarm-test-'))); const repo = join(root, 'repo'); mkdirSync(repo);
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const sourceEnv = { ...process.env };
   const clean = gitEnvironment();
   for (const key of Object.keys(sourceEnv)) if (!(key in clean)) delete process.env[key];

@@ -212,3 +212,16 @@ test('ordered admission prevents newer waiters passing older requests and recove
   assert.deepEqual(order, ['first', 'second']);
   assert.equal(existsSync(join(runtime, 'request-000-dead.json')), false);
 });
+
+
+test('receiver next respects the requested parent and refuses a mismatched stored context generation', async t => {
+  const f = await sharedFixture(t); const parent = (await f.client.create({ type: 'Epic', title: 'Handoff scope' })).item.id;
+  const id = await f.item(['scoped']); await f.client.update(id, { parent }); await f.shared.start(id);
+  const sent = await f.shared.handoff(id, 'receiver', 'Scoped context'); const receiver = worker(f, 'receiver');
+  assert.equal((await receiver.next('another-parent')).selected, null);
+  assert.equal((await receiver.next(parent, true)).selected, id);
+  await f.client.update(id, { force: true, field: [`swarm_handoff=${JSON.stringify({ ...sent.context, token: 'obsolete' })}`] });
+  const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8');
+  await assert.rejects(receiver.next(parent), StaleFenceError);
+  assert.equal(readFileSync(history, 'utf8'), before);
+});
