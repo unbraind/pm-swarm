@@ -151,7 +151,7 @@ hashes. The measured coordination/read phase is 3,641 ms, the test case is
 loaded-host observation, not a performance target or replacement for the
 initial receipt's measured duration.
 
-## Combined-source full gates and final handoff
+## Combined-source full gates
 
 Combined application head `ecda51c837a0db249d0f9852c0d18fbdd374d9f8` passes
 [CI run 39679043493](https://github.com/unbraind/pm-swarm/actions/runs/39679043493).
@@ -170,7 +170,7 @@ declarations, production audit (zero vulnerabilities), package contents,
 changelog and publish attestation. Every package dry run has shasum
 `9ea1994a4c840ee46383a662a8a9b4d0a1356aef`.
 
-The final required fetch also brings #12's `2fadac3`, which changes only its
+The next required fetch also brings #12's `2fadac3`, which changes only its
 verification documentation and append-only tracker evidence/claim release. This
 merges cleanly. Published package inputs remain byte-identical to the passing
 combined application head. The final commit adds those prerequisite receipts,
@@ -178,3 +178,14 @@ this verification note and append-only resource PM results, and releases our
 feature claim while keeping it in progress. Final-head CI is linked in the PR.
 No PR is merged and no release is made. Hosted backend acceptance and external
 sink fencing retain their explicit boundaries above.
+
+
+## Provisioning example correction
+
+A final native-help check identifies an authored example mistake: the pinned
+host's provisioning flag is `--tags`, not `--tag`. README now uses `--tags swarm-resource`. The existing Git-free CLI test provisions its own resource with
+that exact command before exercising status, reserve, renew, publication,
+refusals and release. Resource application functions and dependency pins are
+unchanged. This is an example correction, not a PM CLI/SDK defect. It changes the
+packaged README, so the earlier artifact shasum is retained only as historical
+source-head evidence; corrected-head CI establishes the new package receipt.

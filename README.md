@@ -71,7 +71,7 @@ before using it and release it in cleanup. Acquisition is exclusive even for the
 same principal; use renew to extend a reservation you already hold.
 
 ```sh
-pm create --type Task --id test-db --title "Integration test database" --tag swarm-resource
+pm create --type Task --id test-db --title "Integration test database" --tags swarm-resource
 # Use the actual resource ID returned by create, including its project prefix.
 pm swarm resource project-test-db --action reserve --agent worker --ttl 300 --json
 # Retain the returned token string; this example assumes generation 1.

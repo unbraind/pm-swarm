@@ -106,7 +106,9 @@ test('resource backend refusal propagates without creating local coordination or
 });
 
 test('resource CLI renders compact TOON/JSON and typed remedies without git in PATH', async t => {
-  const f = await sharedFixture(t); const id = await resource(f);
+  const f = await sharedFixture(t);
+  const created = f.run('create', '--type', 'Task', '--id', 'cli-resource', '--title', 'Synthetic database slot', '--tags', RESOURCE_TAG);
+  assert.equal(typeof created.id, 'string'); const id = String(created.id);
   assert.equal(f.run('swarm', 'resource', id).held, false);
   const reserved = f.run('swarm', 'resource', id, '--action', 'reserve', '--ttl', '60'); assert.equal(reserved.token, '1');
   assert.equal(f.run('swarm', 'resource', id, '--action', 'renew', '--token', '1').held, true);
