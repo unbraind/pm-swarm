@@ -14,7 +14,8 @@ import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
 import { RESOURCE_TAG } from './resources.ts';
-import { retryLock, withSwarmLease } from './lease.ts';
+import { retryLock, StaleFenceError, withSwarmLease } from './lease.ts';
+import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 
 /** Bind all operations to one real repository, tracker, and caller identity. */
@@ -155,15 +156,26 @@ export class Swarm {
   }
 
   /** Preview footprint updates by default; apply through the SDK files mutation. */
-  async sync(id: string, apply = false, explicitFiles?: string[], _token?: string) {
-    const lane = (await this.lanes()).find(row => row.id === id);
-    if (lane === undefined) throw new Error('No active lane for item');
-    if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
-    const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
-    const add = files.filter(path => !lane.files.includes(path));
-    if (apply && add.length > 0 && lane.agent !== this.author) throw new Error(lane.agent === null ? 'Lane is unclaimed; claim it before applying file links' : `Item claimed by ${lane.agent}`);
-    if (apply && add.length > 0) await retryLock(() => this.client.files(id, { add, author: this.author }));
-    return { id, dry_run: !apply, add };
+  async sync(id: string, apply = false, explicitFiles?: string[], token?: string) {
+    /** Keep lane discovery, authoritative ownership and each write within the same pin. */
+    const evaluate = async (lease?: Lease) => {
+      const lane = (await this.lanes()).find(row => row.id === id);
+      if (lane === undefined) throw new Error('No active lane for item');
+      if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
+      const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
+      const item = apply ? (await this.client.get(id, { depth: 'full' })).item : undefined;
+      const linked = item === undefined ? lane.files : itemFootprint(item);
+      const add = files.filter(path => !linked.includes(path));
+      if (apply && (add.length > 0 || token !== undefined)) {
+        if (item!.assignee !== this.author) throw new Error(item!.assignee ? `Item claimed by ${String(item!.assignee)}` : 'Lane is unclaimed; claim it before applying file links');
+        if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(id);
+        const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
+        if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
+        if (add.length > 0) await lease!.write(() => this.client.files(id, { add, author: this.author }));
+      }
+      return { id, dry_run: !apply, add };
+    };
+    return apply ? withSwarmLease(this.pmRoot, this.author, evaluate) : evaluate();
   }
 
   /** Simulate all lanes, report a smallest conflicting subset, and optionally merge tested commits locally. */

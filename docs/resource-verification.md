@@ -56,3 +56,78 @@ after completion. Local targeted checks are recorded separately from full-gate
 acceptance. An initial PM-linked aggregate suite hit its existing 120-second
 limit under host contention after four passing cases; that run is failed timeout
 evidence, not acceptance. No test deadline or gate threshold is increased.
+
+## Local focused receipts
+
+`npm run typecheck`, `npm run lint`, `npm run build`, `npm run docstring`,
+`npm run duplication`, `npm run identity:check` and the generated changelog check
+pass. Docstrings cover 27 authored files and 81 declarations; duplication is
+zero. Strict core tracker health passes with six existing stale-item advisories.
+
+The aggregate focused c8 run passes 7/7 with no skips or cancellations and
+measures all four dimensions at 100 percent across the two resource modules.
+That run precedes the additional conservative refusal for empty capability
+lists; the targeted backend regression passes again after the refinement. Final
+whole-package coverage is established independently by CI.
+
+The same seven resource scenarios are linked through the pinned PM runner in
+three groups, preserving the existing per-command 120-second limit:
+
+| Exact linked command | Passing result | PM elapsed |
+| --- | --- | ---: |
+| `node --test --test-name-pattern="tracker\|expired\|validation\|backend\|records" test/resources.test.ts` | 5/5 | 15,144 ms |
+| `node --test --test-name-pattern=CLI test/resources.test.ts` | 1/1 | 35,925 ms |
+| `node --test --test-name-pattern=process test/resources.test.ts` | 1/1 | 14,674 ms |
+| `node --test --test-name-pattern="shared assigned-only lanes" test/mixed-tracker.test.ts` | 1/1 | 15,155 ms |
+
+All passing executions have zero failures, skips and cancellations. The first
+split SDK execution fails the newly added missing-capability refusal test before
+its guard is corrected; the table records the successful corrected repetition.
+Existing project policy disables automatic result recording, so PM comments
+retain the measured receipts.
+
+CI attempt [39677319757](https://github.com/unbraind/pm-swarm/actions/runs/39677319757)
+on `85fca39` is failed evidence: both Node matrices pass 190/191 with full coverage,
+but one existing README wording assertion fails. The README now retains the
+assigned-item contract phrase and immediately states the resource exception;
+assertions and application source are unchanged. The focused case passes 1/1
+both directly and through PM. Release steps correctly do not proceed on that
+failed suite. Successful complete-gate receipts follow.
+
+The three core revert proofs were repeated against the current source and tests
+on `f340c88`; each again fails 0/1 by assertion, exit 1, with no cancellations.
+A fourth isolated revert removes only resource exclusion in
+`Swarm.readyCandidates`: `node --test --test-name-pattern="resource records never"
+test/resources.test.ts` fails 0/1 because the incorrectly selected resource
+reaches the independent start guard (`Resource items require swarm resource`).
+That guard still prevents a work claim; the regression requires no resource to
+be selected at all. This additional behavioral failure is an explicit refusal,
+not a timeout or canceled test.
+
+## Complete CI release receipts
+
+Application head `f340c885b1e07f12c1796c74979e829b9da8a47f` passes
+[CI run 39677832478](https://github.com/unbraind/pm-swarm/actions/runs/39677832478).
+
+| Execution | Source tests | Packed acceptance | Statements / branches / functions / lines |
+| --- | --- | --- | --- |
+| Node 22 npm release steps | 191/191 | 3/3 | 100 / 100 / 100 / 100 percent |
+| Node 26 npm release steps | 191/191 | 3/3 | 100 / 100 / 100 / 100 percent |
+| Complete `bun run release:check`, Node 26 | 191/191 | 3/3 | 100 / 100 / 100 / 100 percent |
+
+Every successful suite reports zero failures, skips and cancellations. All 27
+configured authored files are measured at unchanged thresholds. Clean CI strict
+tracker health, identity/privacy, typecheck, lint, zero duplication, docstrings,
+build, production audit, package contents, changelog and publish attestation all
+pass. Production audit reports zero vulnerabilities. All three package dry runs
+report shasum `b6927438f55439898744d9340920644f8a4f9fc3`.
+
+During the required final pre-push refresh, #12 advances to `4d6a708`, adding
+Git sync fencing and its review regressions. The merge retains both that fencing
+and this feature's resource exclusion; its sole textual conflict is the import
+list in `src/swarm.ts`. The earlier passing CI receipt above remains tied to
+`f340c88`. The combined head receives fresh full CI evidence; it is not represented
+as a documentation-only change. Final-head CI is linked in the PR. Existing
+history records remain unchanged byte prefixes. #12's branch is never pushed.
+The PR remains ready for review with base `main`, explicitly dependent on #12.
+No PR merge or release is performed. No new PM CLI/SDK defect was identified.

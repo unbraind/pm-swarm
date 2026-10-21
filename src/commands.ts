@@ -77,7 +77,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
       }
       case 'sync': {
         const operation = swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()), textOption(ctx.options.token));
-        return repo === undefined ? await operation : operation;
+        return await operation;
       }
       case 'heartbeat': return await (swarm as SharedTracker).heartbeat(id, textOption(ctx.options.token));
       case 'handoff': return await (swarm as SharedTracker).handoff(id, textOption(ctx.options.to) ?? '', textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
