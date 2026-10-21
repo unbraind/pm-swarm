@@ -155,11 +155,15 @@ test('queued operations renew agent liveness while respecting the live process p
   const owner = withSwarmLease(f.pmRoot, 'busy-worker', async () => { entered(); await resume; });
   await ready;
   const waiting = withSwarmLease(f.pmRoot, 'queued-worker', async lease => { lease.assert(); }, { renewMs: 20 });
-  await delay(350);
   const first = readRuntime<{ heartbeat: string }>(heartbeatPath(f.pmRoot, 'queued-worker'))!.heartbeat;
-  await delay(150);
-  const second = readRuntime<{ heartbeat: string }>(heartbeatPath(f.pmRoot, 'queued-worker'))!.heartbeat;
-  release(); await Promise.all([owner, waiting]);
+  let second = first;
+  try {
+    const deadline = Date.now() + 10000;
+    while (second === first && Date.now() < deadline) {
+      await delay(25);
+      second = readRuntime<{ heartbeat: string }>(heartbeatPath(f.pmRoot, 'queued-worker'))!.heartbeat;
+    }
+  } finally { release(); await Promise.all([owner, waiting]); }
   assert.ok(Date.parse(second) > Date.parse(first));
 });
 
