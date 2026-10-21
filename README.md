@@ -1,6 +1,6 @@
 # pm-swarm
 
-Coordinate many agents on one pm tracker. pm-swarm uses SDK readiness, atomic claims, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
+Coordinate dozens of agents on one pm tracker, with renewed heartbeats, fenced ownership, dead-agent recovery and context handoff. pm-swarm uses SDK readiness, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
 Install with a current pm host (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. This new package stays unreleased until maintainer approval. After publication:
 
@@ -22,31 +22,49 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | status | `pm swarm status` | Assigned lanes and declared overlaps without Git; in Git, conflicting pairs and clean pair count; `--full` includes every SHA/tree; active branches, ahead/behind current target, changed files, drift, pair and base-tip predictions |
 | status --watch | `pm swarm status --watch --interval 2 --json` | Stream lane and conflict changes as JSON lines (TOON blocks by default); stop with Ctrl-C |
 | sync | `pm swarm sync task-id --files src/a.ts,src/b.ts --dry-run` | Preview explicit changed-file links, or derive them from Git; `--apply` writes through the SDK |
+| heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
+| reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
+| handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; receiver obtains it from `next` |
+| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim in one mutation |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
 | reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
 
 ## Without git
 
-The primary agent loop is `next` → work → `sync --files` → `status` → finish → `reap`. Run `pm init` in a plain directory and install the extension there. Mode is detected once per invocation; non-Git workspaces return `mode: shared-tracker`. `settings` works without repository detection. The tracker commands do not start Git in this mode, including when Git is absent from PATH.
+The primary agent loop is `next` → heartbeat while working → `sync --files --token` → `close --token`. Run `pm init` in a plain directory and install the extension there. Mode is detected once per invocation; non-Git workspaces return `mode: shared-tracker`. `settings` works without repository detection. The tracker commands do not start Git in this mode, including when Git is absent from PATH.
 
 ```sh
 pm swarm plan
 pm swarm next --agent worker --dry-run
-pm swarm next --agent worker
+pm swarm next --agent worker --json
+# Retain selected and token from this response. The token below is illustrative.
+pm swarm heartbeat task-id --agent worker --token 1
 # Edit and test in the shared workspace.
-pm swarm sync task-id --agent worker --files src/a.ts,test/a.test.ts --apply
+pm swarm sync task-id --agent worker --token 1 --files src/a.ts,test/a.test.ts --apply
 pm swarm status --watch --interval 2
-pm close task-id "Tests pass"
+pm swarm close task-id --agent worker --token 1 --note "Tests pass"
 pm swarm reap --agent worker --dry-run
 pm swarm reap --agent worker
 ```
 
-Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm. Assigned-only items also block overlapping selection. `start` records the SDK claim and linked footprint, without branch or base fields. Selection holds a tracker-local SDK lease across readiness, footprint checks and claiming, so concurrent swarm processes serialize their decisions while the lease remains valid. The 1800-second lease is finite and is not renewed during the operation; a stalled process can continue after expiry, and distinct overlapping explicit `start` calls can then both succeed because `PmClient.claim` has no tracker fencing token. Ordinary SDK claims still enforce item ownership. Plan excludes candidates overlapping active assigned items and places unknown footprints in solitary waves; unknown work is deferred when active lanes prevent a safe planning recommendation. `next` retains its explicit unknown-footprint fallback. Claims made by tools outside swarm do not participate in its multi-item footprint lease; recheck status before editing.
+Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm. Assigned-only items also block overlapping selection. `start` records the SDK claim and linked footprint, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
+
+Each shared claim persists a monotonically increasing decimal `swarm_token` and claim timestamp atomically with its assignee. `next` and `start` return `token`; keep that exact string and pass `--token` to shared `sync --apply`, `handoff` and `close`. A stale or missing token is refused with typed `StaleFenceError` / CLI code `swarm_stale_fence` before changing item data. Reusing an author ID after a takeover does not make its old token valid. Embedded `SharedTracker` instances remember the tokens they issue; separate CLI invocations require the explicit token. Legacy claims without a swarm token retain ordinary SDK ownership checks. Plan excludes candidates overlapping active assigned items and places unknown footprints in solitary waves; unknown work is deferred when active lanes prevent a safe planning recommendation. `next` retains its explicit unknown-footprint fallback. Claims made by tools outside swarm do not participate in its multi-item footprint lease; recheck status before editing.
 
 `status` lists nonterminal assigned items with their agent, linked files, claim timestamp and age in seconds. Assignments without claim provenance have null age. It shows declared overlaps, including unknown footprints, and a one-line note explaining that Git ahead/behind and merge predictions are unavailable. Watch adds `overlap_detected`, `overlap_changed` and `overlap_resolved` events. Age advancing alone emits no change.
 
-`sync` requires `--files a,b` without Git. Paths must be relative to the project; `--apply` links them through the SDK and `--dry-run` always previews. `reap` releases terminal claims belonging to the invoking principal; it reports foreign terminal claims with guidance to use their `--agent` principal. Active claims are preserved. `land` exits 2 and explains that it merges Git branches; shared-tracker work already lives on the shared tracker. Shared directory concurrency is tested with eight real CLI processes and a strict tracker health check. Hosted Postgres/MCP coordination is not certified by that local-process test.
+`sync` requires `--files a,b` without Git. Paths must be relative to the project; `--apply` links them through the SDK and `--dry-run` always previews. `reap` releases terminal claims belonging to the invoking principal; it reports foreign terminal claims with guidance to use their `--agent` principal. Active claims are preserved. `land` exits 2 and explains that it merges Git branches; shared-tracker work already lives on the shared tracker. The dedicated `npm run test:scale` proof installs the built package into one non-Git tracker and runs 50 real process agents through next/heartbeat/sync/close loops, kills 13 of 50 mid-run, reclaims their items and checks every write plus full strict health. Git is absent from PATH. See [fenced lease verification](docs/fenced-leases-verification.md) for measured timings. Hosted Postgres/MCP coordination is not certified by that local-process test.
+
+## Heartbeats, takeover and handoff
+
+While editing or running tools outside swarm, run `pm swarm heartbeat --agent worker` regularly. Long swarm mutations renew the operation lease and the invoking principal's heartbeat automatically. Runtime liveness records stay in the tracker's ignored runtime directory; deleting those records discards recent liveness evidence, so preserve them while agents are active. A new claim or transfer grants a fresh heartbeat interval even if the receiver last ran long ago.
+
+`pm swarm reclaim --stale-after 120` returns nonterminal stale assignments to the configured open status. Add `--to recovery-worker` to assign them directly. Each item transition bumps the token and appends a comment with the previous owner, last heartbeat, previous token and destination in the same SDK update. Terminal work is left alone. Choose a threshold longer than your external heartbeat interval.
+
+`pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; inspect edge cases"` transfers owner, token, note and receiver packet in one item transaction. `pm swarm next --agent reviewer` returns that assigned item before selecting new work, with its new token and `context`: item state, up to 50 linked files, the last three comments (up to 1024 characters each), sender and note. `files_omitted` reports any file truncation. The full item remains available through `pm show`. A returned handoff remains available until finished or handed on.
+
+Shared `sync --apply`, `handoff` and `close` consume fencing tokens; reclaim and terminal reap follow their administrative recovery policies. Core pm commands and external SDK clients do not supply swarm tokens and can bypass this protocol; use the swarm writer commands for the fenced loop. This package does not change the host SDK. Agent principals are caller-selected identities, not an authentication system. Optional Git worktree commands retain their existing SDK ownership contract.
 
 ## Optional Git worktree lanes
 
@@ -60,7 +78,7 @@ pm swarm land --json
 pm swarm land --execute
 ```
 
-`next` uses the same certified corpus and SDK dependency readiness as `plan`, excluding existing lanes and both own and foreign claims. It selects known footprints that do not intersect any nonterminal lane's declared footprint or actual changed paths, measured with Git from the current target's merge base. Priority sorts ascending (0 first), then creation time ascending (oldest first), then item ID. A lower priority safe item beats a higher priority overlapping item. Output includes the selection reason and skipped candidates with overlapping lane IDs and paths. `--parent` selects direct children. Both modes share a tracker operation lease; Git operations acquire the repository lease inside it. Git selection also checks assigned items without a local branch, including assigned-only items; the SDK claim is the final ownership check.
+`next` uses the same certified corpus and SDK dependency readiness as `plan`, excluding existing lanes and both own and foreign claims. It selects known footprints that do not intersect any nonterminal lane's declared footprint or actual changed paths, measured with Git from the current target's merge base. Priority sorts ascending (0 first), then creation time ascending (oldest first), then item ID. A lower priority safe item beats a higher priority overlapping item. Output includes the selection reason and skipped candidates with overlapping lane IDs and paths. `--parent` selects direct children. Both modes share a renewing tracker operation lease; Git operations acquire the repository lease inside it. Git selection also checks assigned items without a local branch, including assigned-only items; the SDK claim is the final ownership check.
 
 Unknown candidate footprints are deferred until no known safe item exists, then started with an explicit warning. An active lane with neither linked nor changed paths cannot establish safety and blocks known candidates conservatively. When no eligible item remains, `selected` is null and no lane is created. `--dry-run` makes no claim, item/history edit, branch, worktree, or local Git configuration change. Normal host SDK read caches may still be refreshed. `next` uses the configured base, root and branch prefix, just as `start` does.
 

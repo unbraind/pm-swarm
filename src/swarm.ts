@@ -13,6 +13,7 @@ import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
+import { retryLock, withSwarmLease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 
 /** Bind all operations to one real repository, tracker, and caller identity. */
@@ -87,12 +88,11 @@ export class Swarm {
 
   /** Hold the tracker lease outside the repository lease across Git operations. */
   private async exclusive<T>(operation: () => Promise<T>): Promise<T> {
-    const releaseTracker = await acquireLock(this.pmRoot, 'swarm-operation', 1800, this.author, false, false, 60000);
-    try {
+    return withSwarmLease(this.pmRoot, this.author, async lease => {
       const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-      const release = await acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author);
+      const release = await lease.write(() => acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author));
       try { return await operation(); } finally { await release(); }
-    } finally { await releaseTracker(); }
+    });
   }
 
   /** Publish a lane under the repository operation lease. */
@@ -108,16 +108,16 @@ export class Swarm {
     const overlap_warnings = footprintOverlaps(itemFootprint(item), (await this.activeFootprints()).filter(lane => lane.id !== id));
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
-    await this.client.claim(item.id, { author: this.author });
+    await retryLock(() => this.client.claim(item.id, { author: this.author }));
     let created = false;
     try {
       git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]);
-      await this.client.update(item.id, { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] });
+      await retryLock(() => this.client.update(item.id, { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }));
     } catch (error) {
       if (created) { git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]); git(this.repo, ['worktree', 'remove', path]); }
       if (branchExists(this.repo, branch)) git(this.repo, ['branch', '-D', branch]);
-      if (view.claim_state?.claimed === false) await this.client.release(item.id, { author: this.author });
+      if (view.claim_state?.claimed === false) await retryLock(() => this.client.release(item.id, { author: this.author }));
       throw error;
     }
     return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
@@ -153,14 +153,14 @@ export class Swarm {
   }
 
   /** Preview footprint updates by default; apply through the SDK files mutation. */
-  async sync(id: string, apply = false, explicitFiles?: string[]) {
+  async sync(id: string, apply = false, explicitFiles?: string[], _token?: string) {
     const lane = (await this.lanes()).find(row => row.id === id);
     if (lane === undefined) throw new Error('No active lane for item');
     if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
     const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
     const add = files.filter(path => !lane.files.includes(path));
     if (apply && add.length > 0 && lane.agent !== this.author) throw new Error(lane.agent === null ? 'Lane is unclaimed; claim it before applying file links' : `Item claimed by ${lane.agent}`);
-    if (apply && add.length > 0) await this.client.files(id, { add, author: this.author });
+    if (apply && add.length > 0) await retryLock(() => this.client.files(id, { add, author: this.author }));
     return { id, dry_run: !apply, add };
   }
 
@@ -268,7 +268,7 @@ export class Swarm {
         if (pathResult.status === 0) git(this.repo, ['config', '--local', '--unset', `swarm.lane.${lane.id}`]);
       }
       removed.push(lane.id);
-      if (lane.agent === this.author) { if (!dryRun) await this.client.release(lane.id, { author: this.author }); released.push(lane.id); }
+      if (lane.agent === this.author) { if (!dryRun) await retryLock(() => this.client.release(lane.id, { author: this.author })); released.push(lane.id); }
     }
     return { dry_run: dryRun, removed, released, cleanup, refused };
   }

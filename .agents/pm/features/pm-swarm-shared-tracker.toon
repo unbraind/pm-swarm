@@ -6,11 +6,13 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-20T21:16:07.204Z"
+updated_at: "2026-10-21T15:30:37.256Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[61]{created_at,author,text}:
+comments[66]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -72,24 +74,35 @@ comments[61]{created_at,author,text}:
   "2026-10-20T21:05:41.420Z",codex-agent,"Local npm source suite passes 155/155, zero failures/skips/cancellations, duration 414490 ms. Coverage passes all 24 authored files at unchanged 100 percent thresholds: statements/lines 1548/1548, functions 90/90, branches 808/808. All remaining static, audit, packaging, changelog and attestation checks pass; packed acceptance is still running and is not yet counted as passed locally. Package dry-run shasum matches CI normal and Bun: 61a8ed2e0d363f437a424ac5dffdf8a22258bec6. Eight processes retain eight claims and nine healthy histories, claim batch 23073 ms. Final complete review refresh still has exactly PRRT_kwDOVLY-P86ugbc8 and PRRT_kwDOVLY-P86ugbdL, one comment each, no remaining pages and no Outside diff range findings. Existing history prefix verified unchanged. Local npm gate has needed no retries so far."
   "2026-10-20T21:06:52.578Z",codex-agent,"FINAL code/test/package validation at 891784d: complete local npm run release:check PASSED, isolated HOME, disabled global/system Git config, CI enabled, Node 26.12.0/npm 11.20.0. Source suite 155/155 and packed acceptance 3/3, zero failures/skips/cancellations; source 414490 ms, packed 260881 ms. No timeout retries or deadline changes. Full bun run release:check passes in CI run https://github.com/unbraind/pm-swarm/actions/runs/39495825720 on the same source, 155/155 plus 3/3; both Node 22 and Node 26 jobs pass strict tracked-project health. All 24 authored files retain four unchanged 100 percent thresholds: statements/lines 1548/1548, functions 90/90, branches 808/808. All other release checks pass; package shasum matches 61a8ed2e0d363f437a424ac5dffdf8a22258bec6. Focused regressions pass 7/7 through PM; independent reverts fail 1/1 Git sync, 3/4 Bun probe and 2/2 acceptance entry regressions. Both valid threads fixed; same-class review also checks Bun before the earlier Git packed setup. Complete review refresh has only the original two threads and no Outside diff range findings. PM history prefix unchanged. Final handoff changes only append-only PM evidence and verification documentation, and will receive fresh CI. Existing stale advisories, local extension host skew, development glob advisory and finite unfenced lease/hosted limits remain separate. No new PM CLI/SDK bug observed. Release this claim; keep in_progress. No review replies/resolutions, PR merge or release."
   "2026-10-20T21:16:07.204Z",codex-agent,"Additional handoff evidence: e68da81 CI run 39497758293 initially failed Node 26 packed acceptance 2/3 at ENOTEMPTY while recursively removing the disposable Bun cache; Node 22 passed. This is recorded as a failed attempt, not a timeout. Unchanged-code retry passes both Node matrices, full Bun release gate 155/155 source and 3/3 packed. Deduplicated and created open follow-up pm-swarm-packed-cleanup for the non-Git fixture cleanup gap; historical Git counterpart is recorded on pm-swarm-watch. No review fix changed. Final evidence commit adds only the follow-up, append-only receipts and verification documentation. The feature claim remains released and status in_progress; follow-up remains open. Local full npm gate and original code-head full CI Bun both passed without retries. No new PM CLI/SDK defect observed."
-files[16]{path,scope}:
+  "2026-10-21T14:39:57.280Z",codex-agent,"Renewed lease follow-up: fence shared operations and item writes, renew heartbeats during long commands, atomically reclaim or hand off with context, retry only pre-write lock_conflict refusals, and prove fifty real CLI workers plus killed-worker recovery on one non-Git tracker. Preserve dependency pins and unchanged quality thresholds."
+  "2026-10-21T14:56:36.458Z",codex-agent,"Behavioral progress: expired-start regression preserves item history and prevents overlapping strict ownership. Atomic handoff, same-author ABA token rejection, pool reclaim and targeted reclaim pass with real non-Git trackers. Implementation uses a renewing operation lease plus a live-process pin so an awaited SDK mutation cannot overlap a time-based takeover; killed owners are recoverable. Only explicit lock_conflict failures are retried with bounded jitter. Packed fifty-agent proof and unchanged coverage gates are running. Pinned SDK update rejects unset claim_principal; no unsupported field mutation is used."
+  "2026-10-21T15:04:38.303Z",codex-agent,"Scale feedback changed the lock hot path: fifty waiters could starve SDK admission-lock release in the first attempt, so that attempt was stopped and is not counted as proof. Normal swarm admission now uses atomic hard-link publication of an immutable process pin. SDK locking is limited to dead-pin recovery and actual item mutations, with jittered refusal retries. Linux process-start identity distinguishes reused PIDs; other platforms conservatively preserve live pins. Updated atomic handoff and reclaim tests pass, including continued sync and close after transferring an ordinary SDK claim."
+  "2026-10-21T15:23:47.713Z",codex-agent,"Five isolated behavioral reverts each fail 0/1 as expected: operation expiry guard, item fence, handoff owner publication, lock retry, and stale reclaim. Current focused fencing suite passes 6/6, including real killed-holder recovery and Linux PID reuse. Additional real-storage edges cover queued liveness, unsupported hard links and terminal handoff refusal. Scale reached fifty distinct initial owners and heartbeats but the earlier full run exceeded its per-process deadline during survivor loops; it is failed evidence. Instrumented rerun is advancing; shared sync now reads only its target item under the fence instead of rescanning the entire tracker. Full release gates will run separately from scale to avoid watch-deadline interference."
+  "2026-10-21T15:30:37.205Z",codex-agent,"The registered PM test runner passed the fencing suite 9/9, zero failures/skips/cancellations. A real ordered-admission regression now passes alongside renewal, queued heartbeat and filesystem refusal (4/4 targeted). Admission requests are published atomically, sorted once by arrival coordinate, and dead tickets are pruned; only the queue head attempts the process pin, preventing newer commands from starving older writers. Plain heartbeat updates liveness independently of the write pin. Shared sync uses one target read, with a direct fence check, and retains foreign preview/no-op compatibility."
+files[22]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
   src/commands.ts,project
+  src/lease.ts,project
   src/selection.ts,project
   src/shared-tracker.ts,project
   src/swarm.ts,project
   src/watch.ts,project
   src/workspace.ts,project
+  test/fencing.test.ts,project
   test/helpers.ts,project
   test/install-helpers.ts,project
   test/install-prerequisites.test.ts,project
   test/install.acceptance.ts,project
   test/mixed-tracker.test.ts,project
+  test/process-helpers.ts,project
+  test/scale-worker.ts,project
+  test/scale.acceptance.ts,project
+  test/shared-helpers.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[11]:
+tests[13]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -169,7 +182,22 @@ tests[11]:
       created_at: "2026-10-20T20:52:11.316Z"
       source_kind: local_mutation
       source_ref: feat/shared-tracker-coordination
-docs[2]{path,scope}:
+  - command: node --test test/fencing.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-21T14:57:20.471Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+  - command: "npm run test:scale"
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-21T14:57:46.792Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+docs[3]{path,scope}:
+  docs/fenced-leases-verification.md,project
   docs/shared-tracker-verification.md,project
   README.md,project
 body: ""

@@ -1,7 +1,7 @@
 {
   "name": "pm-swarm",
   "version": "2026.10.15",
-  "description": "Coordinate parallel agents on a shared tracker with optional Git worktree lanes",
+  "description": "Coordinate many agents on one shared tracker with heartbeats, fenced claims and context handoff; Git lanes optional",
   "author": "@unbraind",
   "entry": "./dist/index.js",
   "pm_min_version": "2026.10.15",

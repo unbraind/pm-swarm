@@ -1,7 +1,7 @@
 {
   "name": "pm-swarm",
   "version": "2026.10.15",
-  "description": "Coordinate parallel agents on a shared tracker with optional Git worktree lanes",
+  "description": "Coordinate many agents on one shared tracker with heartbeats, fenced claims and context handoff; Git lanes optional",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/unbraind/pm-swarm.git"
@@ -43,7 +43,8 @@
     "merge:install": "pm merge install",
     "coverage": "npm run build && npm run build:test && node scripts/coverage-gate.ts",
     "verify:release-publish-attestation": "node scripts/verify-release-publish-attestation.ts",
-    "identity:check": "node scripts/identity-gate.ts"
+    "identity:check": "node scripts/identity-gate.ts",
+    "test:scale": "npm run build && node --test test/scale.acceptance.ts"
   },
   "peerDependencies": {
     "@unbrained/pm-cli": ">=2026.10.15"
@@ -64,9 +65,11 @@
   "keywords": [
     "pm-cli",
     "pm-extension",
-    "git",
-    "worktree",
-    "agents"
+    "shared-tracker",
+    "agents",
+    "leases",
+    "handoff",
+    "worktree"
   ],
   "license": "MIT",
   "engines": {
@@ -83,11 +86,12 @@
     "catalog": {
       "display_name": "pm-swarm",
       "category": "workflow",
-      "summary": "Coordinate parallel agents on a shared tracker with optional Git worktree lanes",
+      "summary": "Coordinate many agents on one shared tracker with heartbeats, fenced claims and context handoff; Git lanes optional",
       "tags": [
-        "git",
-        "worktrees",
-        "agents"
+        "shared-tracker",
+        "agents",
+        "leases",
+        "worktrees"
       ],
       "links": {
         "docs": "https://github.com/unbraind/pm-swarm#readme",

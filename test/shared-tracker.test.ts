@@ -1,47 +1,20 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import { writeFileSync, readFileSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { test } from 'node:test';
-import type { TestContext } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { PmClient } from '@unbrained/pm-cli/sdk';
 import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
 import extension from '../index.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { repositoryRoot } from '../src/workspace.ts';
 import { statusChanges, watchStatus } from '../src/watch.ts';
-import { gitEnvironment } from '../src/git-environment.ts';
 import { fixture, swarmCli } from './helpers.ts';
 
-/** Create an SDK tracker outside Git, including the actual extension and a Git-free PATH. */
-async function sharedFixture(t: TestContext) {
-  const repo = mkdtempSync(join(tmpdir(), 'swarm-shared-')); const pmRoot = join(repo, '.agents/pm');
-  t.after(() => rmSync(repo, { recursive: true, force: true }));
-  const original = { ...process.env };
-  process.env.PM_SOURCE_WORKSPACE_ROOT = repo;
-  process.env.GIT_CEILING_DIRECTORIES = dirname(repo);
-  t.after(() => { for (const key of Object.keys(process.env)) if (!(key in original)) delete process.env[key]; Object.assign(process.env, original); });
-  const client = new PmClient({ cwd: repo, pmRoot, author: 'shared-test', noExtensions: false });
-  await client.init('shared-test', { defaults: true, agentGuidance: 'skip' });
-  const extension = join(pmRoot, 'extensions/pm-swarm'); mkdirSync(extension, { recursive: true });
-  writeFileSync(join(extension, 'manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers'] }));
-  writeFileSync(join(extension, 'entry.js'), `export { default } from '${new URL('../index.ts', import.meta.url).href}';\n`);
-  const bin = join(repo, 'bin'); mkdirSync(bin); symlinkSync(process.execPath, join(bin, 'node'));
-  const env = gitEnvironment({ ...process.env, HOME: repo, PATH: bin, PM_PATH: pmRoot, PM_AUTHOR: 'shared-test', PM_GLOBAL_PATH: join(repo, '.pm-cli'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
-  const host = join(import.meta.dirname, '../node_modules/.bin/pm');
-  /** Invoke real CLI parsing and rendering, with no Git executable available. */
-  const cli = (...args: string[]) => spawnSync(process.execPath, [host, ...args], { cwd: repo, env, encoding: 'utf8' });
-  /** Require a successful real command and decode its JSON response. */
-  const run = (...args: string[]) => { const result = cli(...args, '--json'); assert.equal(result.status, 0, result.stdout + result.stderr); return JSON.parse(result.stdout) as Record<string, unknown>; };
-  /** Create ranked real tasks with declared paths through the SDK. */
-  const item = async (files: string[] = [], priority = 2, id?: string) => (await client.create({ type: 'Task', title: 'Shared work', id, priority, file: files.map(path => `path=${path}`) })).item.id;
-  const shared = new SharedTracker(new Swarm(repo, pmRoot, client, 'shared-test'));
-  return { repo, pmRoot, client, shared, cli, run, item, env, host };
-}
+import { sharedFixture } from './shared-helpers.ts';
 
 test('no-git settings fully previews and applies while preserving other settings', async t => {
   const f = await sharedFixture(t);
@@ -97,40 +70,25 @@ test('no-git start warns, strict refuses overlaps, and terminal/foreign claims s
   assert.equal((await f.shared.start(empty)).id, empty, 'own claim is idempotent');
 });
 
-test('expired tracker lease permits overlapping starts and documents the boundary', { timeout: 60000 }, async t => {
+test('expired tracker lease refuses a stalled start before item history changes', { timeout: 60000 }, async t => {
   const f = await sharedFixture(t); const first = await f.item(['src']); const second = await f.item(['src/code.ts']);
   let enter = () => {}; let resume = () => {};
   const entered = new Promise<void>(resolve => { enter = resolve; });
   const resumed = new Promise<void>(resolve => { resume = resolve; });
   const corpus = f.shared.engine.corpus.bind(f.shared.engine);
-  // Pause after the real certified read, retaining its pre-expiry snapshot.
-  f.shared.engine.corpus = async () => {
-    const snapshot = await corpus(); enter(); await resumed; return snapshot;
-  };
+  f.shared.engine.corpus = async () => { const snapshot = await corpus(); enter(); await resumed; return snapshot; };
+  const history = join(f.pmRoot, 'history', `${first}.jsonl`); const before = readFileSync(history, 'utf8');
   const stalled = f.shared.start(first, {}, true);
-  try {
-    await Promise.race([entered, stalled.then(() => assert.fail('the first operation must pause'))]);
-    const path = join(f.pmRoot, 'locks', 'swarm-operation.lock');
-    const lease = JSON.parse(readFileSync(path, 'utf8')) as { ttl_seconds: number; created_at: string };
-    assert.equal(lease.ttl_seconds, 1800);
-    // Age only the disposable tracker's lease; no clock or SDK response is mocked.
-    lease.created_at = new Date(Date.now() - 1801_000).toISOString(); writeFileSync(path, JSON.stringify(lease));
-    const successor = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'lease-successor'));
-    assert.equal((await successor.start(second, {}, true)).id, second);
-  } finally { resume(); await stalled; f.shared.engine.corpus = corpus; }
-  assert.equal((await f.client.get(first)).claim_state?.claimed, true);
-  assert.equal((await f.client.get(second)).claim_state?.claimed, true);
-  assert.equal((await f.shared.status()).overlaps.length, 1);
-  for (const path of ['README.md', 'docs/shared-tracker-verification.md']) {
-    const prefix = path === 'README.md' ? 'Shared lanes are' : 'SharedTracker reuses';
-    const body = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8').split('\n\n').find(paragraph => paragraph.startsWith(prefix)) ?? '';
-    assert.match(body, /while the lease remains valid/);
-    assert.match(body, /1800-second lease is finite and is not renewed/);
-    assert.match(body, /stalled process can continue after expiry/);
-    assert.match(body, /overlapping explicit `start` calls can then both succeed/);
-    assert.match(body, /`PmClient.claim` has no tracker fencing token/);
-    assert.doesNotMatch(body, /serialize their decisions\./);
-  }
+  await entered;
+  const path = join(f.pmRoot, 'runtime/swarm/operation.json');
+  const lease = JSON.parse(readFileSync(path, 'utf8')) as { heartbeat: number };
+  lease.heartbeat = Date.now() - 31000; writeFileSync(path, JSON.stringify(lease));
+  resume(); await assert.rejects(stalled, /swarm_stale_fence/); f.shared.engine.corpus = corpus;
+  assert.equal(readFileSync(history, 'utf8'), before);
+  const successor = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'lease-successor'));
+  await successor.start(second, {}, true);
+  await assert.rejects(f.shared.start(first, {}, true), /Overlapping/);
+  assert.equal((await f.shared.status()).overlaps.length, 0);
 });
 
 test('no-git status reports claim age and declared overlaps, omitting Git measurements', async t => {
@@ -293,7 +251,7 @@ test('no-git command matrix records exit codes and first lines', async t => {
   const commands = [
     ['plan'], ['next', '--agent', 'matrix-worker', '--dry-run'],
     ['start', id, '--agent', 'matrix-worker'], ['status'],
-    ['sync', id, '--files', 'src,docs', '--apply', '--agent', 'matrix-worker'],
+    ['sync', id, '--files', 'src,docs', '--apply', '--agent', 'matrix-worker', '--token', '1'],
     ['land'], ['reap', '--dry-run'], ['settings'],
   ];
   const codes = [];
@@ -336,7 +294,7 @@ test('shared SDK dispatch covers active, terminal, unknown and explicit-file ope
   await run('status', { full: true });
   await assert.rejects(run('sync', {}, [first]), /--files/);
   await run('sync', { files: 'src, docs,docs', apply: true, dryRun: true }, [first]);
-  await run('sync', { files: 'src, docs,docs', apply: true }, [first]);
+  await run('sync', { files: 'src, docs,docs', apply: true, token: '1' }, [first]);
   await run('sync', { files: 'docs', apply: true }, [first]);
   await assert.rejects(run('sync', { files: 'a,' }, [first]), /--files/);
   await assert.rejects(run('sync', { files: 'docs' }, [terminal]), /No active/);
@@ -380,8 +338,8 @@ for (const operation of ['plan', 'preview', 'next', 'start', 'sync', 'reap'] as 
       case 'sync': await f.shared.sync(active, true, ['extra']); break;
       case 'reap': await f.shared.reap(); break;
     }
-    assert.equal(corpusReads, 1, 'one certified corpus per operation');
-    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready] : [], 'only the selected item needs a direct ownership read');
+    assert.equal(corpusReads, operation === 'sync' ? 0 : 1, 'sync reads only its target; selection certifies the corpus');
+    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready] : operation === 'sync' ? [active] : [], 'only the selected item needs a direct ownership read');
   });
 }
 

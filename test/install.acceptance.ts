@@ -164,7 +164,7 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
     invoke(runtime, ['files', id, '--add', 'src/work.ts']);
     const selected = invoke(runtime, ['swarm', 'next', '--agent', 'packed-worker']);
     assert.equal(selected.selected, id); assert.equal(selected.mode, 'shared-tracker'); assert.equal('branch' in selected, false);
-    const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply']);
+    const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply', '--token', String(selected.token)]);
     assert.deepEqual(synced.add, ['test/work.test.ts']);
     const status = invoke(runtime, ['swarm', 'status']); assert.equal((status.lanes as unknown[]).length, 1);
     invoke(runtime, ['update', id, '--status', 'closed', '--message', 'Packed work verified']);
