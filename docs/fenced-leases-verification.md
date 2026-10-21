@@ -154,3 +154,27 @@ The later metadata-head [CI run on 5dbac6c](https://github.com/unbraind/pm-swarm
 [CI run 39654833752 on fd018b4](https://github.com/unbraind/pm-swarm/actions/runs/39654833752) passes Node 22 and Node 26: 179/179 source tests and 3/3 packed acceptance on each. The complete Bun release gate also passes 179/179 plus 3/3. All four coverage dimensions remain at 100 percent across all 25 authored files, and package shasum remains `d4bd106a8f49155a1593413b09832765a2112bc6`.
 
 The PM-linked command `node --test --test-name-pattern="no-git plan uses readiness" test/shared-tracker.test.ts` passes the exact formerly failing case, 1/1, in 28724 ms including imports. The PM-linked review suite again passes 13/13 in 38891 ms including imports. Both have zero failures, skips or cancellations. The five review-round revert proofs and the two SDK invariant tests are unchanged. This receipt supersedes the failed metadata-head CI attempt and includes the final fixture disposal policy. The final handoff releases the feature claim again, preserves in-progress status, and adds only append-only evidence and this note after the cleanup correction.
+
+## Review round on beb4d62
+
+The remote PR branch was pulled before editing; origin main was already an ancestor. All seven review threads and every comment were read with no remaining pagination. Three threads are unresolved. The latest substantive CodeRabbit review, 5604898599, contains these same three findings, including the README nitpick, and no separate Outside diff range findings. Threads are left untouched.
+
+| Thread | Verified disposition |
+| --- | --- |
+| PRRT_kwDOVLY-P86u6gIl | Documented the existing per-item staleness snapshot: eligibility is fixed when reclaim reads the claim and heartbeat evidence; a later heartbeat does not change that decision in the current invocation. Agent-wide heartbeats remain independent of the operation lease. A documentation regression requires this boundary to remain explicit. |
+| PRRT_kwDOVLY-P86u6gIp | Declined with pinned-SDK evidence. Full reads include claim state. In `sdk/query/get.js`, `resolveClaimStateContext` derives `claimed` from the nonblank assignee, independently of claim events; `last_claim` alone is historical provenance. Two real non-Git tracker cases assign a foreign owner directly, with either no claim history or a previously released claim. Both return `claimed: true`; the existing `claimLane` guard rejects start, preserves the entire item history, retains the foreign owner and issues no token. No duplicate ownership guard was added. |
+| PRRT_kwDOVLY-P86u6gIz | Reclaim trims its optional recipient before validation and transfer, matching handoff. SDK and actual CLI regressions verify the canonical response, durable owner, packet destination and evidence note, then receive the packet as the canonical agent and perform a fenced sync. Whitespace-only recipients still fail. |
+
+Whole-PR review checked ownership reads and writes in shared and Git lanes, identity resolution and recipient handling, reclaim evidence selection, handoff reception, operation leases, scale worker barriers and the changed acceptance call sites. Git lanes retain the SDK claim contract; the new shared ownership tests also demonstrate why assignment-only ownership is already protected. No additional valid instance of these defect classes was found. Dependencies, deadlines, coverage scope and all release thresholds remain unchanged. Dist is ignored and is rebuilt by CI.
+
+`node --test test/review-r5.test.ts` passes 5/5, with zero failures, skips or cancellations. `npm run typecheck` and `npm run lint` pass. Full release gates are delegated to CI as requested because of host load.
+
+Independent disposable source copies retain the final tests and reuse the pinned dependencies; no SDK response or tracker is mocked, and source imports need no dist rebuild:
+
+| Behavior reverted independently | Exact regression command | Result |
+| --- | --- | --- |
+| Only `SharedTracker.reclaim`, restored from beb4d62 | `node --test --test-name-pattern="reclaim normalizes receiver identity" test/review-r5.test.ts` | Exit 1, 0/2 passing, both fail on the padded recipient |
+| Only README, restored from beb4d62 | `node --test --test-name-pattern="README defines" test/review-r5.test.ts` | Exit 1, 0/1 passing, missing snapshot boundary |
+| Existing `claimLane` ownership guard removed, to validate the declined finding's protection | `node --test --test-name-pattern="start preserves a foreign assignment" test/review-r5.test.ts` | Exit 1, 0/2 passing, both fail with missing expected rejection |
+
+All three proofs fail by assertion with zero cancellations. They change only the stated behavior in their own copies and never modify the package worktree. CI release receipts follow after completion.

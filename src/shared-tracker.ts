@@ -199,7 +199,8 @@ export class SharedTracker {
 
   /** Recover nonterminal claims whose principal has stopped heartbeating. */
   async reclaim(staleAfter: number, to?: string) {
-    if (!Number.isFinite(staleAfter) || staleAfter <= 0 || (to !== undefined && !to.trim())) throw new Error('reclaim requires --stale-after as positive seconds and a nonempty optional --to');
+    to = to?.trim();
+    if (!Number.isFinite(staleAfter) || staleAfter <= 0 || (to !== undefined && !to)) throw new Error('reclaim requires --stale-after as positive seconds and a nonempty optional --to');
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const recovered = []; const refused: { id: string; reason: string }[] = [];

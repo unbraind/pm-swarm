@@ -6,11 +6,13 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-21T18:50:20.443Z"
+updated_at: "2026-10-21T19:49:58.691Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[83]{created_at,author,text}:
+comments[85]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -94,10 +96,13 @@ comments[83]{created_at,author,text}:
   "2026-10-21T18:38:59.749Z",codex-agent,"Final metadata-head CI exposed an additional fixture cleanup race: run 39653884453 Node 22 reports 178/179, one hook failure ENOTEMPTY while removing the disposable shared tracker telemetry directory. Coverage itself still measures all four 100 percent dimensions; this failed attempt is not counted as a pass and is not a test timeout. Reclaim this item for the small harness correction. Apply the same maxRetries 10 and retryDelay 200 already used by the Git fixture to sharedFixture teardown. Preserve telemetry configuration, assertions, source inventory, thresholds and existing deadlines. The accepted application and scale harness are unchanged; sharedFixture is not used by the fifty-worker proof. Re-run the focused SDK/process suite and fresh complete CI. Earlier successful a7a6ff0 receipts remain valid for that snapshot."
   "2026-10-21T18:39:58.486Z",codex-agent,"Inspection confirms the Git fixture actual retryDelay is 100 ms (the initial cleanup plan said 200); mirror its maxRetries 10 / retryDelay 100 exactly. Apply that bounded teardown policy to sharedFixture and the fifty-worker fixture own verified-root cleanup, which share the SDK temporary-directory lifecycle. This changes only disposal after assertions. Application source, packaged inputs, worker protocol, count assertions and existing deadlines are unchanged. The successful full scale receipt at a7a6ff0 remains evidence for all loop/ownership/history checks; its successful cleanup took the same first-attempt path. No telemetry setting is read or changed as remediation. The existing packed Bun-cache follow-up remains separate."
   "2026-10-21T18:50:09.838Z",codex-agent,"Cleanup correction fd018b4 is fully accepted by CI run https://github.com/unbraind/pm-swarm/actions/runs/39654833752: Node 22 and Node 26 both pass 179/179 source tests plus 3/3 packed acceptance; full bun run release:check also passes 179/179 plus 3/3. Coverage retains all four 100 percent thresholds over all 25 authored files, with the same package shasum d4bd106a8f49155a1593413b09832765a2112bc6. The actual previously failing no-git plan case passes 1/1 through PM (28724 ms invocation); the review suite passes 13/13 through PM (38891 ms invocation). Five original review-round behavioral reverts still fail their seven targeted cases; no review-fix function changed. A further uncommitted filesystem-injection experiment was removed because synchronous cleanup backends differ across Node versions; the final correction uses the existing repository bounded-cleanup policy and the real SDK/CLI case plus full matrix. No SDK response mock or telemetry configuration change was introduced. The scale receipt at a7a6ff0 continues to cover the identical packaged application, worker protocol and all ownership/write/history assertions; fd018b4 changes only bounded disposal after successful verification. The failed 5dbac6c Node 22 attempt is retained as a separate ENOTEMPTY hook failure, not a timeout or a pass. Release this claim again, keep in_progress, and commit final append-only receipts. No review thread replies/resolutions, merge or release."
-files[24]{path,scope}:
+  "2026-10-21T19:47:29.093Z",codex-agent,"PR 12 review refresh: remote branch current and main already an ancestor. Fetched all seven threads with all comments; three remain unresolved and no pagination remains. Latest substantive CodeRabbit review 5604898599 contains three inline findings and no separate Outside diff range section. Plan: verify raw assignments against the pinned full-read claim_state contract, normalize reclaim recipients, document the per-item staleness snapshot, add real non-Git regressions and isolated revert proofs, then targeted local checks and full CI npm/Bun gates at unchanged thresholds. No review replies or resolutions."
+  "2026-10-21T19:49:58.691Z",codex-agent,"Verified dispositions: PRRT_kwDOVLY-P86u6gIl documents per-item reclaim snapshot; PRRT_kwDOVLY-P86u6gIz normalizes optional recipients before validation/transfer. PRRT_kwDOVLY-P86u6gIp is invalid with pinned SDK 2026.10.17: sdk/query/get.js resolveClaimStateContext derives claimed from nonblank assignee, independent of last_claim. Real non-Git tests cover direct foreign assignment with no claim event and after a released claim; existing start guard rejects both without history or token changes. Whole-PR review of shared/Git ownership, recipients, reclaim evidence, reception, leases and worker barriers finds no other valid same-class instance. No extra Outside diff range findings. node --test test/review-r5.test.ts passes 5/5 directly and through pm test pm-swarm-shared-tracker --run --match review-r5.test.ts --progress, zero failures/skips/cancellations. npm run typecheck and npm run lint pass. Isolated revert proofs retain final tests: restoring only SharedTracker.reclaim from beb4d62 makes node --test --test-name-pattern=\"reclaim normalizes receiver identity\" test/review-r5.test.ts fail 0/2, exit 1, padded recipient assertions; restoring only README makes node --test --test-name-pattern=\"README defines\" test/review-r5.test.ts fail 0/1, exit 1; deleting the existing claimLane ownership guard makes node --test --test-name-pattern=\"start preserves a foreign assignment\" test/review-r5.test.ts fail 0/2, exit 1, missing expected rejection. All proofs fail by assertion with zero cancellations, no SDK mocks. Dist is ignored; CI rebuilds it. Full npm/Bun gates will run in CI at unchanged thresholds; no local full gate or scale rerun because host load is saturated. PM runner result tracking is disabled by existing project policy, so this comment retains its pass receipt."
+files[26]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
+  README.md,project
   src/commands.ts,project
   src/lease.ts,project
   src/selection.ts,project
@@ -113,13 +118,14 @@ files[24]{path,scope}:
   test/mixed-tracker.test.ts,project
   test/process-helpers.ts,project
   test/review-r4.test.ts,project
+  test/review-r5.test.ts,project
   test/scale-helpers.ts,project
   test/scale-worker.ts,project
   test/scale.acceptance.ts,project
   test/shared-helpers.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[15]:
+tests[16]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -225,6 +231,13 @@ tests[15]:
     provenance:
       author: codex-agent
       created_at: "2026-10-21T18:41:08.739Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+  - command: node --test test/review-r5.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-21T19:48:53.269Z"
       source_kind: local_mutation
       source_ref: feat/fenced-leases-handoff
 docs[3]{path,scope}:
