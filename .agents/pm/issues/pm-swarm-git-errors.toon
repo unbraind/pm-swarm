@@ -1,0 +1,14 @@
+id: pm-swarm-git-errors
+title: Normalize asynchronous Git command errors consistently
+description: "Git next, start, status, land and reap return promises without awaiting inside runCommand error handling. Their asynchronous failures bypass createPmCliExpectedError, unlike shared commands and the corrected Git sync path. This predates the fenced-sync review change. Add real Git CLI negative cases and normalize asynchronous error exits consistently without changing successful results."
+type: Issue
+status: open
+priority: 3
+tags: []
+created_at: "2026-10-21T21:19:26.607Z"
+updated_at: "2026-10-21T21:20:45.580Z"
+author: codex-agent
+parent: pm-swarm-shared-tracker
+files[1]{path,scope}:
+  src/commands.ts,project
+body: ""

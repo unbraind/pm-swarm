@@ -1,16 +1,18 @@
 id: pm-swarm-packed-latency
 title: Profile packed acceptance latency under host contention
-description: "The final isolated-home npm release gate passes, with its packed Git npm/Bun consumer test taking 599323 ms against the existing 600000 ms test deadline. CI Node 22 and Node 26 pass the same acceptance and full Bun gate. Profile process startup and resource isolation under host contention before considering a budget change. Preserve all command assertions and coverage thresholds. Track this passing near-deadline observation separately from the existing Bun-cache cleanup race in pm-swarm-packed-cleanup."
+description: "An earlier isolated-home npm release gate passed, with its packed Git npm/Bun consumer test taking 599323 ms against the existing 600000 ms test deadline. A later local review-round run exited 1 after the packed Git test timed out; its source suite passed and packed acceptance was 2/3 plus one timeout cancellation. CI Node 22 and Node 26 pass the same acceptance and full Bun gate. Profile process startup and resource isolation under host contention before considering a budget change. Preserve all command assertions and coverage thresholds. Track these host-contention observations separately from the existing Bun-cache cleanup race in pm-swarm-packed-cleanup."
 type: Chore
 status: open
 priority: 3
 tags: []
 created_at: "2026-10-21T16:33:08.327Z"
-updated_at: "2026-10-21T18:10:39.338Z"
+updated_at: "2026-10-21T21:21:01.375Z"
 author: codex-agent
 parent: pm-swarm-y972
-comments[1]{created_at,author,text}:
+comments[3]{created_at,author,text}:
   "2026-10-21T18:10:39.337Z",codex-agent,"Review-round receipt: the isolated-home local npm release run at application snapshot 1b35d9e passes 179/179 source tests and all four 100 percent coverage dimensions, then its Git packed npm/npx/native Bun/bunx case hits the unchanged 600000 ms test deadline (676497 ms total case duration). Packed acceptance is 2/3 plus one timeout cancellation; non-Git packed passes in 173239 ms. Both Node 22 and Node 26 CI on a7a6ff0 pass the same Git case and all 3/3 packed tests; full Bun release also passes 179/179 plus 3/3. Package shasums match d4bd106a8f49155a1593413b09832765a2112bc6. Preserve assertions and deadlines; this is additional evidence for the existing host-contention investigation, not a production dependency failure or new cleanup error."
+  "2026-10-21T21:16:05.056Z",codex-agent,"PRRT_kwDOVLY-P86u9G2Q is valid: description now distinguishes the earlier 599323 ms passing run from the later review-round exit 1 with packed Git timeout. Existing detailed comments, CI evidence, thresholds, deadlines and separate cleanup follow-up remain intact. Regression will require both chronological statements."
+  "2026-10-21T21:20:58.087Z",codex-agent,"Description regression passes in the 8/8 review suite. Restoring only the previous description in an isolated source copy makes node --test --test-name-pattern=\"^latency summary\" test/review-r6.test.ts fail 0/1 by assertion, exit 1, zero cancellations. This review corrects chronology only; latency profiling remains open."
 files[1]{path,scope}:
   test/install.acceptance.ts,project
 docs[1]{path,scope}:

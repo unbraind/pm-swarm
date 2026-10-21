@@ -50,6 +50,6 @@ export async function linkFromBranch(f: Awaited<ReturnType<typeof fixture>>, id:
 export function swarmCli(f: Awaited<ReturnType<typeof fixture>>, args: string[]) {
   const command = join(import.meta.dirname, '../node_modules/.bin/pm');
   return spawnSync(process.execPath, [command, 'swarm', ...args, '--json'], {
-    cwd: f.repo, encoding: 'utf8', env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }),
+    cwd: f.repo, encoding: 'utf8', env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }), timeout: 300000,
   });
 }

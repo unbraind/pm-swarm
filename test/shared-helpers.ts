@@ -26,9 +26,9 @@ export async function sharedFixture(t: TestContext) {
   const env = gitEnvironment({ ...process.env, HOME: repo, PATH: bin, PM_PATH: pmRoot, PM_AUTHOR: 'shared-test', PM_GLOBAL_PATH: join(repo, '.pm-cli'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });
   const host = join(import.meta.dirname, '../node_modules/.bin/pm');
   /** Invoke real CLI parsing and rendering, with no Git executable available. */
-  const cli = (...args: string[]) => spawnSync(process.execPath, [host, ...args], { cwd: repo, env, encoding: 'utf8' });
+  const cli = (...args: string[]) => spawnSync(process.execPath, [host, ...args], { cwd: repo, env, encoding: 'utf8', timeout: 300000 });
   /** Require a successful real command and decode its JSON response. */
-  const run = (...args: string[]) => { const result = cli(...args, '--json'); assert.equal(result.status, 0, result.stdout + result.stderr); return JSON.parse(result.stdout) as Record<string, unknown>; };
+  const run = (...args: string[]) => { const result = cli(...args, '--json'); assert.equal(result.status, 0, result.stdout + result.stderr + (result.error?.message ?? '')); return JSON.parse(result.stdout) as Record<string, unknown>; };
   /** Create ranked real tasks with declared paths through the SDK. */
   const item = async (files: string[] = [], priority = 2, id?: string) => (await client.create({ type: 'Task', title: 'Shared work', id, priority, file: files.map(path => `path=${path}`) })).item.id;
   const shared = new SharedTracker(new Swarm(repo, pmRoot, client, 'shared-test'));

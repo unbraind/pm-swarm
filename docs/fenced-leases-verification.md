@@ -4,7 +4,7 @@ Tracked in [pm-swarm-shared-tracker](https://github.com/unbraind/pm-swarm/blob/m
 
 Selection, shared sync, close, handoff and reclaim serialize through an atomic process pin in the tracker's ignored runtime directory. Immutable requests enter an arrival-ordered queue; staged records are excluded and dead tickets are recovered. Only its head attempts to publish a process pin with a hard link; fifty contenders do not cycle through SDK lock creation on the admission path. The renewable operation record has a 30-second expiry and a five-second renewal interval. The live pin spans awaited SDK mutations. An expired living operation cannot be replaced while it is inside a write; a resumed stale operation refuses its next write. Killed processes are recovered under a separate SDK recovery lock after checking the exact pin generation. Linux start identity detects PID reuse; other platforms preserve ambiguous live pins conservatively. The local filesystem must support atomic hard links and rename. Hosted and cross-host filesystems are outside this acceptance proof.
 
-Shared claims atomically persist assignee, decimal fencing token and claim timestamp. Shared writers verify principal and token under the same pin, before dispatching SDK mutations. Handoff and reclaim update ownership, generation, receiver packet and comment in one item mutation. The receiver's next operation returns its pending packet before selecting new work. A fresh transfer grants a heartbeat interval even when its recipient's old runtime heartbeat is stale. Reclaim returns stale nonterminal items to the configured open status, or assigns them to a specified receiver. Close finishes and releases a fenced claim in one mutation. Core pm writers and optional Git lane ownership retain their SDK contracts and do not consume shared fencing tokens.
+Shared claims atomically persist assignee, decimal fencing token and claim timestamp. Shared writers verify principal and token under the same pin, before dispatching SDK mutations. Handoff and reclaim update ownership, generation, receiver packet and comment in one item mutation. The receiver's next operation returns its pending packet before selecting new work. A fresh transfer grants a heartbeat interval even when its recipient's old runtime heartbeat is stale. Reclaim returns stale nonterminal items to the configured open status, or assigns them to a specified receiver. Close finishes and releases a fenced claim in one mutation. Git sync also validates ownership and any persisted swarm token under the tracker pin; other Git lane ownership and core pm writers retain their SDK contracts.
 
 Only typed pre-write SDK `lock_conflict` refusals are retried, with exponential jitter whose base delay caps at one second and a five-minute total budget. Other failures propagate. Exhausted contention is an explicit failure. An initial fifty-worker experiment using an SDK admission lock stalled under cleanup-gate contention; that attempt failed and is not counted as acceptance. The final process-pin design removes that hot path.
 
@@ -198,3 +198,30 @@ The PM-selected focused suite also passes 5/5, zero failures/skips/cancellations
 Local strict health with the ignored managed `pm-github` installation enabled reports host-version skew: that installation was built with 2026.10.21 while the package pins 2026.10.17. Core strict health with extensions disabled and required merge drivers passes, including integrity and history drift, with six existing stale-item advisories. Both clean CI matrices pass strict health with extensions enabled. The local managed installation, dependency pins and telemetry settings remain untouched. No new PM CLI/SDK defect is observed.
 
 The final handoff adds only PM evidence, claim release and this verification note. Package source and tarball inputs remain identical to `1ec0e7c`; the final head is independently checked by CI. The shared-tracker feature remains in progress and the cleanup follow-up remains open, with both claims released. Review threads remain untouched. Prior scale measurements retain their historical source-head provenance; no new local scale or full release workload is run under the host-load constraint.
+
+
+## PR 12 review round 6
+
+All three unresolved findings from the CodeRabbit review submitted at 2026-10-21T21:11:06Z are valid. The complete thread/comment read has no pagination remaining; the review body has no additional Outside diff range findings. The subprocess timeout nitpick is included.
+
+| Thread | Correction |
+| --- | --- |
+| PRRT_kwDOVLY-P86u9G2Q | The latency item's description distinguishes the earlier 599323 ms passing run from the later local exit 1 after the packed Git timeout. Existing CI receipts, assertions, deadlines and the separate cleanup follow-up remain intact. |
+| PRRT_kwDOVLY-P86u9G2X | Git sync discovers lanes, reads authoritative ownership and linked files, validates the persisted token, and dispatches SDK writes under one tracker lease. Fenced mutations require a token; explicit stale tokens also fail on no-op applies. The real CLI returns typed exit 2. |
+| PRRT_kwDOVLY-P86u9G2b | The shared synchronous CLI helper has a 300000 ms process timeout and includes spawn errors in its assertion diagnostic. The same timeout was added to the Git CLI helper. |
+
+Same-class review additionally covers terminal Git sync writes, fresh linked-footprint deduplication, expired operation refusal and Git CLI asynchronous error conversion for sync. Other Git verbs' pre-existing asynchronous error conversion is tracked separately in [pm-swarm-git-errors](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-git-errors.toon). No SDK responses are mocked; subprocess tests run a real stalled child with only the launch boundary's timeout scaled to 25 ms.
+
+`node --test test/review-r6.test.ts` passes **8/8** through the pinned PM runner, with zero failures, skips or cancellations. The targeted compatibility command `node --test --test-name-pattern="sync protects foreign|Git sync|shared planning retains" test/shared-tracker.test.ts` passes **6/6**, with zero failures, skips or cancellations. `npm run typecheck` and `npm run lint` pass. No local host-load timeout occurred this round. Full release gates run in CI under the task's local CPU restriction; no local full-gate or scale rerun is claimed. Dist is ignored and rebuilt by CI.
+
+Every proof uses an isolated source copy, keeps the final tests, exits 1 by assertion and has zero cancellations. Commands below are `node --test --test-name-pattern="PATTERN" test/review-r6.test.ts`:
+
+| Reverted behavior | PATTERN | Result |
+| --- | --- | --- |
+| Only `Swarm.sync` from 177b7b4 | `Git sync` | 0/5; stale/missing tokens, fresh foreign/unassigned owner, missing pin, expired write |
+| Only `sharedFixture` timeout/diagnostic | `^shared CLI helper` | 0/1; missing process timeout |
+| Only `swarmCli` timeout | `^Git CLI helper` | 0/1; missing process timeout |
+| Only the previous latency description | `^latency summary` | 0/1; missing chronology |
+| Only the sync await in `runCommand` | `^Git sync fences` | 0/1; untyped CLI exit 1 instead of 2 |
+
+The detailed proof and pass receipts are on pm-swarm-shared-tracker. Dependencies, source inventory, exclusions and all release thresholds remain unchanged. No thread was replied to or resolved.
