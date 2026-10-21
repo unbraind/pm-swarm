@@ -225,3 +225,16 @@ Every proof uses an isolated source copy, keeps the final tests, exits 1 by asse
 | Only the sync await in `runCommand` | `^Git sync fences` | 0/1; untyped CLI exit 1 instead of 2 |
 
 The detailed proof and pass receipts are on pm-swarm-shared-tracker. Dependencies, source inventory, exclusions and all release thresholds remain unchanged. No thread was replied to or resolved.
+
+
+The application/test head **4d6a708** is fully accepted by [CI run 39678612674](https://github.com/unbraind/pm-swarm/actions/runs/39678612674), without retry:
+
+| Release execution | Source tests | Packed acceptance | Coverage |
+| --- | ---: | ---: | --- |
+| Node 22 npm release steps | 192/192 | 3/3 | 100/100/100/100 |
+| Node 26 npm release steps | 192/192 | 3/3 | 100/100/100/100 |
+| Full `bun run release:check` | 192/192 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. All 25 authored source files are measured; 74 declarations are documented. The unchanged duplication gate reports 0/4996 lines across 48 sources, zero clones, and production audit reports zero vulnerabilities. Strict clean-clone tracker health, identity/privacy, typecheck, lint, build, package contents, changelog and release-publish attestation pass. Fresh main remains an ancestor. The initial 7364d52 CI attempt failed on one duplicated new-test setup block; factoring only that setup into a helper corrected it, without threshold or assertion changes. The final PM-linked 8/8 regression run took 8339 ms including runner overhead.
+
+The handoff commit adds only PM receipts, releases the claim without closing the item, and records this verification. Its full CI is verified separately before handoff. The latency profiling, packed cleanup and other-Git-command error conversion follow-ups remain open. No new PM CLI/SDK bug was observed.

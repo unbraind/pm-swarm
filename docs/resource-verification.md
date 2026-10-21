@@ -131,3 +131,50 @@ as a documentation-only change. Final-head CI is linked in the PR. Existing
 history records remain unchanged byte prefixes. #12's branch is never pushed.
 The PR remains ready for review with base `main`, explicitly dependent on #12.
 No PR merge or release is performed. No new PM CLI/SDK defect was identified.
+
+## Latest prerequisite integration
+
+Combined application head `ecda51c` includes #12 at
+`4d6a708715ec38700712df88c224f6b8fb73437f`. The resource SDK and model are
+unchanged; the upstream Git-sync fencing and eight new review regressions are
+retained. Focused resource/expiry selection passes 6/6, and the complete
+PM-linked `node --test test/review-r6.test.ts` passes 8/8 in 6,428 ms. Typecheck,
+lint, docstrings and zero duplication pass again.
+
+`node --test test/resource-corpus.acceptance.ts` passes again on this combined
+source, 1/1 with zero failures/skips/cancellations. The same public source head,
+146 items, 300 read-only baseline files and 3,689,055 baseline bytes are checked.
+There are again seven successful resource mutations, one busy refusal and one
+stale refusal, final generation 4, 89-byte JSON, and zero changed baseline
+hashes. The measured coordination/read phase is 3,641 ms, the test case is
+3,908 ms, and total runner time is 4,712 ms. These timings are a separate
+loaded-host observation, not a performance target or replacement for the
+initial receipt's measured duration.
+
+## Combined-source full gates and final handoff
+
+Combined application head `ecda51c837a0db249d0f9852c0d18fbdd374d9f8` passes
+[CI run 39679043493](https://github.com/unbraind/pm-swarm/actions/runs/39679043493).
+The increased count includes #12's eight review-round regressions.
+
+| Execution | Source tests | Packed acceptance | Statements / branches / functions / lines |
+| --- | --- | --- | --- |
+| Node 22 npm release steps | 199/199 | 3/3 | 100 / 100 / 100 / 100 percent |
+| Node 26 npm release steps | 199/199 | 3/3 | 100 / 100 / 100 / 100 percent |
+| Complete `bun run release:check`, Node 26 | 199/199 | 3/3 | 100 / 100 / 100 / 100 percent |
+
+All suites have zero failures, skips and cancellations. All 27 authored files
+remain measured at unchanged thresholds. Every CI gate passes, including strict
+tracker health, identity/privacy, typecheck, lint, zero duplication, 81 documented
+declarations, production audit (zero vulnerabilities), package contents,
+changelog and publish attestation. Every package dry run has shasum
+`9ea1994a4c840ee46383a662a8a9b4d0a1356aef`.
+
+The final required fetch also brings #12's `2fadac3`, which changes only its
+verification documentation and append-only tracker evidence/claim release. This
+merges cleanly. Published package inputs remain byte-identical to the passing
+combined application head. The final commit adds those prerequisite receipts,
+this verification note and append-only resource PM results, and releases our
+feature claim while keeping it in progress. Final-head CI is linked in the PR.
+No PR is merged and no release is made. Hosted backend acceptance and external
+sink fencing retain their explicit boundaries above.
