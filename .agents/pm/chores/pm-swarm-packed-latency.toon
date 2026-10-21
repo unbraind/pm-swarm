@@ -1,0 +1,16 @@
+id: pm-swarm-packed-latency
+title: Profile packed acceptance latency under host contention
+description: "The final isolated-home npm release gate passes, with its packed Git npm/Bun consumer test taking 599323 ms against the existing 600000 ms test deadline. CI Node 22 and Node 26 pass the same acceptance and full Bun gate. Profile process startup and resource isolation under host contention before considering a budget change. Preserve all command assertions and coverage thresholds. Track this passing near-deadline observation separately from the existing Bun-cache cleanup race in pm-swarm-packed-cleanup."
+type: Chore
+status: open
+priority: 3
+tags: []
+created_at: "2026-10-21T16:33:08.327Z"
+updated_at: "2026-10-21T16:33:18.057Z"
+author: codex-agent
+parent: pm-swarm-y972
+files[1]{path,scope}:
+  test/install.acceptance.ts,project
+docs[1]{path,scope}:
+  docs/fenced-leases-verification.md,project
+body: ""
