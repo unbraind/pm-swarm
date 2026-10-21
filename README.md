@@ -26,11 +26,14 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
 | close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim in one mutation |
+| resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
 | reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
 
 ## Without git
+
+Resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
 
 The primary agent loop is `next` → heartbeat while working → `sync --files --token` → `close --token`. Run `pm init` in a plain directory and install the extension there. Mode is detected once per invocation; non-Git workspaces return `mode: shared-tracker`. `settings` works without repository detection. The tracker commands do not start Git in this mode, including when Git is absent from PATH.
 
@@ -48,13 +51,68 @@ pm swarm reap --agent worker --dry-run
 pm swarm reap --agent worker
 ```
 
-Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm. Assigned-only items also block overlapping selection. `start` records fenced ownership and the linked footprint through the SDK, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
+Shared lanes are all non-resource items with a nonblank assignee, including items with SDK claims made inside or outside swarm. Assigned-only items also block overlapping selection. `start` records fenced ownership and the linked footprint through the SDK, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
 
 Each shared claim persists a monotonically increasing decimal `swarm_token` and claim timestamp atomically with its assignee. `next` and `start` return `token`; keep that exact string and pass `--token` to shared `sync --apply`, `handoff` and `close`. A stale or missing token is refused with typed `StaleFenceError` / CLI code `swarm_stale_fence` before changing item data. Reusing an author ID after a takeover does not make its old token valid. Embedded `SharedTracker` instances remember the tokens they issue; separate CLI invocations require the explicit token. Legacy claims without a swarm token retain ordinary SDK ownership checks. Plan excludes candidates overlapping active assigned items and places unknown footprints in solitary waves; unknown work is deferred when active lanes prevent a safe planning recommendation. `next` retains its explicit unknown-footprint fallback. Claims made by tools outside swarm do not participate in its multi-item footprint lease; recheck status before editing.
 
 `status` lists nonterminal assigned items with their agent, linked files, claim timestamp and age in seconds. Assignments without valid claim provenance have null age. It shows declared overlaps, including unknown footprints, and a one-line note explaining that Git ahead/behind and merge predictions are unavailable. Watch adds `overlap_detected`, `overlap_changed` and `overlap_resolved` events. Age advancing alone emits no change.
 
 `sync` requires `--files a,b` without Git. Paths must be relative to the project; `--apply` links them through the SDK and `--dry-run` always previews. `reap` releases terminal claims belonging to the invoking principal; it reports foreign terminal claims with guidance to use their `--agent` principal. Active claims are preserved. `land` exits 2 and explains that it merges Git branches; shared-tracker work already lives on the shared tracker. The dedicated `npm run test:scale` proof installs the built package into one non-Git tracker and runs 50 real process agents through next/heartbeat/sync/close loops, kills 13 of 50 mid-run, reclaims their items and checks every write plus full strict health. Git is absent from PATH. See [fenced lease verification](docs/fenced-leases-verification.md) for measured timings. Hosted Postgres/MCP coordination is not certified by that local-process test.
+
+## Exclusive resources
+
+Use one canonical tracker item per physical resource: a test database, port,
+dataset, test environment or deployment slot. Provision it once with the
+`swarm-resource` tag and distribute its ID to every worker. Different IDs are
+different resources even if their titles match. Resource items are excluded from
+work selection, item start/sync/close/handoff and stale-agent reclaim. Ordinary
+work claims and resource reservations remain independent; acquire the resource
+before using it and release it in cleanup. Acquisition is exclusive even for the
+same principal; use renew to extend a reservation you already hold.
+
+```sh
+pm create --type Task --id test-db --title "Integration test database" --tag swarm-resource
+# Use the actual resource ID returned by create, including its project prefix.
+pm swarm resource project-test-db --action reserve --agent worker --ttl 300 --json
+# Retain the returned token string; this example assumes generation 1.
+pm swarm resource project-test-db --action renew --agent worker --token 1 --ttl 600
+pm swarm resource project-test-db --action publish --agent worker --token 1 --note "Integration checks passed"
+pm swarm resource project-test-db --action release --agent worker --token 1
+pm swarm resource project-test-db
+```
+
+TTL defaults to 300 seconds and accepts integers from 1 through 86400. Renew
+before expiry; an agent heartbeat does not extend a resource reservation. Expired
+owners cannot renew, release or publish. A successor reserve increments the
+durable decimal `swarm_token`; release also increments it, preventing same-author
+ABA. No background reaper is required. Retain resource items and their append-only
+histories rather than deleting/recreating them, which would reset their identity.
+
+Every command returns only `id`, `resource`, `token`, `owner`, `expires_at` and
+`held`, in native TOON or JSON. Status preserves the recorded expired owner while
+reporting `held: false`. Publication appends a note of at most 4096 characters in
+one atomic tracker update; it retains the reservation until release or expiry.
+`ResourceRefusal` exposes `code` and `remedy`; CLI exit 2 preserves the code and
+includes the remedy in its diagnostic. `resource_busy` means wait or ask the owner
+to release; `resource_stale_fence` means discard the token/result, reserve and
+recompute; `resource_invalid` means inspect the tagged item or fix input;
+`resource_backend_refused` means configure a backend with shared fencing.
+
+The built-in `trackerResourceBackend(engine)` reuses #12's local tracker operation
+lease, holding its live writer pin through SDK commit and writing assignee,
+generation, expiry and publication evidence together. It conservatively refuses
+extensions declaring services (or missing/empty capability declarations), since their
+storage ownership cannot be established by this adapter. It never switches to
+local coordination after a provider refusal. The generic `ResourceBackend`
+contract lets a hosted provider supply tracker-wide serialization and atomic
+writes without changing the resource model; a provider must implement its lease
+and commit guarantees explicitly. Hosted Postgres/MCP providers are not certified
+by the filesystem adapter's tests. Direct core writes bypass the swarm protocol;
+all cooperating agents must use this resource API. Tokens guard publication to
+the tracker, not arbitrary external database/deployment writes: those sinks must
+also validate fencing if they allow delayed writes after resource expiry.
+
+For the typed SDK example, see [resource reservations](docs/resource-reservations.md).
 
 ## Heartbeats, takeover and handoff
 

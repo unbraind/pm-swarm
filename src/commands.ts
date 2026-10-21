@@ -10,6 +10,8 @@ import { retryLock, StaleFenceError } from './lease.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
 import type { SwarmSettings } from './types.ts';
+import { ResourceReservations, ResourceRefusal } from './resources.ts';
+import { trackerResourceBackend } from './resource-tracker.ts';
 
 /** Read a scalar flag without accepting repeated or non-text values. */
 function textOption(value: unknown): string | undefined {
@@ -30,14 +32,26 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
   try {
     if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
     const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-    const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close'].includes(command) ? undefined : repositoryRoot(workspace);
+    const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource'].includes(command) ? undefined : repositoryRoot(workspace);
     const client = ctx.sdk.client;
     const opts = overrides(ctx.options);
     const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
     const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
     const id = ctx.args[0];
-    if (['start', 'sync', 'handoff', 'close'].includes(command) && id === undefined) throw new Error('An item id is required');
+    if (['start', 'sync', 'handoff', 'close', 'resource'].includes(command) && id === undefined) throw new Error('An item id is required');
     switch (command) {
+      case 'resource': {
+        const resources = new ResourceReservations(trackerResourceBackend((swarm as SharedTracker).engine), author);
+        const action = textOption(ctx.options.action) ?? 'status'; const token = textOption(ctx.options.token) ?? '';
+        switch (action) {
+          case 'status': return { ...await resources.status(id) };
+          case 'reserve': return { ...await resources.reserve(id, ctx.options.ttl === undefined ? undefined : Number(textOption(ctx.options.ttl))) };
+          case 'renew': return { ...await resources.renew(id, token, ctx.options.ttl === undefined ? undefined : Number(textOption(ctx.options.ttl))) };
+          case 'release': return { ...await resources.release(id, token) };
+          case 'publish': return { ...await resources.publish(id, token, textOption(ctx.options.note) ?? '') };
+          default: throw new ResourceRefusal('resource_invalid', 'Use --action status, reserve, renew, release or publish.');
+        }
+      }
       case 'plan': {
         const result = await swarm.plan(textOption(ctx.options.parent), opts.lane_limit);
         if (ctx.options.full === true || ctx.global.json === true) return result;
@@ -86,7 +100,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
       default: throw new Error('Unknown swarm command');
     }
   } catch (error) {
-    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
+    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof ResourceRefusal ? { context: { code: error.code, required: error.remedy } } : error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
   }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
@@ -95,8 +109,9 @@ export function register(api: ExtensionApi): void {
     commands: ['swarm status'],
     resultDiscriminator: result => typeof result === 'object' && result !== null && 'swarm_watch_complete' in result && result.swarm_watch_complete === true,
   });
-  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at'].map(name => ({ name, type: 'string', optional: true })));
   const definitions = {
+    resource: { description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
     next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
     start: { description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'strict'], id: true },

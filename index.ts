@@ -4,6 +4,12 @@ import { register } from './src/commands.ts';
 export { Swarm } from './src/swarm.ts';
 /** Expose claim coordination for trackers without Git worktree lanes. */
 export { SharedTracker } from './src/shared-tracker.ts';
+/** Expose backend-neutral exclusive resource coordination and typed remedies. */
+export { ResourceReservations, ResourceRefusal, RESOURCE_TAG } from './src/resources.ts';
+/** Expose the adapter reusing the existing shared-tracker operation lease. */
+export { trackerResourceBackend } from './src/resource-tracker.ts';
+/** Expose portable backend and compact resource receipt contracts. */
+export type { ResourceBackend, ResourceRecord, ResourceChange, ResourceReceipt, ResourceRefusalCode } from './src/resources.ts';
 /** Expose typed stale-token refusals for embedded workers. */
 export { StaleFenceError } from './src/lease.ts';
 /** Expose conservative footprint and wave planning primitives. */

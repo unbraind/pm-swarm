@@ -6,6 +6,7 @@ import { Swarm } from './swarm.ts';
 import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
+import { RESOURCE_TAG } from './resources.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -24,7 +25,7 @@ export class SharedTracker {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     const lanes = [];
     for (const item of corpus.items) {
-      if (!item.assignee?.trim()) continue;
+      if (item.tags.includes(RESOURCE_TAG) || !item.assignee?.trim()) continue;
       const terminal = statusIsTerminal(item.status, statuses);
       const claim = withClaims && !terminal ? (await this.engine.client.get(item.id, { fields: 'claim_state' })).claim_state : undefined;
       lanes.push({ id: item.id, agent: item.assignee, files: itemFootprint(item), terminal, claimed_at: typeof item.swarm_claimed_at === 'string' ? item.swarm_claimed_at : claim?.last_claim?.ts ?? null });
@@ -49,6 +50,7 @@ export class SharedTracker {
   /** Validate terminal status, ownership and declared overlap before claiming. */
   private async claimLane(id: string, strict: boolean, lease: Lease, corpus?: Awaited<ReturnType<Swarm['corpus']>>) {
     const view = await this.engine.client.get(id, { depth: 'full' }); const item = view.item;
+    if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot start a terminal item');
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.engine.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
@@ -104,6 +106,7 @@ export class SharedTracker {
     /** Preserve preview and legacy no-op behavior while fencing every actual mutation. */
     const evaluate = async (lease?: Lease) => {
       const item = (await this.engine.client.get(id, { depth: 'full' })).item;
+      if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for sync.');
       if (apply && token !== undefined) this.assertFence(item, token);
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       if (!String(item.assignee ?? '').trim() || statusIsTerminal(String(item.status), statuses)) throw new Error('No active lane for item');
@@ -143,6 +146,7 @@ export class SharedTracker {
 
   /** Refuse stale principal or generation against an already-read item. */
   private assertFence(item: Record<string, unknown>, token?: string): void {
+    if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; item handoff, heartbeat and close cannot change reservations.');
     const id = String(item.id);
     if (item.assignee !== this.engine.author) throw new StaleFenceError(`${id}: Item claimed by ${String(item.assignee)}`);
     if (item.swarm_token !== undefined && (token ?? this.tokens.get(id)) !== item.swarm_token) throw new StaleFenceError(id);
@@ -205,7 +209,7 @@ export class SharedTracker {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const recovered = []; const refused: { id: string; reason: string }[] = [];
       for (const row of (await this.engine.corpus()).items) {
-        if (!row.assignee?.trim() || statusIsTerminal(row.status, statuses)) continue;
+        if (row.tags.includes(RESOURCE_TAG) || !row.assignee?.trim() || statusIsTerminal(row.status, statuses)) continue;
         const recorded = typeof row.swarm_claimed_at === 'string' ? row.swarm_claimed_at : row.updated_at;
         const observed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         const times = [recorded, observed].map(value => value === undefined ? NaN : Date.parse(value)).filter(Number.isFinite);
