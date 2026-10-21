@@ -6,16 +6,18 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-21T21:01:06.878Z"
-updated_at: "2026-10-21T21:13:52.131Z"
+updated_at: "2026-10-21T21:18:30.991Z"
 assignee: codex-agent
 claim_principal: codex-agent
 author: codex-agent
-comments[5]{created_at,author,text}:
+comments[7]{created_at,author,text}:
   "2026-10-21T21:01:11.602Z",codex-agent,"Overlap recheck: core CLI exposes item claim/release and SDK locks/workspace transactions, not named non-file resource reservations. PR #12 owns shared operation lease correctness and fenced item handoff. pm-rl process.ts reserveProcessJob reserves trainer budget allowances per job, not exclusive named environments, ports, datasets or deployment slots. This feature reuses tracker claims and #12 operation leases, adds a resource model and refuses unsupported backend coordination; no worktree lanes are added. Registry reports pm CLI 2026.10.21; tracker writes use the pinned 2026.10.17 host."
   "2026-10-21T21:06:36.873Z",codex-agent,"Design: one explicitly tagged resource item per physical slot, using native assignee plus the existing decimal swarm_token and a durable resource expiry. Reserve, renew, release and bounded publication update through the same operation lease as PR #12 claims. Resource items are excluded from work selection and stale-agent recovery. A typed ResourceBackend owns serialization and atomic publication; its refusal propagates with no fallback. The built-in local tracker adapter refuses service-capable storage configurations before creating a local operation pin. Hosted provider acceptance is not claimed."
   "2026-10-21T21:10:14.329Z",codex-agent,"Public-corpus proof passed: committed public pm-ops tracker at eba7d5262fd75e67afce0caad29dae7dc7dfbaeb; 146 certified items, 300 baseline files, 3689055 bytes made read-only in a non-Git scratch tracker. One new synthetic resource completed 7 successful mutations, 1 busy refusal and 1 stale refusal, ending generation 4. All 300 baseline SHA-256 digests remained unchanged. Compact final JSON was 89 bytes. Measured coordination/read phase: 41224 ms; test case: 42723 ms. Git was absent from PATH for the actual CLI status check. No source tracker or hosted data was changed."
   "2026-10-21T21:11:10.154Z",codex-agent,"Behavioral revert proofs: independent disposable source copies retained the real tracker tests and pinned SDK. Removing only ResourceReservations.reserve exclusivity made node --test --test-name-pattern=\"resources on one non-Git tracker\" test/resources.test.ts fail 0/1 with missing resource_busy rejection. Removing only ResourceReservations.fence ownership/expiry check made node --test --test-name-pattern=\"expired resources admit\" test/resources.test.ts fail 0/1 with missing resource_stale_fence rejection. Removing only trackerResourceBackend supported-provider refusal made node --test --test-name-pattern=\"resource backend refusal propagates\" test/resources.test.ts fail 0/1 with missing resource_backend_refused rejection. Each exit was 1 with zero cancellations; source imports require no dist rebuild. The working implementation was never reverted."
   "2026-10-21T21:13:42.628Z",codex-agent,"Targeted c8 run passed 7/7 tests with zero failures/skips/cancellations; both new resource modules measured 100 percent statements, branches, functions and lines. Exact command: node_modules/.bin/c8 --include=src/resources.ts --include=src/resource-tracker.ts --reporter=text --reporter=json --reports-dir=coverage/resources node --test test/resources.test.ts. Loaded-host total was 189019 ms. Earlier aggregate PM-linked run timed out at the unchanged 120-second limit after four passing cases and is failed evidence. Linked commands are now split by SDK, native CLI and process scenarios without dropping cases or raising deadlines. Typecheck, lint, docstrings, zero duplication and identity checks passed; full npm/Bun gates will run in CI."
+  "2026-10-21T21:17:13.819Z",codex-agent,"PR #15 is ready for review at https://github.com/unbraind/pm-swarm/pull/15, base main, explicitly dependent on #12. Source commit 85fca39 was pushed only to feat/resource-reservations after merging the latest prerequisite branch (already up to date). CI release run: https://github.com/unbraind/pm-swarm/actions/runs/39677319757. Final split PM-linked evidence: SDK selector tracker|expired|validation|backend|records passes 5/5 via pm test --run --only-index 1 --progress (15144 ms); CLI passes 1/1 (35925 ms), process contention passes 1/1 (14674 ms). All passing executions have zero failures/skips/cancellations. The SDK rerun includes the missing/empty capability declaration refusal correction; an earlier SDK attempt failed that new regression before the correction. Result tracking is disabled by existing project policy, so receipts are recorded here. No new PM CLI/SDK bug was identified."
+  "2026-10-21T21:18:30.990Z",codex-agent,"CI attempt 39677319757 on 85fca39 failed one existing documentation regression: the README sentence no longer matched its assigned-item contract assertion. Node 26 reported 190/191 tests passing and 100/100/100/100 coverage across all 27 authored files; failed suite status correctly blocked remaining release steps. Restored the required assigned-item wording and stated the tagged resource exception immediately afterwards. No assertion, source behavior, deadline or threshold was changed. Added the exact focused documentation command to this item."
 files[9]{path,scope}:
   CHANGELOG.md,project
   index.ts,project
@@ -26,10 +28,11 @@ files[9]{path,scope}:
   src/swarm.ts,project
   test/resource-corpus.acceptance.ts,project
   test/resources.test.ts,project
-tests[3]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+tests[4]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
   "node --test --test-name-pattern=\"tracker|expired|validation|backend|records\" test/resources.test.ts",project,codex-agent,"2026-10-21T21:13:24.960Z",local_mutation,feat/resource-reservations
   node --test --test-name-pattern=CLI test/resources.test.ts,project,codex-agent,"2026-10-21T21:13:29.191Z",local_mutation,feat/resource-reservations
   node --test --test-name-pattern=process test/resources.test.ts,project,codex-agent,"2026-10-21T21:13:33.098Z",local_mutation,feat/resource-reservations
+  "node --test --test-name-pattern=\"shared assigned-only lanes\" test/mixed-tracker.test.ts",project,codex-agent,"2026-10-21T21:18:25.604Z",local_mutation,feat/resource-reservations
 docs[3]{path,scope}:
   docs/resource-reservations.md,project
   docs/resource-verification.md,project
