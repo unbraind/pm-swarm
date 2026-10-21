@@ -98,3 +98,5 @@ The corrected focused command, `node --test test/review-r4.test.ts`, passes 13/1
 The lifecycle regressions require each barrier's rejection before the process-exit receipt can win, so a reverted barrier fails by assertion instead of waiting for a test deadline. Full release and scale receipts for this round are recorded after completion below.
 
 All five final mutations exit 1 by assertion, with zero cancellations: reclaim 0/1, status 0/1, unexpected worker exits 0/3, spawn error 0/1, and missing history 0/1. The corrected suite passes 13/13. Earlier lifecycle proof experiments reproduced pending-promise cancellations; the final assertions above replace those deadline-dependent proofs.
+
+A later complete count-loop scan found the same missing-count assertion in the older eight-process acceptance test. It now uses the same checked history verifier, requiring nine histories. The existing disposable-history negative regression and count-assertion revert proof cover that shared verifier. Earlier CI receipts on `1b35d9e` predate this test-only call-site correction; final CI must validate it too. Application source and packed package inputs are unchanged.

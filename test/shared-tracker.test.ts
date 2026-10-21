@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { writeFileSync, readFileSync, readdirSync } from 'node:fs';
+import { writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { test } from 'node:test';
@@ -15,6 +15,7 @@ import { statusChanges, watchStatus } from '../src/watch.ts';
 import { fixture, swarmCli } from './helpers.ts';
 
 import { sharedFixture } from './shared-helpers.ts';
+import { verifyScaleHistories } from './scale-helpers.ts';
 
 test('no-git settings fully previews and applies while preserving other settings', async t => {
   const f = await sharedFixture(t);
@@ -227,10 +228,7 @@ test('real eight-process next contention keeps every claim and history valid wit
   assert.equal(new Set(results.map(row => row.selected)).size, 8);
   assert.deepEqual(results.map(row => row.selected).sort(), ids.sort());
   for (const row of results) { const claim = (await f.client.get(row.selected)).claim_state; assert.equal(claim?.assignee, row.agent); assert.equal(claim?.claimed, true); assert.equal(row.mode, 'shared-tracker'); }
-  let historyFiles = 0;
-  for (const file of readdirSync(join(f.pmRoot, 'history')).filter(file => file.endsWith('.jsonl'))) {
-    historyFiles++; for (const line of readFileSync(join(f.pmRoot, 'history', file), 'utf8').trim().split('\n')) assert.doesNotThrow(() => JSON.parse(line));
-  }
+  const historyFiles = verifyScaleHistories(f.pmRoot, ids.length + 1);
   const health = f.run('--no-extensions', 'health', '--strict-exit'); assert.equal(health.ok, true);
   t.diagnostic(`8 processes, 8 distinct retained claims, ${historyFiles} valid history files, health ok; ${elapsed.toFixed(0)} ms`);
 });
