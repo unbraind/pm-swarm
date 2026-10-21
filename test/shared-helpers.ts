@@ -12,7 +12,7 @@ import { gitEnvironment } from '../src/git-environment.ts';
 /** Create an SDK tracker outside Git, including the actual extension and a Git-free PATH. */
 export async function sharedFixture(t: TestContext) {
   const repo = mkdtempSync(join(tmpdir(), 'swarm-shared-')); const pmRoot = join(repo, '.agents/pm');
-  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  t.after(() => rmSync(repo, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const original = { ...process.env };
   process.env.PM_SOURCE_WORKSPACE_ROOT = repo;
   process.env.GIT_CEILING_DIRECTORIES = dirname(repo);

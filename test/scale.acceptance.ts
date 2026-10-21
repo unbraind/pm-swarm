@@ -23,7 +23,7 @@ test('50 real CLI agents retain every fenced write and reclaim 13 SIGKILL owners
   delete env.NODE_TEST_CONTEXT; delete env.NODE_V8_COVERAGE;
   let verified = false;
   writeFileSync(join(tmpdir(), 'swarm-scale-latest.txt'), root);
-  t.after(() => { if (verified) rmSync(root, { recursive: true, force: true }); });
+  t.after(() => { if (verified) rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }); });
   const phases = new Map<string, string>();
   const progress = setInterval(() => { const counts: Record<string, number> = {}; for (const phase of phases.values()) counts[phase] = (counts[phase] ?? 0) + 1; process.stderr.write(`scale: phases ${JSON.stringify(counts)}\n`); }, 15000);
   t.after(() => clearInterval(progress));
