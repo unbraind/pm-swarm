@@ -100,3 +100,47 @@ The lifecycle regressions require each barrier's rejection before the process-ex
 All five final mutations exit 1 by assertion, with zero cancellations: reclaim 0/1, status 0/1, unexpected worker exits 0/3, spawn error 0/1, and missing history 0/1. The corrected suite passes 13/13. Earlier lifecycle proof experiments reproduced pending-promise cancellations; the final assertions above replace those deadline-dependent proofs.
 
 A later complete count-loop scan found the same missing-count assertion in the older eight-process acceptance test. It now uses the same checked history verifier, requiring nine histories. The existing disposable-history negative regression and count-assertion revert proof cover that shared verifier. Earlier CI receipts on `1b35d9e` predate this test-only call-site correction; final CI must validate it too. Application source and packed package inputs are unchanged.
+
+### Review-round release receipts
+
+Application source and package inputs remain those of `1b35d9e`. The final test-only history-verifier caller is in `a7a6ff0`; [CI run 39647105771](https://github.com/unbraind/pm-swarm/actions/runs/39647105771) passes both Node 22 and Node 26, including the complete `bun run release:check`. Both matrices run 179/179 source tests and 3/3 packed acceptance with zero failures, skips or cancellations. The full Bun command also reports 179/179 and 3/3. All 25 authored source files retain all four unchanged 100 percent coverage thresholds.
+
+| Execution | Source suite | Packed acceptance | Disposition |
+| --- | --- | --- | --- |
+| Local isolated-HOME `npm run release:check`, Node 24.19.0/npm 11.17.0 | 179/179, no failures/skips/cancellations | 2/3 plus one timeout cancellation | Command exits 1; its Git npm/native Bun case hits the unchanged 600000 ms deadline. The identical case passes in both final CI matrices and full Bun release. This is the task's explicit CI-confirmed local-timeout exception, not an uninterrupted local pass. |
+| Final CI Node 22 and Node 26 release steps, `a7a6ff0` | 179/179 each | 3/3 each | Pass |
+| Full `bun run release:check`, final CI Node 26 | 179/179 | 3/3 | Pass |
+
+The local source run loaded tests from `1b35d9e`; its eight-process diagnostic independently reports all nine histories. Final CI validates the added count assertion from `a7a6ff0`. Application source and package inputs do not change between these snapshots. Local coverage totals are statements/lines 1812/1812, functions 112/112 and branches 988/988. Identity/privacy, typecheck, lint, zero duplication, docstrings, production audit, package contents, changelog and publish attestation pass. The production audit reports zero vulnerabilities.
+
+Local source duration is 1155804 ms. The local Git packed case reports 676497 ms including completion and cleanup before its timeout receipt; the non-Git packed case passes in 173239 ms. The complete packed suite takes 855573 ms. No timeout or threshold is relaxed. The existing `pm-swarm-packed-latency` item is enriched with this receipt; no duplicate follow-up is created. Local and both CI matrices' package dry-runs share shasum `d4bd106a8f49155a1593413b09832765a2112bc6`.
+
+The local eight-process proof retains eight distinct claims, nine valid histories and strict fixture health; its claim batch takes 26234 ms. Core tracker strict health passes with six pre-existing stale-item advisories. No new PM CLI/SDK defect is observed. Hosted and cross-host coordination remain outside the local filesystem proof.
+
+### Review-round scale rerun
+
+The final harness at `a7a6ff0` passes through the registered PM runner, `npm run test:scale`: 1/1, exit 0, zero failures, skips or cancellations. It uses the actual built tarball, pinned host and a real non-Git tracker. The corrected process monitor preserves intentional post-readiness SIGKILL while the task-plus-project history count is now enforced.
+
+| Observation | Result |
+| --- | ---: |
+| Initial agents / distinct initial owners with heartbeats | 50 / 50 |
+| SIGKILL owners / recovered tasks | 13 / 13 |
+| Original tasks completed exactly once | 87 / 87 |
+| Valid histories, explicitly asserted | 88 |
+| Double ownership / lost sync and close writes | 0 / 0 |
+| Managed-extension strict health | clean |
+
+| Phase | Milliseconds |
+| --- | ---: |
+| Setup | 50,759 |
+| Initial claims and heartbeats | 215,418 |
+| Survivor loops from contention start | 806,229 |
+| Reclaim | 24,097 |
+| Recovery and final verification from recovery start | 184,271 |
+| Total application proof | 1,041,268 |
+
+The whole node test invocation takes 1,049,671 ms including imports and runner overhead. No scale deadline is changed. This full run complements the negative process-exit and missing-history regressions; progress snapshots are not used as acceptance evidence. The final review refresh still has exactly the original four unresolved threads and one comment each, with no remaining pagination or separate Outside diff range findings.
+
+The scale rerun uses Node 26.12.0/npm 11.20.0; its PM runner takes 1059000 ms including the build. The final PM-linked `node --test test/review-r4.test.ts` repetition passes 13/13, exit 0, zero failures/skips/cancellations, in 58412 ms of source-test time. Its strengthened barrier assertions are included.
+
+The final handoff changes only append-only PM evidence and this verification note. Both original history files remain byte-identical prefixes after the final writes and claim release. The private-path check passes all added tracked lines, generated changelog is current, and strict core tracker health passes with the six existing stale-item advisories. Origin main remains an ancestor. The feature stays in progress with its claim released; the enriched latency follow-up stays open. No review thread is replied to or resolved, no PR is merged and no release is performed.

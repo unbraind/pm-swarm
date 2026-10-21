@@ -6,9 +6,11 @@ status: open
 priority: 3
 tags: []
 created_at: "2026-10-21T16:33:08.327Z"
-updated_at: "2026-10-21T16:33:18.057Z"
+updated_at: "2026-10-21T18:10:39.338Z"
 author: codex-agent
 parent: pm-swarm-y972
+comments[1]{created_at,author,text}:
+  "2026-10-21T18:10:39.337Z",codex-agent,"Review-round receipt: the isolated-home local npm release run at application snapshot 1b35d9e passes 179/179 source tests and all four 100 percent coverage dimensions, then its Git packed npm/npx/native Bun/bunx case hits the unchanged 600000 ms test deadline (676497 ms total case duration). Packed acceptance is 2/3 plus one timeout cancellation; non-Git packed passes in 173239 ms. Both Node 22 and Node 26 CI on a7a6ff0 pass the same Git case and all 3/3 packed tests; full Bun release also passes 179/179 plus 3/3. Package shasums match d4bd106a8f49155a1593413b09832765a2112bc6. Preserve assertions and deadlines; this is additional evidence for the existing host-contention investigation, not a production dependency failure or new cleanup error."
 files[1]{path,scope}:
   test/install.acceptance.ts,project
 docs[1]{path,scope}:
