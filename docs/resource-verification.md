@@ -189,3 +189,17 @@ refusals and release. Resource application functions and dependency pins are
 unchanged. This is an example correction, not a PM CLI/SDK defect. It changes the
 packaged README, so the earlier artifact shasum is retained only as historical
 source-head evidence; corrected-head CI establishes the new package receipt.
+
+The corrected provisioning/package head `8d19bc962af1c9c17f78d7a3b8a47baba375df2d`
+passes [CI run 39681059999](https://github.com/unbraind/pm-swarm/actions/runs/39681059999).
+Node 22 npm, Node 26 npm and the complete Node 26 `bun run release:check` each
+pass 199/199 source tests plus 3/3 packed acceptance, with zero failures, skips
+or cancellations. This includes real Git-free resource provisioning through the
+documented `pm create --tags` invocation. All 27 authored files retain
+100/100/100/100 coverage; every remaining gate passes. The corrected package
+shasum is `5ae8a94438429b5d0eaa2a8a4a639e205c496f38` on all three dry runs.
+
+The final receipt/claim-release commit changes only this note and append-only PM
+evidence; published inputs remain identical to `8d19bc9`. The PM item remains in
+progress, with its claim released. Final-head CI is linked in the PR. No PR merge
+or release is performed.
