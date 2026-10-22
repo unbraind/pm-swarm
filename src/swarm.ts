@@ -13,7 +13,7 @@ import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { settings } from './settings.ts';
-import { retryLock, StaleFenceError, withSwarmLease } from './lease.ts';
+import { StaleFenceError, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 
@@ -59,20 +59,20 @@ export class Swarm {
 
   /** Claim before creating a worktree, and keep its absolute location only in local Git config. */
   async start(id: string, overrides: Partial<SwarmSettings> = {}, strict = false) {
-    return this.exclusive(() => this.startLane(id, overrides, strict));
+    return this.exclusive(lease => this.startLane(id, overrides, strict, lease));
   }
 
   /** Pick and publish under one lease; previews take no lease and perform no mutations. */
   async next(parent?: string, dryRun = false) {
     if (dryRun) return this.nextLane(parent, true);
-    return this.exclusive(() => this.nextLane(parent, false));
+    return this.exclusive(lease => this.nextLane(parent, false, lease));
   }
 
   /** Rank ready work, exclude active overlaps, and explain every skipped candidate. */
-  private async nextLane(parent: string | undefined, dryRun: boolean) {
+  private async nextLane(parent: string | undefined, dryRun: boolean, lease?: Lease) {
     const { candidates } = await this.readyCandidates(parent);
     const { chosen, unknown, reason, warnings, skipped } = selectNext(candidates, await this.activeFootprints());
-    const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown) : undefined;
+    const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown, lease!) : undefined;
     return { ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
   }
 
@@ -88,16 +88,16 @@ export class Swarm {
   }
 
   /** Hold the tracker lease outside the repository lease across Git operations. */
-  private async exclusive<T>(operation: () => Promise<T>): Promise<T> {
+  private async exclusive<T>(operation: (lease: Lease) => Promise<T>): Promise<T> {
     return withSwarmLease(this.pmRoot, this.author, async lease => {
       const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
       const release = await lease.write(() => acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author));
-      try { return await operation(); } finally { await release(); }
+      try { return await operation(lease); } finally { await release(); }
     });
   }
 
   /** Publish a lane under the repository operation lease. */
-  private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean) {
+  private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease) {
     const config = await settings(this.pmRoot, overrides);
     const item = (await this.client.get(id, { depth: 'full' })).item;
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
@@ -109,16 +109,16 @@ export class Swarm {
     const overlap_warnings = footprintOverlaps(itemFootprint(item), (await this.activeFootprints()).filter(lane => lane.id !== id));
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
-    await retryLock(() => this.client.claim(item.id, { author: this.author }));
+    await lease.write(() => this.client.claim(item.id, { author: this.author }));
     let created = false;
     try {
       git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]);
-      await retryLock(() => this.client.update(item.id, { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }));
+      await lease.write(() => this.client.update(item.id, { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }));
     } catch (error) {
       if (created) { git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]); git(this.repo, ['worktree', 'remove', path]); }
       if (branchExists(this.repo, branch)) git(this.repo, ['branch', '-D', branch]);
-      if (view.claim_state?.claimed === false) await retryLock(() => this.client.release(item.id, { author: this.author }));
+      if (view.claim_state?.claimed === false) await lease.write(() => this.client.release(item.id, { author: this.author }));
       throw error;
     }
     return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
@@ -252,10 +252,10 @@ export class Swarm {
   }
 
   /** Reap only terminal merged branches, and release only this caller's stale claims. */
-  async reap(dryRun = false) { return this.exclusive(() => this.reapLanes(dryRun)); }
+  async reap(dryRun = false) { return this.exclusive(lease => this.reapLanes(dryRun, lease)); }
 
   /** Check ancestry and remove registrations under the shared repository lease. */
-  private async reapLanes(dryRun: boolean) {
+  private async reapLanes(dryRun: boolean, lease: Lease) {
     const lanes = await this.lanes(); const config = await settings(this.pmRoot);
     const removed: string[] = []; const released: string[] = [];
     const cleanup: { id: string; action: string }[] = []; const refused: { id: string; reason: string }[] = [];
@@ -280,7 +280,7 @@ export class Swarm {
         if (pathResult.status === 0) git(this.repo, ['config', '--local', '--unset', `swarm.lane.${lane.id}`]);
       }
       removed.push(lane.id);
-      if (lane.agent === this.author) { if (!dryRun) await retryLock(() => this.client.release(lane.id, { author: this.author })); released.push(lane.id); }
+      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => this.client.release(lane.id, { author: this.author })); released.push(lane.id); }
     }
     return { dry_run: dryRun, removed, released, cleanup, refused };
   }

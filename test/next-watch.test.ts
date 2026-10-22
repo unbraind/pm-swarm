@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { once } from 'node:events';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -15,6 +14,7 @@ import { gitEnvironment } from '../src/git-environment.ts';
 import { statusChanges, watchInterval, watchStatus } from '../src/watch.ts';
 import { fixture, swarmCli } from './helpers.ts';
 import { fixtureGit as git, fixtureSnapshot } from './git-helpers.ts';
+import { processExit } from './process-helpers.ts';
 
 
 /** Publish two measured lanes over the same real source file. */
@@ -180,7 +180,7 @@ for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines
   const sender = join(f.root, 'sender');
   repoGit(f.root, ['clone', '--branch', right.branch, f.repo, sender]);
   const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test', PM_SWARM_TEST_POLL_HEARTBEAT: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
-  const exit = once(child, 'exit'); t.after(() => { child.kill('SIGKILL'); });
+  const exit = processExit(child, 'exit'); t.after(() => { child.kill('SIGKILL'); });
   let output = ''; let error = ''; child.stdout.on('data', data => { output += String(data); }); child.stderr.on('data', data => { error += String(data); });
   /** Decode only complete frames so separate pipe chunks cannot race assertions. */
   const records = () => output.split(json ? '\n' : '\n\n').slice(0, -1).filter(part => part.trim() !== '').map(part => (json ? JSON.parse(part) : decodeToon(part)) as { event: string; data: { id?: string } });

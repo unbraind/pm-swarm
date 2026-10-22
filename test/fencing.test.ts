@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
-import { once } from 'node:events';
 import fs, { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -13,6 +12,7 @@ import { heartbeatPath, processStart, readRuntime, retryLock, StaleFenceError, w
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { monitorLeaseHolder } from './process-helpers.ts';
 
 /** Bind a separate real worker to the same physical tracker. */
 function worker(f: Awaited<ReturnType<typeof sharedFixture>>, author: string) {
@@ -132,11 +132,11 @@ test('new registered commands parse tokens and report actionable native errors w
 });
 
 
-test('a real killed lease holder is recovered, and Linux PID reuse does not retain a stale pin', async t => {
+test('a real killed lease holder is recovered, and Linux PID reuse does not retain a stale pin', { timeout: 30000 }, async t => {
   const f = await sharedFixture(t);
   const child = spawn(process.execPath, ['--input-type=module', '-e', `import { withSwarmLease } from ${JSON.stringify(new URL('../src/lease.ts', import.meta.url).href)}; await withSwarmLease(process.env.PM_PATH, 'killed-worker', async () => { process.stdout.write('ready'); await new Promise(() => {}); });`], { cwd: f.repo, env: f.env });
-  const exit = once(child, 'close'); t.after(() => { if (child.signalCode === null) child.kill('SIGKILL'); });
-  await once(child.stdout, 'data'); child.kill('SIGKILL'); const [code, signal] = await exit;
+  const { ready, exit } = monitorLeaseHolder(child); t.after(() => { if (child.signalCode === null) child.kill('SIGKILL'); });
+  await ready; child.kill('SIGKILL'); const [code, signal] = await exit;
   assert.equal(code, null); assert.equal(signal, 'SIGKILL');
   await withSwarmLease(f.pmRoot, 'rescuer', async lease => { lease.assert(); });
   assert.equal(existsSync(join(f.pmRoot, 'runtime/swarm/operation-pin.json')), false);

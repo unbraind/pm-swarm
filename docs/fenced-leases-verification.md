@@ -311,3 +311,44 @@ Both full release gates pass on the final source/tests/package inputs with Node 
 Every suite has zero failures, skips and cancellations. All 25 authored source files are reported, all 75 declarations are documented, duplication is 0/5235 lines across 50 sources with zero clones, and production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Isolated strict tracker health passes. No local timeout or retry occurred in this round; the prior round's interrupted gate remains separate historical evidence. Dist is ignored and rebuilt by both gates.
 
 The source commit includes the code, regression, README clarification, these verification receipts and append-only PM history. The claim is released without closing the item; the complete pushed-head CI is checked before handoff. Existing packed latency, cleanup and other-Git-command error follow-ups remain open. No new PM CLI/SDK bug was observed. No review reply, resolution, mention, PR merge or package release is performed.
+
+## Review round on 947ae81
+
+The worktree began clean with no unpushed commits. The remote head was pulled; main was already an ancestor. All unresolved threads and all their comments were fetched with complete pagination. The latest substantive review (2026-10-22T14:00:27Z) contains two actionable findings and no Outside diff range findings. Earlier accepted fixes and proofs were retained.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vOLPC | Valid. `exclusive` now passes its actual operation lease to Git start/next/reap. All lane claim, publication update, rollback release and reap release attempts use `lease.write`, checking time and generation on every SDK retry. |
+| PRRT_kwDOVLY-P86vOLPN | Valid. The killed-holder test races stdout readiness against process termination, retains early rejections immediately and has a 30-second timeout. Readiness listeners are removed on success and failure. |
+
+Whole-PR self-review covered every SDK mutation in both engines and all child-process barriers. Shared-mode writes and Git sync already use `lease.write`; the landing SDK call only lists tests, while acknowledgements are confined to the disposable simulation tracker. The live process pin still protects synchronous Git cleanup from concurrent swarm operations. A claim made while valid is deliberately retained if the lease expires before publication or rollback: stale operations cannot even release their own earlier claim. Git rollback removes the local lane, and a fresh operation can inspect/recover the retained ownership. Reap similarly preserves any completed local cleanup while refusing a stale tracker release.
+
+The related deferred-exit rejection pattern also occurred in the Git watch, non-Git watch and packed watch tests. They now share `processExit`, which immediately handles a termination promise without swallowing the error from its later consumer. Their existing bounded output waits and deadlines are unchanged. Other process waits immediately await termination or already retain their barrier rejections.
+
+`node --test --test-reporter=tap test/review-r9.test.ts` passes 11/11. Five real Git/SDK cases expire the durable operation record before start/next claims, after real synchronous lane creation, during failed creation rollback, and after reap cleanup. They check unchanged history or exactly one valid prior claim, branch cleanup, retained ownership and preservation of unrelated files. Six actual process cases cover early failure, early clean exit, spawn failure, successful readiness and kill, plus delayed consumption of both close and exit errors. The early-exit regressions fail by assertion if readiness remains pending; they cannot hang waiting for the broken behavior. The real killed-holder recovery test also passes 1/1 in its non-Git tracker. No SDK responses or subprocess outcomes are substituted.
+
+Independent behavioral revert proofs retain the final tests and pinned SDK in isolated copies; source imports require no dist rebuild. Each proof exits 1, with zero skips or cancellations:
+
+| Only reverted function behavior | Exact regression command | Result |
+| --- | --- | --- |
+| `Swarm.startLane` restored from 947ae81 | `node --test --test-reporter=tap --test-name-pattern="Git (start\|next\|lane)" test/review-r9.test.ts` | 0/4; expired claims, publication and rollback no longer refuse safely |
+| `Swarm.reapLanes` restored from 947ae81 | `node --test --test-reporter=tap --test-name-pattern="Git reap" test/review-r9.test.ts` | 0/1; stale release succeeds and changes history |
+| `monitorLeaseHolder` restored to unguarded stdout readiness | `node --test --test-reporter=tap --test-name-pattern="lease-holder readiness settles on (early\|spawn)" test/review-r9.test.ts` | 0/3; readiness remains pending after child termination |
+| `processExit` restored to unhandled `once` | `node --test --test-reporter=tap --test-name-pattern="deferred (close\|exit) consumers" test/review-r9.test.ts` | 0/2; real spawn errors cause unhandled rejections before delayed consumption |
+
+No proof mutation entered the package worktree. Dependencies, coverage scope and release thresholds are unchanged. Dist is ignored and rebuilt by the release gates.
+
+### Local acceptance
+
+Both unchanged full release gates pass on the final source and test inputs with Node 26, fresh home/global state and isolated Git configuration:
+
+| Exact command | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| `npm run release:check` | 209/209 | 3/3 | 100/100/100/100 |
+| `bun run release:check` | 209/209 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. Neither gate needed a retry or encountered a timeout. Coverage includes all 25 authored source files; all 75 declarations are documented. Duplication is 0/5368 lines across 51 sources, with zero clones. Production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Dist remains ignored and is rebuilt by both gates.
+
+The pinned PM runner passes the focused 11/11 suite (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 5128 ms including runner overhead). Test-result persistence is disabled by project policy, so the receipt is recorded in item comments. Strict isolated `pm health --strict-exit --require-merge-drivers` passes, including integrity and history drift checks. The existing history prefix is byte-identical; only new records are appended.
+
+The final remote/review refresh retains the same head, main ancestry, two unresolved threads, complete comment pagination and latest review; there are no additional or Outside diff range findings. Both findings are fixed; no refusal is needed. No new PM CLI/SDK defect was observed. Existing packed cleanup, packed latency, other-Git-command errors and development-tool advisory follow-ups remain open. The item stays in progress with its claim released for orchestrator verification. The code and PM evidence are committed together; exact pushed-head CI is checked before handoff.
