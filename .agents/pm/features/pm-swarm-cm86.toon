@@ -2,19 +2,22 @@ id: pm-swarm-cm86
 title: Synchronize linked file footprints
 description: ""
 type: Feature
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:39.655Z"
-updated_at: "2026-10-15T20:04:25.230Z"
+updated_at: "2026-10-21T19:42:45.902Z"
+closed_at: "2026-10-21T19:42:42.960Z"
+completed_at: "2026-10-21T19:42:42.960Z"
 author: codex-agent
 estimated_minutes: 15
 acceptance_criteria: Default preview; explicit apply uses SDK files semantics and repository relative paths.
 parent: pm-swarm-07o2
-comments[3]{created_at,author,text}:
+comments[4]{created_at,author,text}:
   "2026-10-15T18:53:33.233Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:11:55.857Z",codex-agent,"Sync compares against the current target merge base, so inherited base files and tracker updates are not linked as agent changes. Reverting only sync to the recorded starting base makes the new real-worktree regression fail with ERR_ASSERTION, exit 1. Exact source bytes restored."
   "2026-10-15T19:51:41.866Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-cm86 --run --progress passed 1 linked command(s), 10 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
+  "2026-10-21T19:42:16.592Z",codex-agent,"Authorized tracker reconciliation, audit 2026-10-21. Owner-authorized takeover of any historical assignment for this verified terminal transition. Reverified current main 1dfceab6c477: merged #2 (265d20b), #10 (1dfceab); source tree exactly matches the audited snapshot. **Synchronize linked file footprints.** [PR #2](https://github.com/unbraind/pm-swarm/pull/2) implements footprint/dependency partitioning; [PR #10](https://github.com/unbraind/pm-swarm/pull/10) exposes explicit --files footprints and conflict-free next selection in shared-tracker mode without Git."
 files[2]{path,scope}:
   src/swarm.ts,project
   test/swarm.test.ts,project
@@ -22,4 +25,5 @@ tests[1]{command,scope,timeout_seconds,pm_context_mode,workspace_context_mode,pr
   "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts",project,600,none,snapshot,codex-agent,"2026-10-15T19:01:08.264Z",local_mutation,feat/swarm
 docs[1]{path,scope}:
   README.md,project
+close_reason: "Reverified current main 1dfceab6c477: merged #2 (265d20b), #10 (1dfceab); source tree exactly matches the audited snapshot. **Synchronize linked file footprints.** [PR #2](https://github.com/unbraind/pm-swarm/pull/2) implements footprint/dependency partitioning; [PR #10](https://github.com/unbraind/pm-swarm/pull/10) exposes explicit --files footprints and conflict-free next selection in shared-tracker mode without Git."
 body: ""
