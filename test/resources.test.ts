@@ -9,6 +9,7 @@ import type { ResourceBackend } from '../index.ts';
 import { Swarm } from '../src/swarm.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { fixture } from './helpers.ts';
+import { heartbeatPath } from '../src/lease.ts';
 
 /** Bind another principal to exactly the same real tracker and operation lease. */
 function resources(f: Awaited<ReturnType<typeof sharedFixture>>, author = 'shared-test') {
@@ -137,7 +138,7 @@ test('concurrent real process agents receive exactly one resource reservation', 
 });
 
 test('resource records never become work claims or stale-agent reclaim candidates', async t => {
-  const f = await sharedFixture(t); const id = await resource(f); const a = resources(f);
+  const f = await sharedFixture(t); const id = await resource(f); const a = resources(f, 'resource-worker');
   assert.equal((await f.shared.next()).selected, null);
   await assert.rejects(f.shared.start(id), /Resource items/);
   await a.reserve(id);
@@ -145,8 +146,12 @@ test('resource records never become work claims or stale-agent reclaim candidate
   await assert.rejects(f.shared.close(id, 'Bypass', '1'), /Resource items/);
   assert.deepEqual((await f.shared.status()).lanes, []);
   await f.client.update(id, { field: ['swarm_claimed_at=2000-01-01T00:00:00.000Z'] });
+  writeFileSync(heartbeatPath(f.pmRoot, 'resource-worker'), JSON.stringify({ heartbeat: '2000-01-01T00:00:00.000Z' }));
+  const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8');
+  assert.deepEqual((await f.shared.reclaim(1, undefined, true)).recovered, [], 'preview excludes stale reserved resources');
   assert.deepEqual((await f.shared.reclaim(1)).recovered, []);
-  assert.equal((await a.status(id)).owner, 'shared-test');
+  assert.equal(readFileSync(history, 'utf8'), before, 'resource history survives stale-agent recovery');
+  assert.equal((await a.status(id)).owner, 'resource-worker');
   const git = await fixture(t); const gitId = await resource({ ...f, client: git.client });
   await assert.rejects(git.swarm.start(gitId), /Resource items/);
   assert.deepEqual((await git.swarm.plan()).lanes, []);

@@ -4,7 +4,7 @@ Tracked in [pm-swarm-shared-tracker](https://github.com/unbraind/pm-swarm/blob/m
 
 Selection, shared sync, close, handoff and reclaim serialize through an atomic process pin in the tracker's ignored runtime directory. Immutable requests enter an arrival-ordered queue; staged records are excluded and dead tickets are recovered. Only its head attempts to publish a process pin with a hard link; fifty contenders do not cycle through SDK lock creation on the admission path. The renewable operation record has a 30-second expiry and a five-second renewal interval. The live pin spans awaited SDK mutations. An expired living operation cannot be replaced while it is inside a write; a resumed stale operation refuses its next write. Killed processes are recovered under a separate SDK recovery lock after checking the exact pin generation. Linux start identity detects PID reuse; other platforms preserve ambiguous live pins conservatively. The local filesystem must support atomic hard links and rename. Hosted and cross-host filesystems are outside this acceptance proof.
 
-Shared claims atomically persist assignee, decimal fencing token and claim timestamp. Shared writers verify principal and token under the same pin, before dispatching SDK mutations. Handoff and reclaim update ownership, generation, receiver packet and comment in one item mutation. The receiver's next operation returns its pending packet before selecting new work. A fresh transfer grants a heartbeat interval even when its recipient's old runtime heartbeat is stale. Reclaim returns stale nonterminal items to the configured open status, or assigns them to a specified receiver. Close finishes and releases a fenced claim in one mutation. Git sync also validates ownership and any persisted swarm token under the tracker pin; other Git lane ownership and core pm writers retain their SDK contracts.
+Shared claims atomically persist assignee, decimal fencing token and claim timestamp. Shared writers verify principal and token under the same pin, before dispatching SDK mutations. Handoff and reclaim update ownership, generation, receiver packet and comment in one item mutation. The receiver's next operation returns its pending packet before selecting new work. A fresh transfer grants a heartbeat interval even when its recipient's old runtime heartbeat is stale. Reclaim returns stale nonterminal items to the configured open status, or assigns them to a specified receiver. A non-decimal swarm_token is preserved and reported in refused, and the rest of the batch continues. A Git lane is not returned to the pool; pass --to to keep that lane assigned. Explicit reassignment preserves swarm_branch. Close finishes and releases a fenced claim in one mutation. Git sync also validates ownership and any persisted swarm token under the tracker pin; other Git lane ownership and core pm writers retain their SDK contracts.
 
 Only typed pre-write SDK `lock_conflict` refusals are retried, with exponential jitter whose base delay caps at one second and a five-minute total budget. Other failures propagate. Exhausted contention is an explicit failure. An initial fifty-worker experiment using an SDK admission lock stalled under cleanup-gate contention; that attempt failed and is not counted as acceptance. The final process-pin design removes that hot path.
 
@@ -238,3 +238,240 @@ The application/test head **4d6a708** is fully accepted by [CI run 39678612674](
 Every suite has zero failures, skips and cancellations. All 25 authored source files are measured; 74 declarations are documented. The unchanged duplication gate reports 0/4996 lines across 48 sources, zero clones, and production audit reports zero vulnerabilities. Strict clean-clone tracker health, identity/privacy, typecheck, lint, build, package contents, changelog and release-publish attestation pass. Fresh main remains an ancestor. The initial 7364d52 CI attempt failed on one duplicated new-test setup block; factoring only that setup into a helper corrected it, without threshold or assertion changes. The final PM-linked 8/8 regression run took 8339 ms including runner overhead.
 
 The handoff commit adds only PM receipts, releases the claim without closing the item, and records this verification. Its full CI is verified separately before handoff. The latency profiling, packed cleanup and other-Git-command error conversion follow-ups remain open. No new PM CLI/SDK bug was observed.
+
+## Review round on PR 12 after 2fadac3
+
+The remote head was current, then origin main (one commit ahead, tracker reconciliation only) was merged before edits. All twelve review threads were fetched with their comments and no remaining pagination. Two threads are unresolved. The latest CodeRabbit review body, submitted 2026-10-22T00:13:40Z, contains those two findings and no Outside diff range section. Threads are left untouched.
+
+| Thread | Verified disposition |
+| --- | --- |
+| PRRT_kwDOVLY-P86vADX2 | Valid. `swarm_token` is a free string field. `BigInt` throws `SyntaxError` for values such as `abc` and `1.5`, and it also accepts non-decimal values such as `-1`, `0x10`, `+3` and surrounding whitespace, which would rewind or jump a fencing generation. `decimalFencingGeneration` accepts only a decimal generation, with a missing value as zero. `start`, `next`, `handoff` and `close` name the item and refuse before writing. `reclaim` reports the item in `refused` and continues with the other items. |
+| PRRT_kwDOVLY-P86vADX6 | Valid. `reclaim` is dispatched through `SharedTracker` even inside a Git workspace. Pool return clears assignee and sets the open status but leaves `swarm_branch`. Git `next` skips that field and Git `start` reports that the lane already exists, so the item cannot be resumed. Pool return of a truthy `swarm_branch` is refused. Explicit `--to` still transfers and preserves the branch and base. The guard reads the full item, which is the record `transfer` would write; certified corpus rows also retain `swarm_branch`. |
+
+Whole-PR review of token parsing, batch mutation loops and assignee clearing found no other instance. `nextToken` is the only `BigInt` conversion of a stored generation. `handoff` cannot pool-return because it requires a recipient. `close` and Git `reap` are terminal paths, not open-pool returns, and were left unchanged. Dependencies, deadlines, coverage scope and all release thresholds remain unchanged. Dist is ignored and rebuilt by the release gates.
+
+`node --test test/review-r7.test.ts` passes 4/4, with zero failures, skips or cancellations. Independent isolated copies retain the final tests and pinned SDK; source imports need no dist rebuild. Each mutant exits 1 by assertion with zero cancellations:
+
+| Behavior reverted independently | Exact regression command | Result |
+| --- | --- | --- |
+| Only `decimalFencingGeneration`, restored to unconditional `BigInt` | `node --test --test-name-pattern="malformed swarm_token" test/review-r7.test.ts` | Exit 1, 0/2. Writers see `SyntaxError`; reclaim aborts on `Cannot convert 1.5 to a BigInt` |
+| Only the reclaim malformed-token guard | `node --test --test-reporter=tap --test-name-pattern="does not abort reclaim" test/review-r7.test.ts` | Exit 1, 0/1. The batch throws from `nextToken` instead of refusing and continuing |
+| Only `gitLanePoolRefusal`, restored to allow every pool return | `node --test --test-reporter=tap --test-name-pattern="Git lane pool return" test/review-r7.test.ts` | Exit 1, 0/1. The real Git lane and a manually stored branch are both returned to the pool |
+| Only the new README refusal sentences | `node --test --test-reporter=tap --test-name-pattern="README defines reclaim token" test/review-r7.test.ts` | Exit 1, 0/1. The documentation regression no longer matches |
+
+The continuation independently reproduced all four revert proofs and the 4/4 passing focused suite. No proof mutation was applied to the package worktree. Strict tracker health passes with a fresh global configuration, including integrity and append-only history. The default local configuration reports an externally installed `pm-github` host-version mismatch; no dependency pin or global extension was changed.
+
+The pinned PM runner also passes the focused suite, 4/4 with zero test failures, skips or cancellations (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 282252 ms including runner overhead). Test-result persistence is disabled by project policy, so the receipt is retained in the item comments.
+
+The local `npm run release:check` used Node 26, a fresh home/global configuration and isolated Git configuration. Identity, types, lint, duplication (0/5148 lines across 49 sources), build and docstrings (25 files, 74 declarations) pass. Both unchanged watch-process tests fail during heavy host contention; the four new regression cases pass again within that full run. The already-failed gate was then interrupted, exit 130, so incomplete coverage and later package checks are not claimed as passing. No dependency pin, deadline, coverage scope or threshold changed. Complete npm and Bun acceptance is pending CI on the pushed candidate.
+
+### Candidate CI acceptance
+
+Application/test head **684ce997bde8f25a42fe23dbee78fafb76dd7e04** passes [CI run 39764229670](https://github.com/unbraind/pm-swarm/actions/runs/39764229670) on its first attempt:
+
+| Gate | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| Node 22 npm pipeline | 196/196 | 3/3 | 100/100/100/100 |
+| Node 26 npm pipeline | 196/196 | 3/3 | 100/100/100/100 |
+| Node 26 `bun run release:check` | 196/196 | 3/3 | 100/100/100/100 |
+
+Every successful suite has zero failures, skips and cancellations. Coverage reports all 25 authored source files; duplication is 0/5148 lines across 49 sources with zero clones; all 74 declarations are documented; production audit reports zero vulnerabilities. Strict clean-clone PM health, identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Both unchanged watch tests that missed initial output deadlines locally pass in CI without a retry. The interrupted local gate remains incomplete evidence.
+
+The final review refresh retains exactly the original two unresolved threads, the same latest substantive review, complete pagination and no Outside diff range findings. Both findings are valid and fixed; no additional instance was found. No new PM CLI/SDK bug was observed. Existing packed latency, cleanup and other-Git-command error follow-ups remain open.
+
+The handoff commit adds only PM receipts, releases the claim without closing the item, and records this verification. Its full CI is checked separately before handoff. Application source, tests and package inputs remain unchanged from the accepted candidate.
+
+## Review round on 8fa9283
+
+The worktree started clean with no unpushed commits. The remote head was pulled and fresh main was already an ancestor. The prior round remains accepted on its exact pushed head; its tests and evidence were retained. All unresolved threads and comments were fetched without remaining pagination. The latest CodeRabbit review, submitted 2026-10-22T11:10:00Z, has one finding and no Outside diff range section.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vKOZC | Valid. Receiver `next` parsed a free-string packet without checking JSON syntax or decoded shape. Invalid JSON leaked `SyntaxError`; `null` leaked `TypeError`. The decoder now rejects malformed JSON, non-object/array contexts and invalid or mismatched decimal generations with `StaleFenceError` before returning context or remembering a token. CLI classification remains exit 2 with structured `swarm_stale_fence`. |
+
+Whole-PR review found only one reader of `swarm_handoff`; both handoff and reclaim construct its packet with `JSON.stringify`. Missing and malformed packet generations are refused even when the item generation is also missing or equally malformed, preventing an unusable receiver token. The other JSON readers handle runtime records, settings or an internal test-runner protocol, not receiver packets; their existing corruption contracts remain unchanged.
+
+`node --test test/review-r8.test.ts` passes 2/2 with zero failures, skips or cancellations. The SDK case covers malformed JSON, null, string/number/boolean primitives, arrays, absent/numeric/non-decimal/mismatched packet generations, and both preview and claim modes. It verifies unchanged item snapshots and byte-identical histories after refusal. Restoring a valid packet preserves preview without granting ownership, then permits receiver continuation. Real CLI cases cover malformed JSON and null in both modes, inspect the structured error code, preserve history, and accept a repaired valid packet. All fixtures are non-Git trackers, use the pinned real SDK and host, and have no Git executable on the CLI path.
+
+Type checking, lint and the unchanged zero-duplication gate pass (0/5235 lines, 50 sources, zero clones). Dependencies and all release thresholds remain unchanged. Dist remains ignored and is rebuilt by release validation.
+
+The repo-pinned linked runner also passes 2/2, exit 0, zero test failures/skips/cancellations (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 16358 ms including runner overhead).
+
+Behavioral revert proof restores **only `SharedTracker.next` from 8fa9283** in an isolated copy while retaining the final parser helper, regression tests and pinned SDK. `node --test --test-reporter=tap test/review-r8.test.ts` exits 1: **0/2 pass, 2 failures, zero skips/cancellations**. The SDK case receives raw `SyntaxError` instead of `StaleFenceError`; the CLI case loses structured `swarm_stale_fence` classification. Source imports require no dist rebuild. No proof mutation entered the package worktree.
+
+### Local release acceptance
+
+Both full release gates pass on the final source/tests/package inputs with Node 26, fresh home/global configuration and isolated Git configuration:
+
+| Exact gate command | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| `npm run release:check` | 198/198 | 3/3 | 100/100/100/100 |
+| `bun run release:check` | 198/198 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. All 25 authored source files are reported, all 75 declarations are documented, duplication is 0/5235 lines across 50 sources with zero clones, and production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Isolated strict tracker health passes. No local timeout or retry occurred in this round; the prior round's interrupted gate remains separate historical evidence. Dist is ignored and rebuilt by both gates.
+
+The source commit includes the code, regression, README clarification, these verification receipts and append-only PM history. The claim is released without closing the item; the complete pushed-head CI is checked before handoff. Existing packed latency, cleanup and other-Git-command error follow-ups remain open. No new PM CLI/SDK bug was observed. No review reply, resolution, mention, PR merge or package release is performed.
+
+## Review round on 947ae81
+
+The worktree began clean with no unpushed commits. The remote head was pulled; main was already an ancestor. All unresolved threads and all their comments were fetched with complete pagination. The latest substantive review (2026-10-22T14:00:27Z) contains two actionable findings and no Outside diff range findings. Earlier accepted fixes and proofs were retained.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vOLPC | Valid. `exclusive` now passes its actual operation lease to Git start/next/reap. All lane claim, publication update, rollback release and reap release attempts use `lease.write`, checking time and generation on every SDK retry. |
+| PRRT_kwDOVLY-P86vOLPN | Valid. The killed-holder test races stdout readiness against process termination, retains early rejections immediately and has a 30-second timeout. Readiness listeners are removed on success and failure. |
+
+Whole-PR self-review covered every SDK mutation in both engines and all child-process barriers. Shared-mode writes and Git sync already use `lease.write`; the landing SDK call only lists tests, while acknowledgements are confined to the disposable simulation tracker. The live process pin still protects synchronous Git cleanup from concurrent swarm operations. A claim made while valid is deliberately retained if the lease expires before publication or rollback: stale operations cannot even release their own earlier claim. Git rollback removes the local lane, and a fresh operation can inspect/recover the retained ownership. Reap similarly preserves any completed local cleanup while refusing a stale tracker release.
+
+The related deferred-exit rejection pattern also occurred in the Git watch, non-Git watch and packed watch tests. They now share `processExit`, which immediately handles a termination promise without swallowing the error from its later consumer. Their existing bounded output waits and deadlines are unchanged. Other process waits immediately await termination or already retain their barrier rejections.
+
+`node --test --test-reporter=tap test/review-r9.test.ts` passes 11/11. Five real Git/SDK cases expire the durable operation record before start/next claims, after real synchronous lane creation, during failed creation rollback, and after reap cleanup. They check unchanged history or exactly one valid prior claim, branch cleanup, retained ownership and preservation of unrelated files. Six actual process cases cover early failure, early clean exit, spawn failure, successful readiness and kill, plus delayed consumption of both close and exit errors. The early-exit regressions fail by assertion if readiness remains pending; they cannot hang waiting for the broken behavior. The real killed-holder recovery test also passes 1/1 in its non-Git tracker. No SDK responses or subprocess outcomes are substituted.
+
+Independent behavioral revert proofs retain the final tests and pinned SDK in isolated copies; source imports require no dist rebuild. Each proof exits 1, with zero skips or cancellations:
+
+| Only reverted function behavior | Exact regression command | Result |
+| --- | --- | --- |
+| `Swarm.startLane` restored from 947ae81 | `node --test --test-reporter=tap --test-name-pattern="Git (start\|next\|lane)" test/review-r9.test.ts` | 0/4; expired claims, publication and rollback no longer refuse safely |
+| `Swarm.reapLanes` restored from 947ae81 | `node --test --test-reporter=tap --test-name-pattern="Git reap" test/review-r9.test.ts` | 0/1; stale release succeeds and changes history |
+| `monitorLeaseHolder` restored to unguarded stdout readiness | `node --test --test-reporter=tap --test-name-pattern="lease-holder readiness settles on (early\|spawn)" test/review-r9.test.ts` | 0/3; readiness remains pending after child termination |
+| `processExit` restored to unhandled `once` | `node --test --test-reporter=tap --test-name-pattern="deferred (close\|exit) consumers" test/review-r9.test.ts` | 0/2; real spawn errors cause unhandled rejections before delayed consumption |
+
+No proof mutation entered the package worktree. Dependencies, coverage scope and release thresholds are unchanged. Dist is ignored and rebuilt by the release gates.
+
+### Local acceptance
+
+Both unchanged full release gates pass on the final source and test inputs with Node 26, fresh home/global state and isolated Git configuration:
+
+| Exact command | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| `npm run release:check` | 209/209 | 3/3 | 100/100/100/100 |
+| `bun run release:check` | 209/209 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. Neither gate needed a retry or encountered a timeout. Coverage includes all 25 authored source files; all 75 declarations are documented. Duplication is 0/5368 lines across 51 sources, with zero clones. Production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Dist remains ignored and is rebuilt by both gates.
+
+The pinned PM runner passes the focused 11/11 suite (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 5128 ms including runner overhead). Test-result persistence is disabled by project policy, so the receipt is recorded in item comments. Strict isolated `pm health --strict-exit --require-merge-drivers` passes, including integrity and history drift checks. The existing history prefix is byte-identical; only new records are appended.
+
+The final remote/review refresh retains the same head, main ancestry, two unresolved threads, complete comment pagination and latest review; there are no additional or Outside diff range findings. Both findings are fixed; no refusal is needed. No new PM CLI/SDK defect was observed. Existing packed cleanup, packed latency, other-Git-command errors and development-tool advisory follow-ups remain open. The item stays in progress with its claim released for orchestrator verification. The code and PM evidence are committed together; exact pushed-head CI is checked before handoff.
+
+## Review round on 936161b
+
+The worktree began clean, with no draft edits or unpushed commits. The remote head was pulled and main was already an ancestor. All review threads and complete comments were fetched with no remaining pagination. The latest substantive review (2026-10-22T16:34:29Z) has one actionable finding and no Outside diff range findings. Previous fixes and acceptance remain intact.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vSKfI | Valid. Reclaim decided eligibility from an old corpus row but transferred a freshly read item without checking for external changes. It now requires matching ownership, status, revision, token, claim timestamp and Git identity fields, then re-reads the independent owner heartbeat before transfer. Observed changes or a fresh heartbeat skip that item while unchanged stale items still recover. |
+
+Same-class whole-PR review also found terminal reap trusting corpus lifecycle/ownership. Shared reap now compares a fresh item before release; Git reap does so before cleanup or release, preserving reopened/reassigned work and its worktree. Both reuse `recoverySnapshotMatches`. Selection and owned mutation paths already read fresh authoritative items, and lease checks continue to guard every SDK mutation attempt. The core SDK can still write after the last check because it does not join the swarm pin; these checks are bounded revalidation, not an atomic conditional-write contract for external writers. The README now describes the final-check boundary, superseding the older round's initial-snapshot heartbeat policy and updating its documentation regression.
+
+`node --test --test-reporter=tap test/review-r10.test.ts test/review-r5.test.ts` passes 15/15, zero failures/skips/cancellations. The ten new cases include two nine-change matrices (pool and receiver transfers), fresh/stale/invalid/removed heartbeat rechecks, and reopened/reassigned terminal reap in both coordination modes. The matrices preserve byte-identical post-external-write histories and complete item snapshots, while unchanged stale controls still recover. A real Git-free CLI performs owner reassignment; all other writes use the real pinned SDK or agent heartbeat. No SDK response is substituted. Reap races mutate real storage after obtaining the old corpus, including when run against the reverted implementation.
+
+Independent isolated copies retain final tests and the pinned SDK. Source imports require no dist rebuild. Each behavioral revert exits 1 with zero skips/cancellations:
+
+| Only reverted behavior | Exact command | Result |
+| --- | --- | --- |
+| `SharedTracker.reclaim` restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="reclaim " test/review-r10.test.ts` | 1/6 pass, five failures: external changes/fresh heartbeat are reclaimed and new stale/invalid heartbeat evidence is omitted; the removed-heartbeat control still passes |
+| `SharedTracker.reap` restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="shared reap" test/review-r10.test.ts` | 0/2; reopened claims are released or foreign reassignment produces an SDK ownership error |
+| `Swarm.reapLanes` restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="Git reap" test/review-r10.test.ts` | 0/2; stale terminal cleanup removes worktrees before release or refusal |
+| Only README restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="README defines" test/review-r5.test.ts` | 0/1; the documented revalidation and final-check boundary are absent |
+
+No proof mutation entered the worktree. Types, lint and unchanged zero duplication pass (0/5494 lines across 53 sources). Dependency pins, deadlines, coverage scope and all release thresholds are unchanged. Dist remains ignored and will be rebuilt by both complete release gates.
+
+### Local release acceptance
+
+Both complete gates pass on final source/tests with Node 26, fresh home/global state and isolated Git configuration:
+
+| Exact command | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| `npm run release:check` | 219/219 | 3/3 | 100/100/100/100 |
+| `bun run release:check` | 219/219 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. Both gates pass first attempt with no timeout or retry. Coverage reports all 26 authored source files, including the new shared recovery predicate; all 76 declarations are documented. Duplication is zero across 53 sources and 5494 lines. Production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Dist is ignored and rebuilt by both gates.
+
+The pinned PM linked command also passes 15/15, exit 0 (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 12871 ms including runner overhead). Result persistence is disabled by project policy; receipts are retained in item comments. Strict isolated tracker health passes, including history drift and integrity. The previous history prefix is preserved byte-for-byte with append-only new records.
+
+Final remote/review refresh confirms the same branch head, main ancestry, single valid unresolved thread, complete comments and latest review, with no additional or Outside diff range findings. No refusal is needed. No new PM CLI/SDK defect was observed; existing packed latency, cleanup, other-Git-command error and development-tool advisory follow-ups remain open. The code, tests and PM evidence are committed together. The item remains in progress with its claim released for orchestrator verification; exact pushed-head CI is checked before handoff. Core writers after final revalidation remain outside the documented swarm pin contract.
+
+## Review round on b7c2fb0
+
+The worktree began clean with no unpushed draft. After pulling the remote head, main was ahead by three workflow dependency updates. Merge commit 754045d incorporates those updates without conflicts under the required automation identity. Merge inspection reports no pending receipts or history drift, so no reconciliation mutation or history repair was needed. All unresolved review threads/comments were fetched with complete pagination; the latest review (2026-10-22T18:58:34Z) has one actionable finding and no Outside diff range findings.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vVb9l | Valid. A PID invisible in another namespace can return ESRCH and authorize removal of a live pin or request. When probes are available, every new owner/request records a hash of host identity, host boot and PID namespace; unavailable probes leave locality unverifiable. Liveness probes occur only for matching, verifiable locality; missing, malformed or different tags and unavailable probes preserve ownership. Legacy records require conservative operator inspection. |
+
+Whole-PR review covered both pin recovery probes, abandoned queue heads and generation cleanup. Every liveness call receives the current invocation's locality. The related empty/lost queue path now raises `StaleFenceError` before using a missing filename. Each loop checks its own request generation, and final cleanup removes only that generation, preserving replacement records and avoiding a masking missing-file error. The README and busy diagnostic explain conservative recovery and safe operator inspection with all writers stopped. Hashes keep raw host/namespace/boot identity out of runtime owner records. Automatic recovery is certified only within a verified Linux host boot and PID namespace; unsupported probes fail closed without preventing normal token-owned cleanup.
+
+`node --test --test-reporter=tap test/review-r11.test.ts test/fencing.test.ts` passes 25/25 with zero failures, skips or cancellations. The 14 new cases cover request/pin/operation publication, changed host/namespace/boot probes, legacy and malformed locality, unavailable boot/namespace probes, foreign/legacy queue heads, and empty/missing/replaced admission requests. Fixtures use real non-Git trackers and actual SDK writes. Only OS locality probes and real filesystem observation boundaries vary; SDK data and outcomes are never substituted. An original live holder continues a real SDK write after a contender refuses. Existing positive dead-owner, PID-reuse and abandoned-ticket fixtures now explicitly identify their known local namespace; the actual killed-process recovery test still passes.
+
+Independent isolated copies retain final tests and pinned SDK. Source imports need no dist rebuild. All proofs exit 1 with zero skips/cancellations:
+
+| Only reverted behavior | Exact command | Result |
+| --- | --- | --- |
+| `alive` restored from b7c2fb0 | `node --test --test-reporter=tap --test-name-pattern="lease preserves a held pin\|lease retains an older" test/review-r11.test.ts` | 0/9 pass; ambiguous pins/requests are deleted |
+| `withSwarmLease` restored from b7c2fb0 | `node --test --test-reporter=tap --test-name-pattern="lease publication\|lease fails closed" test/review-r11.test.ts` | 0/4; locality publication and lost-request refusals regress |
+| Only `leaseLocality` reduced to hostname-only hashing | `node --test --test-reporter=tap --test-name-pattern="held pin with (namespace\|boot) locality" test/review-r11.test.ts` | 0/2; namespace/boot changes no longer prevent pin recovery |
+| Only README restored from b7c2fb0 | `node --test --test-reporter=tap --test-name-pattern="README defines" test/review-r11.test.ts` | 0/1; namespace/legacy cleanup contract is missing |
+
+No proof mutation entered the worktree. Types, lint and unchanged zero duplication pass. Dependency pins, existing deadlines, coverage scope and all release thresholds remain unchanged. Dist is ignored and rebuilt by full release validation.
+
+### First local npm attempt
+
+`npm run release:check` passes 233/233 source tests with zero failures/skips/cancellations and 100/100/100/100 coverage on all 26 authored source files. Zero duplication (0/5633 lines, 54 sources), all 77 docstrings, identity/privacy, types, lint, build, production audit, package contents, changelog and publish attestation pass. The production audit reports zero vulnerabilities. The pinned PM focused run also passes 25/25, exit 0, 33388 ms including runner overhead; result persistence is disabled, so its receipt is retained in item comments.
+
+Packed acceptance completes **2/3**, exit 1, with zero skips/cancellations. The Git consumer's unchanged watch shutdown assertion (`test/install.acceptance.ts:102`) receives null process exit status instead of zero after reporting three completed polls. Its spawn has the existing 20-second child timeout, but the assertion stops before reporting the signal; this log alone does not identify which signal ended it. That case takes 349306.694 ms, while the separate non-Git packed case passes in 355928.706 ms. Total packed runtime is 709542.998 ms. Read-only process inspection confirmed ongoing Bun command progress, and direct Node/native Bun probes produce identical locality tags. This is not a passing local npm gate. No command assertion, deadline or threshold is changed; acceptance requires an unchanged retry or exact-head CI. The existing packed latency follow-up remains open.
+
+### Candidate handoff for exact-head CI
+
+The local full Bun attempt is still in progress under heavy host contention; its types, lint, zero duplication, build and all 77 docstrings have passed, but its source and packed suites are not accepted yet. The candidate carries the completed 25/25 regressions and four negative revert proofs, plus the complete local npm source/coverage receipts and the packed watch failure above. No incomplete local gate is represented as passing. The exact pushed-head Node 22 npm, Node 26 npm and full Bun release checks must all pass at unchanged thresholds before handoff. If the local duplicate remains unfinished after complete CI acceptance, it may be interrupted and must remain explicitly incomplete evidence.
+
+The final review refresh still has exactly PRRT_kwDOVLY-P86vVb9l with one complete comment and no further pagination or Outside diff range findings. Main is already contained after merge 754045d. No new PM CLI/SDK defect is established; existing packed latency, cleanup, other-Git-command error and development-tool advisory follow-ups remain open. Strict isolated health and history-prefix preservation are checked before commit. The claim is released without closing the item; all PM changes accompany the code.
+
+## Orchestrator review on c920bef
+
+The feature head was pulled before editing; origin main was already an ancestor. The GitHub thread read found zero unresolved threads with no remaining thread/comment pagination. The latest substantive CodeRabbit review has no separate Outside diff range findings. This round addresses the supplied orchestrator findings; no review thread is replied to or resolved.
+
+| Finding | Change |
+| --- | --- |
+| Git checkout/removal blocks renewal beyond the 30-second lease | Git operations retain the live process pin across synchronous calls, while checking both operation and pin generations before every SDK write. The same policy covers start, next, rollback, reap, landing and Git sync. Shared mode retains its expiry check. |
+| Reclaim affects ordinary assignments and unrelated workflow states | Default eligibility requires a swarm marker and configured open/in-progress status. `--parent` limits direct children; `--dry-run` previews without changing ownership, history or heartbeat records. Blocked, draft and custom review states are preserved. Parent identity also participates in recovery snapshot revalidation. |
+| Missing deterministic recovery-race coverage | Two recovery contenders share an abandoned observation and a real SDK recovery lock. A filesystem interleaving installs a successor hard-link pin immediately after the first removal. New/live generations, a different abandoned generation, same-token liveness changes and an already-removed pin all survive the second contender correctly. No SDK response is mocked. |
+| README overstates Git heartbeat renewal | Documentation explains blocked timers, retained Git process pins, generation checks and the separate shared-mode expiry policy. |
+| Recovery without verifiable locality | Retained deliberately outside the requested implementation. Removing the locality restriction would reintroduce the previous cross-host/namespace PID confusion. `pm-swarm-portable-recovery` tracks a safe portable design; operator guidance and foreign/legacy-owner regressions remain. |
+
+The Git regression places an executable wrapper before the real Git executable on PATH. Each actual worktree add/remove waits 31 seconds, exceeding the unchanged default lease, before forwarding to Git. Success verifies worktree metadata and terminal claim release; failed checkout verifies rollback releases the claim and preserves an unrelated directory. The older Git expiry fixtures, including Git sync, now supersede the durable operation generation instead, retaining refusal checks before claim, publication, rollback and reap release under the corrected Git time policy.
+
+The PM-linked command `node --test --test-reporter=tap test/review-r12.test.ts test/review-r9.test.ts` initially passes 22/22 with zero failures, skips or cancellations in 242326 ms. After adding missing-pin and branch-only legacy cases, the same PM command passes 24/24, again with no failures, skips or cancellations. PM reports `tracking_disabled`; this receipt records the completed run. The additional scoped/custom-status preview check passes 2/2 alongside parent revalidation before the full gate.
+
+Behavioral revert proofs run in disposable source copies with the current tests and real temporary SDK trackers; production files in the package worktree are never reverted for proof. Exact commands use `node --test --test-reporter=tap --test-name-pattern="PATTERN" test/review-r12.test.ts`:
+
+| Reverted behavior | PATTERN | Expected negative result |
+| --- | --- | --- |
+| Original `withSwarmLease` function | `Git checkout slower` | 0/2 pass, exit 1; stale operation refusal after slow checkout |
+| Git exclusive call-site policy | `Git checkout slower.*publication` | 0/1 pass, exit 1 |
+| Original reclaim function | `reclaim defaults` | 0/1 pass, exit 1 |
+| Swarm-marker eligibility only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Parent filter only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Workflow-status filter only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Preview mutation suppression only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Recovery under-lock check replaced with unconditional unlink | `two recovery contenders` | 0/4 pass, exit 1 |
+| Parent snapshot comparison only | `recovery snapshot` | 0/1 pass, exit 1 |
+| README before this round | `README distinguishes` | 0/1 pass, exit 1 |
+
+All ten negative runs exit 1 with zero skips and cancellations. Full release receipts are recorded after both unchanged npm and Bun gates complete. No dependency pin, gate threshold or existing test deadline is changed. Build output is regenerated by the gates and remains ignored.
+
+
+The first local npm release attempt loads the initial 244-test inventory. It encounters an existing TOON watch readiness assertion after the unchanged 15-second wait with no child output, and the older Git sync fixture that intentionally aged its heartbeat. The latter fixture now supersedes the operation token instead and passes 1/1 in a focused retry, preserving the file-history refusal assertion under the corrected Git policy. The isolated unchanged watch retry also fails 0/1 at readiness with empty output. Host contention is suspected, pending CI verification. The already-failed npm process tree is stopped with SIGTERM; the command exits 143 and is not claimed as a complete pass. No timeout is raised. The final two edge cases pass 3/3 together with the existing pin-supersession check; the complete current source inventory is 246 tests. The local full Bun command and dedicated-runner CI provide the subsequent release validation.
+
+### Completed release gates
+
+[CI run 39853393648](https://github.com/unbraind/pm-swarm/actions/runs/39853393648), attempt 1, passes on `6048f8508d176ff0c1052e7087ecf889ba3818fb`:
+
+| Execution | Source tests | Packed npm/native Bun acceptance | Coverage |
+| --- | --- | --- | --- |
+| Node 22 npm release steps | 246/246 | 3/3 | 100/100/100/100 across 26 authored files |
+| Node 26 npm release steps | 246/246 | 3/3 | 100/100/100/100 across 26 authored files |
+| Full `bun run release:check`, Node 26 | 246/246 | 3/3 | 100/100/100/100 across 26 authored files |
+
+Every successful suite has zero failures, skips and cancellations. Strict clean-clone PM health, identity/privacy, typecheck, lint, zero duplication (0/5776 lines across 55 sources), 78 documented declarations, production audit (zero vulnerabilities), package contents, changelog and publish attestation pass. The unchanged watch readiness and shutdown checks pass in all three executions. This supplies the dedicated-runner retry evidence for the local readiness timeouts; no local full-gate pass is claimed. The redundant local full Bun attempt is stopped after this complete exact-head CI success and remains incomplete.
+
+The final PM-linked 24/24 repetition takes 240738 ms. The code and packaged inputs remain those tested at `6048f85`; the handoff receipt changes only verification documentation and append-only tracker evidence, releases the feature claim, and preserves in-progress status. Portable recovery remains an open follow-up. The final pushed receipt head receives its own CI validation.

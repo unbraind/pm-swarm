@@ -7,9 +7,32 @@ import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmL
 import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
+import { recoverySnapshotMatches } from './recovery.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
+
+/** Accept only a decimal fencing generation; a missing value is generation zero. */
+function decimalFencingGeneration(value: unknown): string | undefined {
+  const current = String(value ?? '0');
+  return /^\d+$/.test(current) ? current : undefined;
+}
+
+/** Decode receiver context only when its object shape and decimal fence are valid. */
+function parseHandoffContext(id: string, raw: string, token: unknown): Record<string, unknown> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new StaleFenceError(id); }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new StaleFenceError(id);
+  const context = parsed as Record<string, unknown>;
+  if (typeof context.token !== 'string' || decimalFencingGeneration(context.token) === undefined || context.token !== token) throw new StaleFenceError(id);
+  return context;
+}
+
+/** Refuse returning a Git lane to the pool; explicit reassignment keeps its branch. */
+function gitLanePoolRefusal(branch: unknown, to: string | undefined): string | undefined {
+  if (to !== undefined || !branch) return undefined;
+  return 'Git lane cannot return to the pool; use --to to assign its worktree branch';
+}
 
 /** Coordinate claims on the host-bound tracker without branches or worktrees. */
 export class SharedTracker {
@@ -71,8 +94,7 @@ export class SharedTracker {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const incoming = corpus.items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
       if (incoming !== undefined) {
-        const context = JSON.parse(String(incoming.swarm_handoff)) as Record<string, unknown>;
-        if (context.token !== incoming.swarm_token) throw new StaleFenceError(incoming.id);
+        const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
         if (!dryRun) this.tokens.set(incoming.id, String(incoming.swarm_token));
         return { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
       }
@@ -129,9 +151,11 @@ export class SharedTracker {
   async reap(dryRun = false) {
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       const released: string[] = []; const refused: { id: string; reason: string }[] = [];
-      for (const lane of await this.sharedLanes(undefined, false)) {
+      const corpus = await this.engine.corpus(); const snapshots = new Map(corpus.items.map(item => [item.id, item]));
+      for (const lane of await this.sharedLanes(corpus, false)) {
         if (!lane.terminal) continue;
         if (lane.agent !== this.engine.author) { refused.push({ id: lane.id, reason: 'Terminal claim belongs to another agent; use reap --agent with its principal' }); continue; }
+        if (!recoverySnapshotMatches(snapshots.get(lane.id)!, (await this.engine.client.get(lane.id, { depth: 'full' })).item)) continue;
         if (!dryRun) await lease.write(() => this.engine.client.release(lane.id, { author: this.engine.author }));
         released.push(lane.id);
       }
@@ -141,7 +165,9 @@ export class SharedTracker {
 
   /** Increment the durable item generation without floating-point overflow. */
   private nextToken(item: Record<string, unknown>): string {
-    return (BigInt(String(item.swarm_token ?? '0')) + 1n).toString();
+    const current = decimalFencingGeneration(item.swarm_token);
+    if (current === undefined) throw new Error(`Item ${String(item.id)} has a malformed swarm_token; repair it before changing ownership`);
+    return (BigInt(current) + 1n).toString();
   }
 
   /** Refuse stale principal or generation against an already-read item. */
@@ -185,42 +211,52 @@ export class SharedTracker {
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
-  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease: Lease) {
+  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease: Lease, dryRun = false) {
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
     const files = itemFootprint(item);
     const comments = (item.comments as { text: string; author: string; created_at: string }[]).slice(-3).map(row => ({ ...row, text: row.text.slice(0, 1024) }));
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-    await lease.write(() => this.engine.client.update(id, {
+    if (!dryRun) await lease.write(() => this.engine.client.update(id, {
       author: this.engine.author, force: true, ...(to === undefined ? { status: statuses.open_status } : { assignee: to }),
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
     }));
-    this.tokens.delete(id);
+    if (!dryRun) this.tokens.delete(id);
     return { id, previous_owner: item.assignee, agent: to ?? null, token, context };
   }
 
-  /** Recover nonterminal claims whose principal has stopped heartbeating. */
-  async reclaim(staleAfter: number, to?: string) {
+  /** Preview or recover stale swarm work, preserving unrelated owners and workflow states. */
+  async reclaim(staleAfter: number, to?: string, dryRun = false, parent?: string) {
     to = to?.trim();
     if (!Number.isFinite(staleAfter) || staleAfter <= 0 || (to !== undefined && !to)) throw new Error('reclaim requires --stale-after as positive seconds and a nonempty optional --to');
-    return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
+    /** Share eligibility and fresh-snapshot checks between preview and mutation. */
+    const evaluate = async (lease?: Lease) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const recovered = []; const refused: { id: string; reason: string }[] = [];
       for (const row of (await this.engine.corpus()).items) {
-        if (row.tags.includes(RESOURCE_TAG) || !row.assignee?.trim() || statusIsTerminal(row.status, statuses)) continue;
+        if (row.tags.includes(RESOURCE_TAG) || !row.assignee?.trim() || statusIsTerminal(row.status, statuses) || (parent !== undefined && row.parent !== parent)) continue;
+        if (row.swarm_token === undefined && row.swarm_claimed_at === undefined && row.swarm_branch === undefined) continue;
+        if (row.status !== statuses.open_status && row.status !== statuses.in_progress_status) { refused.push({ id: row.id, reason: 'Workflow status is outside open or in-progress work; preserve it for explicit review' }); continue; }
         const recorded = typeof row.swarm_claimed_at === 'string' ? row.swarm_claimed_at : row.updated_at;
         const observed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         const times = [recorded, observed].map(value => value === undefined ? NaN : Date.parse(value)).filter(Number.isFinite);
         if (times.length === 0) { refused.push({ id: row.id, reason: 'No valid claim or heartbeat timestamp; repair liveness evidence before reclaiming' }); continue; }
         if (Date.now() - Math.max(...times) < staleAfter * 1000) continue;
         const item = (await this.engine.client.get(row.id, { depth: 'full' })).item;
-        const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        recovered.push(await this.transfer(item, to, note, lease));
+        if (!recoverySnapshotMatches(row, item)) continue;
+        if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
+        const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
+        if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
+        const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
+        if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
+        const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
+        recovered.push(await this.transfer(item, to, note, lease!, dryRun));
       }
-      return { recovered, refused };
-    });
+      return { dry_run: dryRun, recovered, refused };
+    };
+    return dryRun ? evaluate() : withSwarmLease(this.engine.pmRoot, this.engine.author, evaluate);
   }
 
   /** Finish a fenced claim and release its ownership in one durable mutation. */

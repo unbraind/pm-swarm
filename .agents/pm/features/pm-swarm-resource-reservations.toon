@@ -6,9 +6,11 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-21T21:01:06.878Z"
-updated_at: "2026-10-21T21:49:23.570Z"
+updated_at: "2026-10-22T21:31:18.427Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
-comments[15]{created_at,author,text}:
+comments[19]{created_at,author,text}:
   "2026-10-21T21:01:11.602Z",codex-agent,"Overlap recheck: core CLI exposes item claim/release and SDK locks/workspace transactions, not named non-file resource reservations. PR #12 owns shared operation lease correctness and fenced item handoff. pm-rl process.ts reserveProcessJob reserves trainer budget allowances per job, not exclusive named environments, ports, datasets or deployment slots. This feature reuses tracker claims and #12 operation leases, adds a resource model and refuses unsupported backend coordination; no worktree lanes are added. Registry reports pm CLI 2026.10.21; tracker writes use the pinned 2026.10.17 host."
   "2026-10-21T21:06:36.873Z",codex-agent,"Design: one explicitly tagged resource item per physical slot, using native assignee plus the existing decimal swarm_token and a durable resource expiry. Reserve, renew, release and bounded publication update through the same operation lease as PR #12 claims. Resource items are excluded from work selection and stale-agent recovery. A typed ResourceBackend owns serialization and atomic publication; its refusal propagates with no fallback. The built-in local tracker adapter refuses service-capable storage configurations before creating a local operation pin. Hosted provider acceptance is not claimed."
   "2026-10-21T21:10:14.329Z",codex-agent,"Public-corpus proof passed: committed public pm-ops tracker at eba7d5262fd75e67afce0caad29dae7dc7dfbaeb; 146 certified items, 300 baseline files, 3689055 bytes made read-only in a non-Git scratch tracker. One new synthetic resource completed 7 successful mutations, 1 busy refusal and 1 stale refusal, ending generation 4. All 300 baseline SHA-256 digests remained unchanged. Compact final JSON was 89 bytes. Measured coordination/read phase: 41224 ms; test case: 42723 ms. Git was absent from PATH for the actual CLI status check. No source tracker or hosted data was changed."
@@ -24,23 +26,31 @@ comments[15]{created_at,author,text}:
   "2026-10-21T21:41:51.089Z",codex-agent,"Final example verification found an authored documentation error: the pinned host accepts --tags, not --tag. Corrected README resource provisioning and strengthened the existing Git-free native CLI case to provision its resource using that exact documented command before exercising leases. Resource application functions are unchanged; this is not a PM CLI/SDK defect. Reclaimed the item for this correction and fresh exact-head CI. Prior CI receipts retain their source provenance."
   "2026-10-21T21:42:56.368Z",codex-agent,"Corrected provisioning example passes the actual Git-free CLI chain: pm test pm-swarm-resource-reservations --run --only-index 2 --progress, executing node --test --test-name-pattern=CLI test/resources.test.ts, passes 1/1 in 33564 ms with zero failures/skips/cancellations. The test now creates the tagged resource through native pm create --tags before reservation. Typecheck and lint pass. Corrected-head full CI follows; no application resource function changes."
   "2026-10-21T21:49:21.664Z",codex-agent,"Corrected native provisioning/package head 8d19bc962af1c9c17f78d7a3b8a47baba375df2d passes full CI: https://github.com/unbraind/pm-swarm/actions/runs/39681059999. Node 22 npm, Node 26 npm and complete bun run release:check each pass 199/199 source tests plus 3/3 packed acceptance, zero failures/skips/cancellations. The suite now provisions a real non-Git resource via documented pm create --tags before the fenced CLI loop. All 27 authored files retain 100/100/100/100 coverage; strict tracker health and every remaining gate pass, zero production vulnerabilities. All package dry runs have corrected shasum 5ae8a94438429b5d0eaa2a8a4a639e205c496f38. Final receipt commit is docs and append-only PM evidence only; release claim and retain in-progress status. Final-head run will be linked in PR #15. No new PM CLI/SDK bug, PR merge or release."
-files[10]{path,scope}:
+  "2026-10-22T21:20:21.726Z",codex-agent,"Restack requested after PR #12 follow-up. The resource branch is clean and matches its remote head. Merge origin/main first, regenerating only the conflicting generated changelog from the merged tracker. Then merge verified prerequisite head 060c4076bc4e5b9f8b69bf69c1090e552b03626a; preserve resource exclusions alongside Git pin policy, reclaim parent/dry-run controls and recovery regressions. PR #12 final-head CI 39854899571 passes npm Node 22/26 and full Bun, each 246 source plus 3 packed tests with unchanged full coverage. Run combined resource/fencing regressions and complete npm/Bun CI before final handoff."
+  "2026-10-22T21:23:14.299Z",codex-agent,"Conflict resolution keeps RESOURCE_TAG exclusions and recoverySnapshotMatches in SharedTracker, plus all upstream parent, marker, workflow and dry-run guards. Swarm retains RESOURCE_TAG with StaleFenceError/withSwarmLease and drops the obsolete retryLock import. Strengthen the existing resource exclusion test: use a foreign resource owner, age its real heartbeat, and require both preview and applied stale-agent reclaim to leave resource owner/history intact. This prevents fresh caller heartbeats from masking a missing resource filter. Run the combined linked resource, new fencing, and Git sync regressions, then prove that removing only the resource reclaim filter fails."
+  "2026-10-22T21:26:45.048Z",codex-agent,"The isolated resource reclaim-filter proof fails 0/1, exit 1, zero skips/cancellations, at the preview assertion: removing only row.tags.includes(RESOURCE_TAG) proposes returning the held slot to the work pool. The current test uses a foreign owner and stale actual heartbeat and checks both preview and mutation preserve owner/history. Exact command and source-copy evidence are recorded in docs/resource-verification.md under Prerequisite refresh on 060c407. Combined typecheck, lint, build, docstrings (28 files, 85 declarations) and zero duplication (0/6184 lines across 59 sources) pass. No working source is reverted and no SDK response is mocked."
+  "2026-10-22T21:31:18.426Z",codex-agent,"Combined PM-linked regression run completes 27/28, no skips/cancellations, 301569 ms. The sole failure is the unchanged native resource CLI case: its final release correctly refuses an expired token after a 185562 ms scenario with an explicit 120-second renewal. Every resource SDK/process/exclusion and prerequisite round-12/Git sync case passes. A focused CLI retry is running unchanged; full dedicated-runner npm/Bun CI must validate this timing-sensitive scenario before acceptance. No TTL, assertion or existing deadline is changed. The failed local run remains failed evidence, while the reclaim-filter negative proof is 0/1 as expected."
+files[13]{path,scope}:
   CHANGELOG.md,project
   index.ts,project
   src/commands.ts,project
+  src/lease.ts,project
+  src/recovery.ts,project
   src/resource-tracker.ts,project
   src/resources.ts,project
   src/shared-tracker.ts,project
   src/swarm.ts,project
   test/resource-corpus.acceptance.ts,project
   test/resources.test.ts,project
+  test/review-r12.test.ts,project
   test/review-r6.test.ts,project
-tests[5]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+tests[6]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
   "node --test --test-name-pattern=\"tracker|expired|validation|backend|records\" test/resources.test.ts",project,codex-agent,"2026-10-21T21:13:24.960Z",local_mutation,feat/resource-reservations
   node --test --test-name-pattern=CLI test/resources.test.ts,project,codex-agent,"2026-10-21T21:13:29.191Z",local_mutation,feat/resource-reservations
   node --test --test-name-pattern=process test/resources.test.ts,project,codex-agent,"2026-10-21T21:13:33.098Z",local_mutation,feat/resource-reservations
   "node --test --test-name-pattern=\"shared assigned-only lanes\" test/mixed-tracker.test.ts",project,codex-agent,"2026-10-21T21:18:25.604Z",local_mutation,feat/resource-reservations
   node --test test/review-r6.test.ts,project,codex-agent,"2026-10-21T21:27:06.876Z",local_mutation,feat/resource-reservations
+  node --test --test-reporter=tap test/resources.test.ts test/review-r12.test.ts test/review-r6.test.ts,project,codex-agent,"2026-10-22T21:23:09.475Z",local_mutation,feat/resource-reservations
 docs[3]{path,scope}:
   docs/resource-reservations.md,project
   docs/resource-verification.md,project

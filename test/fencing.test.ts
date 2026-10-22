@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
-import { once } from 'node:events';
 import fs, { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -9,10 +8,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
 import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
 import extension from '../index.ts';
-import { heartbeatPath, processStart, readRuntime, retryLock, StaleFenceError, withSwarmLease } from '../src/lease.ts';
+import { heartbeatPath, leaseLocality, processStart, readRuntime, retryLock, StaleFenceError, withSwarmLease } from '../src/lease.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { monitorLeaseHolder } from './process-helpers.ts';
 
 /** Bind a separate real worker to the same physical tracker. */
 function worker(f: Awaited<ReturnType<typeof sharedFixture>>, author: string) {
@@ -100,7 +100,7 @@ test('renewal outlives the lease, expiry and supersession fail closed, live pins
     assert.throws(lease.assert, StaleFenceError);
   });
   assert.equal(readRuntime<{ token: string }>(path)!.token, 'successor', 'old owner cannot unlink new generation');
-  writeFileSync(join(f.pmRoot, 'runtime/swarm/operation-pin.json'), JSON.stringify({ pid: 2147483647, token: 'killed', heartbeat: 0 }));
+  writeFileSync(join(f.pmRoot, 'runtime/swarm/operation-pin.json'), JSON.stringify({ pid: 2147483647, locality: leaseLocality(), token: 'killed', heartbeat: 0 }));
   await withSwarmLease(f.pmRoot, 'recovered', async lease => { lease.assert(); });
   writeFileSync(path, '{broken'); assert.throws(() => readRuntime(path), SyntaxError);
 });
@@ -132,17 +132,17 @@ test('new registered commands parse tokens and report actionable native errors w
 });
 
 
-test('a real killed lease holder is recovered, and Linux PID reuse does not retain a stale pin', async t => {
+test('a real killed lease holder is recovered, and Linux PID reuse does not retain a stale pin', { timeout: 30000 }, async t => {
   const f = await sharedFixture(t);
   const child = spawn(process.execPath, ['--input-type=module', '-e', `import { withSwarmLease } from ${JSON.stringify(new URL('../src/lease.ts', import.meta.url).href)}; await withSwarmLease(process.env.PM_PATH, 'killed-worker', async () => { process.stdout.write('ready'); await new Promise(() => {}); });`], { cwd: f.repo, env: f.env });
-  const exit = once(child, 'close'); t.after(() => { if (child.signalCode === null) child.kill('SIGKILL'); });
-  await once(child.stdout, 'data'); child.kill('SIGKILL'); const [code, signal] = await exit;
+  const { ready, exit } = monitorLeaseHolder(child); t.after(() => { if (child.signalCode === null) child.kill('SIGKILL'); });
+  await ready; child.kill('SIGKILL'); const [code, signal] = await exit;
   assert.equal(code, null); assert.equal(signal, 'SIGKILL');
   await withSwarmLease(f.pmRoot, 'rescuer', async lease => { lease.assert(); });
   assert.equal(existsSync(join(f.pmRoot, 'runtime/swarm/operation-pin.json')), false);
   assert.equal(processStart(2147483647), undefined);
   if (processStart(process.pid) !== undefined) {
-    writeFileSync(join(f.pmRoot, 'runtime/swarm/operation-pin.json'), JSON.stringify({ pid: process.pid, process_start: 'reused-pid', token: 'old' }));
+    writeFileSync(join(f.pmRoot, 'runtime/swarm/operation-pin.json'), JSON.stringify({ pid: process.pid, locality: leaseLocality(), process_start: 'reused-pid', token: 'old' }));
     await withSwarmLease(f.pmRoot, 'new-process', async lease => { lease.assert(); });
   }
 });
@@ -197,7 +197,7 @@ test('ordered admission prevents newer waiters passing older requests and recove
   const runtime = join(f.pmRoot, 'runtime/swarm'); const order: string[] = [];
   // An incomplete staged record never enters the queue; dead complete tickets are reaped.
   writeFileSync(join(runtime, 'request-000-incomplete.json.staged'), '{');
-  writeFileSync(join(runtime, 'request-000-dead.json'), JSON.stringify({ pid: 2147483647, token: 'abandoned' }));
+  writeFileSync(join(runtime, 'request-000-dead.json'), JSON.stringify({ pid: 2147483647, locality: leaseLocality(), token: 'abandoned' }));
   const attempted: string[] = []; const link = fs.linkSync;
   const observation = t.mock.method(fs, 'linkSync', (...args: Parameters<typeof fs.linkSync>) => { attempted.push(String(args[0])); return link(...args); });
   syncBuiltinESMExports();
