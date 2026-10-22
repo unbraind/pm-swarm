@@ -264,3 +264,19 @@ The continuation independently reproduced all four revert proofs and the 4/4 pas
 The pinned PM runner also passes the focused suite, 4/4 with zero test failures, skips or cancellations (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 282252 ms including runner overhead). Test-result persistence is disabled by project policy, so the receipt is retained in the item comments.
 
 The local `npm run release:check` used Node 26, a fresh home/global configuration and isolated Git configuration. Identity, types, lint, duplication (0/5148 lines across 49 sources), build and docstrings (25 files, 74 declarations) pass. Both unchanged watch-process tests fail during heavy host contention; the four new regression cases pass again within that full run. The already-failed gate was then interrupted, exit 130, so incomplete coverage and later package checks are not claimed as passing. No dependency pin, deadline, coverage scope or threshold changed. Complete npm and Bun acceptance is pending CI on the pushed candidate.
+
+### Candidate CI acceptance
+
+Application/test head **684ce997bde8f25a42fe23dbee78fafb76dd7e04** passes [CI run 39764229670](https://github.com/unbraind/pm-swarm/actions/runs/39764229670) on its first attempt:
+
+| Gate | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| Node 22 npm pipeline | 196/196 | 3/3 | 100/100/100/100 |
+| Node 26 npm pipeline | 196/196 | 3/3 | 100/100/100/100 |
+| Node 26 `bun run release:check` | 196/196 | 3/3 | 100/100/100/100 |
+
+Every successful suite has zero failures, skips and cancellations. Coverage reports all 25 authored source files; duplication is 0/5148 lines across 49 sources with zero clones; all 74 declarations are documented; production audit reports zero vulnerabilities. Strict clean-clone PM health, identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Both unchanged watch tests that missed initial output deadlines locally pass in CI without a retry. The interrupted local gate remains incomplete evidence.
+
+The final review refresh retains exactly the original two unresolved threads, the same latest substantive review, complete pagination and no Outside diff range findings. Both findings are valid and fixed; no additional instance was found. No new PM CLI/SDK bug was observed. Existing packed latency, cleanup and other-Git-command error follow-ups remain open.
+
+The handoff commit adds only PM receipts, releases the claim without closing the item, and records this verification. Its full CI is checked separately before handoff. Application source, tests and package inputs remain unchanged from the accepted candidate.
