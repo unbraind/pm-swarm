@@ -10,6 +10,18 @@ import type { SwarmSettings } from './types.ts';
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
 
+/** Accept only a decimal fencing generation; a missing value is generation zero. */
+function decimalFencingGeneration(value: unknown): string | undefined {
+  const current = String(value ?? '0');
+  return /^\d+$/.test(current) ? current : undefined;
+}
+
+/** Refuse returning a Git lane to the pool; explicit reassignment keeps its branch. */
+function gitLanePoolRefusal(branch: unknown, to: string | undefined): string | undefined {
+  if (to !== undefined || !branch) return undefined;
+  return 'Git lane cannot return to the pool; use --to to assign its worktree branch';
+}
+
 /** Coordinate claims on the host-bound tracker without branches or worktrees. */
 export class SharedTracker {
   /** Host-bound engine supplying certified reads and SDK operations. */
@@ -138,7 +150,9 @@ export class SharedTracker {
 
   /** Increment the durable item generation without floating-point overflow. */
   private nextToken(item: Record<string, unknown>): string {
-    return (BigInt(String(item.swarm_token ?? '0')) + 1n).toString();
+    const current = decimalFencingGeneration(item.swarm_token);
+    if (current === undefined) throw new Error(`Item ${String(item.id)} has a malformed swarm_token; repair it before changing ownership`);
+    return (BigInt(current) + 1n).toString();
   }
 
   /** Refuse stale principal or generation against an already-read item. */
@@ -212,6 +226,9 @@ export class SharedTracker {
         if (times.length === 0) { refused.push({ id: row.id, reason: 'No valid claim or heartbeat timestamp; repair liveness evidence before reclaiming' }); continue; }
         if (Date.now() - Math.max(...times) < staleAfter * 1000) continue;
         const item = (await this.engine.client.get(row.id, { depth: 'full' })).item;
+        if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
+        const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
+        if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
         recovered.push(await this.transfer(item, to, note, lease));
       }
