@@ -461,3 +461,17 @@ All ten negative runs exit 1 with zero skips and cancellations. Full release rec
 
 
 The first local npm release attempt loads the initial 244-test inventory. It encounters an existing TOON watch readiness assertion after the unchanged 15-second wait with no child output, and the older Git sync fixture that intentionally aged its heartbeat. The latter fixture now supersedes the operation token instead and passes 1/1 in a focused retry, preserving the file-history refusal assertion under the corrected Git policy. The isolated unchanged watch retry also fails 0/1 at readiness with empty output. Host contention is suspected, pending CI verification. The already-failed npm process tree is stopped with SIGTERM; the command exits 143 and is not claimed as a complete pass. No timeout is raised. The final two edge cases pass 3/3 together with the existing pin-supersession check; the complete current source inventory is 246 tests. The local full Bun command and dedicated-runner CI provide the subsequent release validation.
+
+### Completed release gates
+
+[CI run 39853393648](https://github.com/unbraind/pm-swarm/actions/runs/39853393648), attempt 1, passes on `6048f8508d176ff0c1052e7087ecf889ba3818fb`:
+
+| Execution | Source tests | Packed npm/native Bun acceptance | Coverage |
+| --- | --- | --- | --- |
+| Node 22 npm release steps | 246/246 | 3/3 | 100/100/100/100 across 26 authored files |
+| Node 26 npm release steps | 246/246 | 3/3 | 100/100/100/100 across 26 authored files |
+| Full `bun run release:check`, Node 26 | 246/246 | 3/3 | 100/100/100/100 across 26 authored files |
+
+Every successful suite has zero failures, skips and cancellations. Strict clean-clone PM health, identity/privacy, typecheck, lint, zero duplication (0/5776 lines across 55 sources), 78 documented declarations, production audit (zero vulnerabilities), package contents, changelog and publish attestation pass. The unchanged watch readiness and shutdown checks pass in all three executions. This supplies the dedicated-runner retry evidence for the local readiness timeouts; no local full-gate pass is claimed. The redundant local full Bun attempt is stopped after this complete exact-head CI success and remains incomplete.
+
+The final PM-linked 24/24 repetition takes 240738 ms. The code and packaged inputs remain those tested at `6048f85`; the handoff receipt changes only verification documentation and append-only tracker evidence, releases the feature claim, and preserves in-progress status. Portable recovery remains an open follow-up. The final pushed receipt head receives its own CI validation.
