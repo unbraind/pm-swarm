@@ -4,17 +4,15 @@
 
 ### Added
 
+- Partition ready work by footprints and dependencies ([pm-swarm-9kio](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-9kio.toon))
+- Synchronize linked file footprints ([pm-swarm-cm86](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-cm86.toon))
 - Coordinate parallel agents on a shared tracker without git ([pm-swarm-shared-tracker](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-shared-tracker.toon))
 - Pick and start safe ready work automatically ([pm-swarm-next](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-next.toon))
 - Warn or refuse overlapping lane starts ([pm-swarm-overlap](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-overlap.toon))
 - Watch live lane status changes ([pm-swarm-watch](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-watch.toon))
 - Predict conflicts from real git merges ([pm-swarm-4343](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-4343.toon))
 - Retire only merged terminal lanes ([pm-swarm-dbn3](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-dbn3.toon))
-- Find and execute clean landing order ([pm-swarm-jt6d](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-jt6d.toon))
 - Integrate settings and package quality gates ([pm-swarm-y972](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-y972.toon))
-- Synchronize linked file footprints ([pm-swarm-cm86](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-cm86.toon))
-- Partition ready work by footprints and dependencies ([pm-swarm-9kio](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-9kio.toon))
-- Claim and create isolated worktree lanes ([pm-swarm-01i5](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-01i5.toon))
 
 ### Changed
 
