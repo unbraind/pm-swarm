@@ -3,21 +3,24 @@ title: Partition ready work by footprints and dependencies
 description: ""
 type: Feature
 pm_format_version: 2
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-15T18:29:28.066Z"
-updated_at: "2026-10-15T20:04:20.508Z"
+updated_at: "2026-10-21T19:44:24.715Z"
+closed_at: "2026-10-21T19:44:19.684Z"
+completed_at: "2026-10-21T19:44:19.684Z"
 author: codex-agent
 estimated_minutes: 30
 acceptance_criteria: SDK readiness and claims; overlaps and dependencies separate safe waves; unknown footprints isolated; complete receipt retained.
 parent: pm-swarm-07o2
-comments[5]{created_at,author,text}:
+comments[6]{created_at,author,text}:
   "2026-10-15T18:53:09.837Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:02:30.084Z",codex-agent,"Behavioural revert proof: replaced only separation with its pre-feature empty-reason behavior. The partition regression failed with ERR_ASSERTION, exit 1. Restored the exact original function bytes; no import or build failure counted as proof."
   "2026-10-15T19:35:57.760Z",codex-agent,"Round 1: keep SDK complete-list certification fail closed while hiding read receipts in default output; measure a 13-item tracker before and after."
   "2026-10-15T19:39:25.434Z",codex-agent,"Measured real host TOON plan on 13 disjoint ready items: default before 6143 bytes / 94 lines, after 5589 bytes / 74 lines (554 bytes / 20 lines less). Complete corpus certification remains before rendering. Full and JSON output retain receipts; real SDK harness tests verify both."
   "2026-10-15T19:51:39.120Z",codex-agent,"Round 1 PM-linked acceptance: pm test pm-swarm-9kio --run --progress passed 2 linked command(s), 11 tests, zero failures. Full post-run snapshots unchanged: two registered worktrees, zero parallel branches, zero swarm Git configuration keys. Source, tracker and settings mutations remained inside scratch repositories."
+  "2026-10-21T19:43:41.299Z",codex-agent,"Authorized tracker reconciliation, audit 2026-10-21. Owner-authorized takeover of any historical assignment for this verified terminal transition. Reverified current main 1dfceab6c477: merged #2 (265d20b), #10 (1dfceab); source tree exactly matches the audited snapshot. **Partition ready work by footprints and dependencies.** [PR #2](https://github.com/unbraind/pm-swarm/pull/2) implements footprint/dependency partitioning; [PR #10](https://github.com/unbraind/pm-swarm/pull/10) exposes explicit --files footprints and conflict-free next selection in shared-tracker mode without Git."
 files[5]{path,scope}:
   src/commands.ts,project
   src/planner.ts,project
@@ -49,4 +52,5 @@ tests[2]:
     updated_at: "2026-10-15T19:43:16.162Z"
 docs[1]{path,scope}:
   README.md,project
+close_reason: "Reverified current main 1dfceab6c477: merged #2 (265d20b), #10 (1dfceab); source tree exactly matches the audited snapshot. **Partition ready work by footprints and dependencies.** [PR #2](https://github.com/unbraind/pm-swarm/pull/2) implements footprint/dependency partitioning; [PR #10](https://github.com/unbraind/pm-swarm/pull/10) exposes explicit --files footprints and conflict-free next selection in shared-tracker mode without Git."
 body: ""
