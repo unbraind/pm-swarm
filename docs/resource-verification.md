@@ -213,3 +213,17 @@ The existing resource-exclusion regression now reserves the slot as a foreign re
 Typecheck, lint, build, zero duplication and docstring checks pass on the combined source: 28 authored files, 85 documented declarations, 0/6184 duplicated lines across 59 sources. The combined PM-linked command `node --test --test-reporter=tap test/resources.test.ts test/review-r12.test.ts test/review-r6.test.ts` completes 27/28 with no skips/cancellations in 301569 ms. Its sole failure is the unchanged native CLI scenario: the final release refuses a genuinely expired token during a 185562 ms case containing an explicit 120-second renewal. The resource reclaim guard and all prerequisite regressions pass. The focused unchanged CLI retry passes 1/1 with zero skips/cancellations in 121993 ms total (116915 ms test time); no TTL, deadline or assertion is relaxed. Full unchanged npm and Bun release validation follows in CI. Earlier public-corpus measurements above retain their original source provenance; they are not rerun for this prerequisite refresh.
 
 The prerequisite merge is committed as `1e5b2a2`, with #12 and main both ancestors. Strict tracker health passes with no pending merge receipts; no reconcile, history repair or re-anchor is needed. Both existing history prefixes are retained. Full-head release validation remains pending CI.
+
+### Completed prerequisite-refresh gates
+
+[CI run 39858167503](https://github.com/unbraind/pm-swarm/actions/runs/39858167503), attempt 1, passes exact combined head `e0ce509b71f5092e93089ed74119e336642ff3ca`:
+
+| Execution | Source tests | Packed npm/native Bun acceptance | Coverage |
+| --- | --- | --- | --- |
+| Node 22 npm release steps | 253/253 | 3/3 | 100/100/100/100 across 28 authored files |
+| Node 26 npm release steps | 253/253 | 3/3 | 100/100/100/100 across 28 authored files |
+| Full `bun run release:check`, Node 26 | 253/253 | 3/3 | 100/100/100/100 across 28 authored files |
+
+Every successful suite has zero failures, skips and cancellations. Strict clean-clone tracker health, identity/privacy, typecheck, lint, zero duplication, 85 documented declarations, production audit with zero vulnerabilities, package contents, generated changelog and publish attestation pass. The unchanged native resource CLI scenario passes in all executions, as do the strengthened resource reclaim check and the 31-second Git operations. The prior local combined failure remains recorded alongside its unchanged successful focused retry.
+
+The final receipt changes only verification notes and append-only PM evidence, releases the resource feature claim while retaining in-progress status, and preserves both main and the verified #12 head as ancestors. Application and packaged inputs remain those tested at `e0ce509`; the pushed receipt head receives its own CI validation. No PR is merged, review thread replied to/resolved, or release performed.
