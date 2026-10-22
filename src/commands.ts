@@ -6,6 +6,7 @@ import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbra
 import { repositoryRoot } from './workspace.ts';
 import { SharedTracker, SHARED_LAND_REFUSAL } from './shared-tracker.ts';
 import { settings } from './settings.ts';
+import { retryLock, StaleFenceError } from './lease.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
 import type { SwarmSettings } from './types.ts';
@@ -29,13 +30,13 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
   try {
     if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
     const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-    const repo = command === 'settings' ? undefined : repositoryRoot(workspace);
+    const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close'].includes(command) ? undefined : repositoryRoot(workspace);
     const client = ctx.sdk.client;
     const opts = overrides(ctx.options);
     const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
     const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
     const id = ctx.args[0];
-    if (['start', 'sync'].includes(command) && id === undefined) throw new Error('An item id is required');
+    if (['start', 'sync', 'handoff', 'close'].includes(command) && id === undefined) throw new Error('An item id is required');
     switch (command) {
       case 'plan': {
         const result = await swarm.plan(textOption(ctx.options.parent), opts.lane_limit);
@@ -61,9 +62,13 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
         return repo === undefined ? await operation : operation;
       }
       case 'sync': {
-        const operation = swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()));
-        return repo === undefined ? await operation : operation;
+        const operation = swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()), textOption(ctx.options.token));
+        return await operation;
       }
+      case 'heartbeat': return await (swarm as SharedTracker).heartbeat(id, textOption(ctx.options.token));
+      case 'handoff': return await (swarm as SharedTracker).handoff(id, textOption(ctx.options.to) ?? '', textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
+      case 'reclaim': return await (swarm as SharedTracker).reclaim(Number(textOption(ctx.options.staleAfter)), textOption(ctx.options.to), ctx.options.dryRun === true, textOption(ctx.options.parent));
+      case 'close': return await (swarm as SharedTracker).close(id, textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
       case 'land': {
         if (repo === undefined) throw new Error(SHARED_LAND_REFUSAL);
         return swarm.land(ctx.options.execute === true);
@@ -75,13 +80,13 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
       case 'settings': {
         const config = await settings(ctx.pm_root, opts);
         if (isAbsolute(config.root) || /^[A-Za-z]:/.test(config.root)) throw new Error('Tracked swarm root setting must be relative; use start --root for local absolute paths');
-        if (ctx.options.apply === true) await ctx.sdk.mutateWorkspaceSettings({ operationId: randomUUID(), mutate: current => ({ ...current, swarm: config }) });
+        if (ctx.options.apply === true) await retryLock(() => ctx.sdk!.mutateWorkspaceSettings({ operationId: randomUUID(), mutate: current => ({ ...current, swarm: config }) }));
         return { swarm: config, dry_run: ctx.options.apply !== true };
       }
       default: throw new Error('Unknown swarm command');
     }
   } catch (error) {
-    throw createPmCliExpectedError(String(error), { exitCode: 2 });
+    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
   }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
@@ -90,19 +95,23 @@ export function register(api: ExtensionApi): void {
     commands: ['swarm status'],
     resultDiscriminator: result => typeof result === 'object' && result !== null && 'swarm_watch_complete' in result && result.swarm_watch_complete === true,
   });
-  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff'].map(name => ({ name, type: 'string', optional: true })));
   const definitions = {
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
     next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
     start: { description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'strict'], id: true },
     status: { description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
-    sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files'], id: true },
+    sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files', 'token'], id: true },
+    heartbeat: { description: 'Renew agent liveness, optionally fencing an item', flags: ['agent', 'token'], id: false },
+    reclaim: { description: 'Recover claims from agents that stopped heartbeating', flags: ['agent', 'stale-after', 'to', 'parent', 'dry-run'], id: false },
+    handoff: { description: 'Transfer fenced ownership with receiver context atomically', flags: ['agent', 'to', 'note', 'token'], id: true },
+    close: { description: 'Finish and release a fenced claim atomically', flags: ['agent', 'note', 'token'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
     reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
     settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'apply'], id: false },
   };
   for (const [name, definition] of Object.entries(definitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
-    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id ? [{ name: 'id', required: true }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
+    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' ? [{ name: 'id', required: definition.id }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }

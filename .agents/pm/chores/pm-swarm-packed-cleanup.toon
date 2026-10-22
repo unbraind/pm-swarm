@@ -6,12 +6,14 @@ status: open
 priority: 2
 tags: []
 created_at: "2026-10-20T21:12:15.689Z"
-updated_at: "2026-10-20T21:16:06.242Z"
+updated_at: "2026-10-21T20:09:26.887Z"
 author: codex-agent
 acceptance_criteria: "Non-Git packed acceptance reliably removes disposable Bun cache state under concurrent cache cleanup; preserve original command assertions, full npm and Bun gates and unchanged thresholds/timeouts."
 parent: pm-swarm-shared-tracker
-comments[1]{created_at,author,text}:
+comments[3]{created_at,author,text}:
   "2026-10-20T21:16:06.241Z",codex-agent,"Deduplicated against ENOTEMPTY and Bun cleanup tracker searches. The historical Git packed fixture cleanup correction is recorded on closed pm-swarm-watch; this new item tracks the equivalent non-Git fixture, which currently lacks bounded retries. Handoff CI run 39497758293 on e68da81 first passed Node 22 but failed Node 26 packed acceptance 2/3 solely at recursive scratch Bun-cache cleanup. The unchanged-code retry passes Node 22/26, including Node 26 packed acceptance and the complete Bun release gate, 155/155 source plus 3/3 packed. This is a real intermittent fixture cleanup failure, not a timeout or a passing first attempt. No source, test, deadline or threshold was changed for the retry. Leave this follow-up open for separate cleanup hardening."
+  "2026-10-21T19:56:25.616Z",codex-agent,"PR 12 review head 1ec0e7c reproduces this existing cleanup race in CI run https://github.com/unbraind/pm-swarm/actions/runs/39665163625 attempt 1. Node 22 passes 184/184 source tests and 3/3 packed acceptance. Node 26 passes 184/184 at all four 100 percent coverage thresholds, then packed acceptance reports 2/3: the non-Git case fails its disposal hook with ENOTEMPTY while removing the disposable global tracker locks directory. This is a failed cleanup attempt, not a timeout or a passing gate. The Bun full gate is not reached. No command assertion or review regression fails. Requested an unchanged-code rerun of the failed job; this item retains the independent cleanup-hardening scope and existing unchanged deadlines. No duplicate follow-up is created."
+  "2026-10-21T20:09:26.886Z",codex-agent,"The unchanged failed-job retry on application head 1ec0e7c succeeds: https://github.com/unbraind/pm-swarm/actions/runs/39665163625 attempt 2. Node 26 now passes 184/184 source tests and 3/3 packed acceptance, followed by the complete Bun release gate at 184/184 and 3/3; Node 22 remains green. All successful suites have zero failures/skips/cancellations and all four coverage dimensions are 100 percent. The first attempt remains a genuine ENOTEMPTY disposal failure. This follow-up stays open for independent cleanup hardening; no cleanup code, timeout or dependency pin is changed in the review fix."
 files[1]{path,scope}:
   test/install.acceptance.ts,project
 docs[1]{path,scope}:

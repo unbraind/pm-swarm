@@ -4,6 +4,8 @@ import { register } from './src/commands.ts';
 export { Swarm } from './src/swarm.ts';
 /** Expose claim coordination for trackers without Git worktree lanes. */
 export { SharedTracker } from './src/shared-tracker.ts';
+/** Expose typed stale-token refusals for embedded workers. */
+export { StaleFenceError } from './src/lease.ts';
 /** Expose conservative footprint and wave planning primitives. */
 export { partition, separation, overlaps, footprintPath } from './src/planner.ts';
 /** Expose the real Git merge predictor for embedded tools. */
@@ -15,4 +17,4 @@ export { settings } from './src/settings.ts';
 /** Expose portable lane contracts. */
 export type { Candidate, Lane, Prediction, Separation, SwarmSettings } from './src/types.ts';
 /** Activate the swarm command family and its extension fields. */
-export default defineExtension({ name: 'pm-swarm', version: '2026.10.15', description: 'Parallel agents on a shared tracker with optional Git lanes', activate: register });
+export default defineExtension({ name: 'pm-swarm', version: '2026.10.15', description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });

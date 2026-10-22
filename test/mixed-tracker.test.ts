@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { existsSync, readFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import { delimiter, join, relative } from 'node:path';
 import { test } from 'node:test';
-import { acquireLock } from '@unbrained/pm-cli/sdk';
+import { withSwarmLease } from '../src/lease.ts';
 import { fixture } from './helpers.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
@@ -92,17 +92,15 @@ test('Git operations hold the tracker lease throughout real SDK reads and releas
   const corpus = f.swarm.corpus.bind(f.swarm); let checks = 0;
   // Observe the real lease during real SDK reads; no tracker response is substituted.
   f.swarm.corpus = async () => {
-    const release = await acquireLock(f.pmRoot, 'swarm-operation', 1800, 'probe', false, false, 0).catch(() => undefined);
-    if (release !== undefined) await release();
-    assert.equal(release, undefined, 'Git and shared operations must hold the same tracker lease');
+    await assert.rejects(withSwarmLease(f.pmRoot, 'probe', async () => {}, { waitMs: 0 }), /swarm_busy/, 'Git and shared operations must hold the same tracker pin');
     checks++; return corpus();
   };
   assert.equal((await f.swarm.next()).selected, id);
   assert.ok(checks >= 2);
   await assert.rejects(f.swarm.start(id), /Lane already exists/);
-  const release = await acquireLock(f.pmRoot, 'swarm-operation', 1800, 'probe', false, false, 0); await release();
+  await withSwarmLease(f.pmRoot, 'probe', async lease => { lease.assert(); });
   await f.swarm.reap(true);
-  const releaseAgain = await acquireLock(f.pmRoot, 'swarm-operation', 1800, 'probe', false, false, 0); await releaseAgain();
+  await withSwarmLease(f.pmRoot, 'probe', async lease => { lease.assert(); });
 });
 
 test('Git releases the tracker lease when repository discovery fails', async t => {
@@ -110,7 +108,7 @@ test('Git releases the tracker lease when repository discovery fails', async t =
   // The engine still owns a real tracker, while its repository argument is invalid.
   const invalid = new Swarm(join(f.root, 'missing-repository'), f.pmRoot, f.client, 'swarm-test');
   await assert.rejects(invalid.start(id), /git rev-parse failed/);
-  const release = await acquireLock(f.pmRoot, 'swarm-operation', 1800, 'probe', false, false, 0); await release();
+  await withSwarmLease(f.pmRoot, 'probe', async lease => { lease.assert(); });
 });
 
 for (const suffix of ['/', '/nested/..', '/.'] as const) {

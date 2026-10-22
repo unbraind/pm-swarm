@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { test } from 'node:test';
-import { once } from 'node:events';
 import { isBuiltin } from 'node:module';
 import { setTimeout as delay } from 'node:timers/promises';
 import { decodeToon } from '@unbrained/pm-cli/sdk/testing';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
 import { requireBun } from './install-helpers.ts';
+import { processExit } from './process-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, async t => {
@@ -79,7 +79,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
       const watchArgs = [host, 'swarm', 'status', '--watch', '--interval', '0.1'];
       if (json) watchArgs.push('--json');
       const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: { ...environment(cwd), PM_SWARM_TEST_POLL_HEARTBEAT: '1' }, cwd, timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
-      const exit = once(child, 'exit');
+      const exit = processExit(child, 'exit');
       const stream = { output: '', error: '' };
       child.stdout.on('data', chunk => { stream.output += chunk.toString(); });
       child.stderr.on('data', chunk => { stream.error += chunk.toString(); });
@@ -164,7 +164,7 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
     invoke(runtime, ['files', id, '--add', 'src/work.ts']);
     const selected = invoke(runtime, ['swarm', 'next', '--agent', 'packed-worker']);
     assert.equal(selected.selected, id); assert.equal(selected.mode, 'shared-tracker'); assert.equal('branch' in selected, false);
-    const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply']);
+    const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply', '--token', String(selected.token)]);
     assert.deepEqual(synced.add, ['test/work.test.ts']);
     const status = invoke(runtime, ['swarm', 'status']); assert.equal((status.lanes as unknown[]).length, 1);
     invoke(runtime, ['update', id, '--status', 'closed', '--message', 'Packed work verified']);
