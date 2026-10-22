@@ -81,8 +81,18 @@ function alive(owner: Owner, locality: string | undefined): boolean {
   catch (error) { return !(typeof error === 'object' && error !== null && 'code' in error && error.code === 'ESRCH'); }
 }
 
-/** Tune durations for embedded use and deterministic real-storage regression tests. */
-export interface LeaseOptions { leaseMs?: number; renewMs?: number; waitMs?: number }
+/** Revalidate an abandoned pin under the recovery lock before removing its generation. */
+export async function recoverLeasePin(pmRoot: string, author: string, locality: string | undefined, observed: Owner): Promise<void> {
+  const pin = join(swarmRuntime(pmRoot), 'operation-pin.json');
+  const release = await retryLock(() => acquireLock(pmRoot, 'swarm-recovery', 30, author, false, false, 0));
+  try {
+    const current = readRuntime<Owner>(pin);
+    if (current?.token === observed.token && !alive(current, locality)) unlinkSync(pin);
+  } finally { await release(); }
+}
+
+/** Tune durations; Git callers may retain the live process pin across synchronous work. */
+export interface LeaseOptions { leaseMs?: number; renewMs?: number; waitMs?: number; allowBlocking?: boolean }
 
 /** Assertions and retriable writes bound to the current operation generation. */
 export interface Lease {
@@ -115,11 +125,7 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
         catch (error) { if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST')) throw error; }
         const owner = readRuntime<Owner>(pin);
         if (owner !== undefined && !alive(owner, identity.locality)) {
-          const release = await retryLock(() => acquireLock(pmRoot, 'swarm-recovery', 30, author, false, false, 0));
-          try {
-            const current = readRuntime<Owner>(pin);
-            if (current?.token === owner.token && !alive(current, identity.locality)) unlinkSync(pin);
-          } finally { await release(); }
+          await recoverLeasePin(pmRoot, author, identity.locality, owner);
         }
       } else if (head !== undefined && !alive(head, identity.locality)) {
         rmSync(first, { force: true });
@@ -130,11 +136,11 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
     }
   } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
   let failure: unknown;
-  /** Validate both time and generation before renewing or dispatching a write. */
+  /** Always validate both generations; synchronous Git work retains its live pin past expiry. */
   const assert = () => {
     if (failure !== undefined) throw failure;
     const owner = readRuntime<Owner>(path);
-    if (owner?.token !== token || Date.now() - owner.heartbeat >= leaseMs) throw new StaleFenceError('operation');
+    if (owner?.token !== token || readRuntime<Owner>(pin)?.token !== token || (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs)) throw new StaleFenceError('operation');
   };
   const lease: Lease = { assert, write: operation => retryLock(async () => { assert(); return operation(); }) };
   let timer: ReturnType<typeof setInterval> | undefined;

@@ -425,3 +425,39 @@ Packed acceptance completes **2/3**, exit 1, with zero skips/cancellations. The 
 The local full Bun attempt is still in progress under heavy host contention; its types, lint, zero duplication, build and all 77 docstrings have passed, but its source and packed suites are not accepted yet. The candidate carries the completed 25/25 regressions and four negative revert proofs, plus the complete local npm source/coverage receipts and the packed watch failure above. No incomplete local gate is represented as passing. The exact pushed-head Node 22 npm, Node 26 npm and full Bun release checks must all pass at unchanged thresholds before handoff. If the local duplicate remains unfinished after complete CI acceptance, it may be interrupted and must remain explicitly incomplete evidence.
 
 The final review refresh still has exactly PRRT_kwDOVLY-P86vVb9l with one complete comment and no further pagination or Outside diff range findings. Main is already contained after merge 754045d. No new PM CLI/SDK defect is established; existing packed latency, cleanup, other-Git-command error and development-tool advisory follow-ups remain open. Strict isolated health and history-prefix preservation are checked before commit. The claim is released without closing the item; all PM changes accompany the code.
+
+## Orchestrator review on c920bef
+
+The feature head was pulled before editing; origin main was already an ancestor. The GitHub thread read found zero unresolved threads with no remaining thread/comment pagination. The latest substantive CodeRabbit review has no separate Outside diff range findings. This round addresses the supplied orchestrator findings; no review thread is replied to or resolved.
+
+| Finding | Change |
+| --- | --- |
+| Git checkout/removal blocks renewal beyond the 30-second lease | Git operations retain the live process pin across synchronous calls, while checking both operation and pin generations before every SDK write. The same policy covers start, next, rollback, reap, landing and Git sync. Shared mode retains its expiry check. |
+| Reclaim affects ordinary assignments and unrelated workflow states | Default eligibility requires a swarm marker and configured open/in-progress status. `--parent` limits direct children; `--dry-run` previews without changing ownership, history or heartbeat records. Blocked, draft and custom review states are preserved. Parent identity also participates in recovery snapshot revalidation. |
+| Missing deterministic recovery-race coverage | Two recovery contenders share an abandoned observation and a real SDK recovery lock. A filesystem interleaving installs a successor hard-link pin immediately after the first removal. New/live generations, a different abandoned generation, same-token liveness changes and an already-removed pin all survive the second contender correctly. No SDK response is mocked. |
+| README overstates Git heartbeat renewal | Documentation explains blocked timers, retained Git process pins, generation checks and the separate shared-mode expiry policy. |
+| Recovery without verifiable locality | Retained deliberately outside the requested implementation. Removing the locality restriction would reintroduce the previous cross-host/namespace PID confusion. `pm-swarm-portable-recovery` tracks a safe portable design; operator guidance and foreign/legacy-owner regressions remain. |
+
+The Git regression places an executable wrapper before the real Git executable on PATH. Each actual worktree add/remove waits 31 seconds, exceeding the unchanged default lease, before forwarding to Git. Success verifies worktree metadata and terminal claim release; failed checkout verifies rollback releases the claim and preserves an unrelated directory. The older Git expiry fixtures, including Git sync, now supersede the durable operation generation instead, retaining refusal checks before claim, publication, rollback and reap release under the corrected Git time policy.
+
+The PM-linked command `node --test --test-reporter=tap test/review-r12.test.ts test/review-r9.test.ts` initially passes 22/22 with zero failures, skips or cancellations in 242326 ms. After adding missing-pin and branch-only legacy cases, the same PM command passes 24/24, again with no failures, skips or cancellations. PM reports `tracking_disabled`; this receipt records the completed run. The additional scoped/custom-status preview check passes 2/2 alongside parent revalidation before the full gate.
+
+Behavioral revert proofs run in disposable source copies with the current tests and real temporary SDK trackers; production files in the package worktree are never reverted for proof. Exact commands use `node --test --test-reporter=tap --test-name-pattern="PATTERN" test/review-r12.test.ts`:
+
+| Reverted behavior | PATTERN | Expected negative result |
+| --- | --- | --- |
+| Original `withSwarmLease` function | `Git checkout slower` | 0/2 pass, exit 1; stale operation refusal after slow checkout |
+| Git exclusive call-site policy | `Git checkout slower.*publication` | 0/1 pass, exit 1 |
+| Original reclaim function | `reclaim defaults` | 0/1 pass, exit 1 |
+| Swarm-marker eligibility only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Parent filter only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Workflow-status filter only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Preview mutation suppression only | `reclaim defaults` | 0/1 pass, exit 1 |
+| Recovery under-lock check replaced with unconditional unlink | `two recovery contenders` | 0/4 pass, exit 1 |
+| Parent snapshot comparison only | `recovery snapshot` | 0/1 pass, exit 1 |
+| README before this round | `README distinguishes` | 0/1 pass, exit 1 |
+
+All ten negative runs exit 1 with zero skips and cancellations. Full release receipts are recorded after both unchanged npm and Bun gates complete. No dependency pin, gate threshold or existing test deadline is changed. Build output is regenerated by the gates and remains ignored.
+
+
+The first local npm release attempt loads the initial 244-test inventory. It encounters an existing TOON watch readiness assertion after the unchanged 15-second wait with no child output, and the older Git sync fixture that intentionally aged its heartbeat. The latter fixture now supersedes the operation token instead and passes 1/1 in a focused retry, preserving the file-history refusal assertion under the corrected Git policy. The isolated unchanged watch retry also fails 0/1 at readiness with empty output. Host contention is suspected, pending CI verification. The already-failed npm process tree is stopped with SIGTERM; the command exits 143 and is not claimed as a complete pass. No timeout is raised. The final two edge cases pass 3/3 together with the existing pin-supersession check; the complete current source inventory is 246 tests. The local full Bun command and dedicated-runner CI provide the subsequent release validation.

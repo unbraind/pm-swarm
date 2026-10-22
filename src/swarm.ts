@@ -94,7 +94,7 @@ export class Swarm {
       const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
       const release = await lease.write(() => acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author));
       try { return await operation(lease); } finally { await release(); }
-    });
+    }, { allowBlocking: true });
   }
 
   /** Publish a lane under the repository operation lease. */
@@ -174,7 +174,7 @@ export class Swarm {
       }
       return { id, dry_run: !apply, add };
     };
-    return apply ? withSwarmLease(this.pmRoot, this.author, evaluate) : evaluate();
+    return apply ? withSwarmLease(this.pmRoot, this.author, evaluate, { allowBlocking: true }) : evaluate();
   }
 
   /** Simulate all lanes, report a smallest conflicting subset, and optionally merge tested commits locally. */

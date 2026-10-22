@@ -12,19 +12,19 @@ import { readRuntime, StaleFenceError } from '../src/lease.ts';
 import { fixture } from './helpers.ts';
 import { monitorLeaseHolder, processExit } from './process-helpers.ts';
 
-/** Age disposable lease evidence without changing clocks or substituting SDK responses. */
-function expire(pmRoot: string) {
+/** Supersede disposable lease evidence without substituting SDK responses. */
+function supersede(pmRoot: string) {
   const path = join(pmRoot, 'runtime/swarm/operation.json');
   const owner = readRuntime<Record<string, unknown>>(path)!;
-  writeFileSync(path, JSON.stringify({ ...owner, heartbeat: Date.now() - 60000 }));
+  writeFileSync(path, JSON.stringify({ ...owner, token: 'superseding-operation' }));
 }
 
-/** Observe real synchronous Git completion and expire the operation at a selected boundary. */
-function expireAfterGit(t: TestContext, pmRoot: string, matches: (args: string[], status: number | null) => boolean) {
+/** Observe real synchronous Git completion and supersede the operation at a selected boundary. */
+function supersedeAfterGit(t: TestContext, pmRoot: string, matches: (args: string[], status: number | null) => boolean) {
   const original = childProcess.spawnSync;
   const observation = t.mock.method(childProcess, 'spawnSync', (command: string, args: string[], options: SpawnSyncOptions) => {
     const result = original(command, args, options);
-    if (command === 'git' && matches(args, result.status)) expire(pmRoot);
+    if (command === 'git' && matches(args, result.status)) supersede(pmRoot);
     return result;
   });
   syncBuiltinESMExports();
@@ -32,13 +32,13 @@ function expireAfterGit(t: TestContext, pmRoot: string, matches: (args: string[]
 }
 
 for (const action of ['start', 'next'] as const) {
-  test(`Git ${action} refuses an expired lease before claiming`, async t => {
+  test(`Git ${action} refuses a superseded lease before claiming`, async t => {
     const f = await fixture(t); const id = await f.item(['src/work']); f.save();
     const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8');
     const get = f.client.get.bind(f.client);
     f.client.get = async (...args) => {
       const result = await get(...args);
-      if (args[1]?.fields === 'id,assignee,claim_state') expire(f.pmRoot);
+      if (args[1]?.fields === 'id,assignee,claim_state') supersede(f.pmRoot);
       return result;
     };
     await assert.rejects(action === 'start' ? f.swarm.start(id) : f.swarm.next(), StaleFenceError);
@@ -49,17 +49,17 @@ for (const action of ['start', 'next'] as const) {
 }
 
 for (const phase of ['publication', 'rollback'] as const) {
-  test(`Git lane ${phase} never writes through an expired lease`, async t => {
+  test(`Git lane ${phase} never writes through a superseded lease`, async t => {
     const f = await fixture(t); const id = await f.item(); f.save();
     const root = join(f.root, 'lanes'); const path = join(root, `repo-${id}`);
     if (phase === 'rollback') { mkdirSync(path, { recursive: true }); writeFileSync(join(path, 'keep'), 'Unrelated data'); }
-    expireAfterGit(t, f.pmRoot, (args, status) => phase === 'publication'
+    supersedeAfterGit(t, f.pmRoot, (args, status) => phase === 'publication'
       ? args[0] === 'config' && args[2] === `swarm.lane.${id}` && status === 0
       : args[0] === 'worktree' && args[1] === 'add' && status !== 0);
     const history = join(f.pmRoot, 'history', `${id}.jsonl`); const before = readFileSync(history, 'utf8').trim().split('\n').length;
     await assert.rejects(f.swarm.start(id, { root }), StaleFenceError);
     const item = (await f.client.get(id, { depth: 'full' })).item;
-    assert.equal(item.assignee, 'swarm-test', 'an expired operation cannot release even its own prior claim');
+    assert.equal(item.assignee, 'swarm-test', 'a superseded operation cannot release even its own prior claim');
     assert.equal(item.swarm_branch, undefined);
     assert.equal(readFileSync(history, 'utf8').trim().split('\n').length, before + 1, 'only the valid initial claim persisted');
     assert.equal(branchExists(f.repo, `swarm/${id}`), false);
@@ -74,7 +74,7 @@ test('Git reap rechecks its lease after synchronous cleanup before releasing the
   f.save(); const lane = await f.swarm.start(id);
   await f.client.update(id, { status: 'closed', message: 'Fixture complete' }); await f.client.claim(id, { force: true });
   const before = readFileSync(history, 'utf8');
-  expireAfterGit(t, f.pmRoot, args => args[0] === 'branch' && args[1] === '-d');
+  supersedeAfterGit(t, f.pmRoot, args => args[0] === 'branch' && args[1] === '-d');
   await assert.rejects(f.swarm.reap(), StaleFenceError);
   assert.equal(readFileSync(history, 'utf8'), before);
   assert.equal((await f.client.get(id)).claim_state?.assignee, 'swarm-test');

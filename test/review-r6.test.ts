@@ -70,7 +70,7 @@ test('Git sync pins discovery and the real SDK file write against handoff', asyn
   await withSwarmLease(f.pmRoot, 'rival', async lease => { lease.assert(); });
 });
 
-test('Git sync refuses an expired operation before the SDK file mutation', async t => {
+test('Git sync refuses a superseded operation before the SDK file mutation', async t => {
   const f = await gitLaneFixture(t); const { id } = f;
   const get = f.client.get.bind(f.client); const history = join(f.pmRoot, 'history', `${id}.jsonl`);
   const before = readFileSync(history, 'utf8');
@@ -78,8 +78,8 @@ test('Git sync refuses an expired operation before the SDK file mutation', async
     const result = await get(...args);
     if (args[1]?.depth === 'full') {
       const path = join(f.pmRoot, 'runtime/swarm/operation.json');
-      const owner = JSON.parse(readFileSync(path, 'utf8')) as { heartbeat: number };
-      owner.heartbeat = Date.now() - 60000; writeFileSync(path, JSON.stringify(owner));
+      const owner = JSON.parse(readFileSync(path, 'utf8')) as { token: string };
+      owner.token = 'superseding-operation'; writeFileSync(path, JSON.stringify(owner));
     }
     return result;
   };

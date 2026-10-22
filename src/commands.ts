@@ -67,7 +67,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
       }
       case 'heartbeat': return await (swarm as SharedTracker).heartbeat(id, textOption(ctx.options.token));
       case 'handoff': return await (swarm as SharedTracker).handoff(id, textOption(ctx.options.to) ?? '', textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
-      case 'reclaim': return await (swarm as SharedTracker).reclaim(Number(textOption(ctx.options.staleAfter)), textOption(ctx.options.to));
+      case 'reclaim': return await (swarm as SharedTracker).reclaim(Number(textOption(ctx.options.staleAfter)), textOption(ctx.options.to), ctx.options.dryRun === true, textOption(ctx.options.parent));
       case 'close': return await (swarm as SharedTracker).close(id, textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
       case 'land': {
         if (repo === undefined) throw new Error(SHARED_LAND_REFUSAL);
@@ -103,7 +103,7 @@ export function register(api: ExtensionApi): void {
     status: { description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
     sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files', 'token'], id: true },
     heartbeat: { description: 'Renew agent liveness, optionally fencing an item', flags: ['agent', 'token'], id: false },
-    reclaim: { description: 'Recover claims from agents that stopped heartbeating', flags: ['agent', 'stale-after', 'to'], id: false },
+    reclaim: { description: 'Recover claims from agents that stopped heartbeating', flags: ['agent', 'stale-after', 'to', 'parent', 'dry-run'], id: false },
     handoff: { description: 'Transfer fenced ownership with receiver context atomically', flags: ['agent', 'to', 'note', 'token'], id: true },
     close: { description: 'Finish and release a fenced claim atomically', flags: ['agent', 'note', 'token'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },

@@ -6,11 +6,13 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-22T19:38:37.318Z"
+updated_at: "2026-10-22T20:56:51.436Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[117]{created_at,author,text}:
+comments[122]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -128,7 +130,12 @@ comments[117]{created_at,author,text}:
   "2026-10-22T19:09:52.422Z",codex-agent,"Implemented PRRT_kwDOVLY-P86vVb9l with hashed host/boot/PID-namespace identity on requests, pins and operations. Both pin recovery probes and abandoned-head checks now require known matching locality; legacy, malformed, foreign and unverifiable records remain potentially live. Same-class audit adds own-request generation checks, structured empty/lost admission refusal and generation-owned cleanup preserving replacements. README and busy diagnostics describe conservative operator recovery with all writers stopped. Focused direct tests pass 25/25 (14 new plus 11 existing fencing cases), including real non-Git SDK writes and actual killed-owner recovery; no SDK mocks. Four isolated function-only behavioral reverts exit 1: alive 0/9, withSwarmLease 0/4, hostname-only locality 0/2, README 0/1, all zero skips/cancellations. Exact commands and scope evidence are in docs/fenced-leases-verification.md. No proof mutation entered the worktree. The main merge has no pending receipts/history drift; no repair was applied. Types/lint/zero duplication pass; full unchanged npm/Bun gates follow."
   "2026-10-22T19:30:58.735Z",codex-agent,"Local npm release attempt: source suite passes 233/233 with 100/100/100/100 coverage, all other pre-packed gates pass. Packed acceptance finishes 2/3: the Git consumer watch shutdown assertion at test/install.acceptance.ts:102 receives null exit status instead of zero after its unchanged 20-second child deadline; the other packed cases pass. This is incomplete local gate evidence, not an accepted npm gate. Direct Node/native Bun locality probes match. No timeout, assertion or threshold is changed. Run the full Bun gate next and require unchanged npm/Bun acceptance in retry or exact-head CI before handoff. Existing packed latency follow-up remains open; exact result will be distinguished from earlier passing rounds."
   "2026-10-22T19:38:04.398Z",codex-agent,"Candidate handoff: direct/pinned regressions 25/25 and four isolated revert proofs are complete. Local npm source passes 233/233 with full 100/100/100/100 coverage, but packed acceptance is 2/3 (watch shutdown code null); the signal was not retained by the failed assertion, so a 20-second child-deadline explanation remains an inference pending unchanged CI. Local full Bun is still running under contention after passing static gates and early source cases; it is not accepted as a complete gate. Require exact-head CI Node 22 npm, Node 26 npm and full Bun release checks before handoff. If the duplicate local Bun run remains unfinished after complete CI acceptance, interrupt it and retain it as explicitly incomplete evidence. No assertion, deadline, threshold or dependency pin changes. Final remote/review refresh has the same one valid thread, complete comments, no outside-diff findings and main already contained by 754045d. No new PM CLI/SDK defect established; existing follow-ups stay open. Release the claim without closing the item, commit code with append-only evidence, and publish the exact-head CI receipts in the PR description."
-files[34]{path,scope}:
+  "2026-10-22T20:31:36.126Z",codex-agent,"Review round 12: clean feature head pulled; main is already an ancestor. Verify Git operations past the lease using a sleeping Git executable, retain generation checks while allowing synchronous Git work under the live process pin, constrain reclaim to swarm-owned work with parent and dry-run controls, and exercise two recovery contenders against a live successor. Retain conservative unverifiable-locality recovery pending a safe portable identity design. GitHub review metadata is temporarily unavailable due API rate limits; retry before completion."
+  "2026-10-22T20:39:31.890Z",codex-agent,"Latest GitHub read: zero unresolved threads, all thread/comment pagination exhausted; latest substantive CodeRabbit review has no separate Outside diff range findings. Orchestrator findings are tracked as Git lease timeout, reclaim scope/preview, recovery contenders, and README accuracy. Unverifiable-locality auto recovery remains outside this requested implementation and is tracked by pm-swarm-portable-recovery; weakening locality checks would contradict the prior cross-namespace safety fix."
+  "2026-10-22T20:43:27.195Z",codex-agent,"PM-linked round-12 and round-9 regressions pass 22/22, exit 0, zero failures/skips/cancellations, 242326 ms; result persistence is tracking_disabled. Real Git checkout/removal each waits 31 seconds, beyond the unchanged default 30-second lease. Reverting withSwarmLease alone fails both slow-Git cases (0/2); removing the Git exclusive policy fails publication (0/1). Original reclaim and independent marker, parent and workflow-filter removals each fail 0/1. Disposable copies contain all proof changes; production source is never reverted. Full unchanged npm release gate is running; remaining proof receipts will follow."
+  "2026-10-22T20:44:48.267Z",codex-agent,"All round-12 behavioral revert proofs complete in disposable copies: old lease 0/2; Git policy call-site 0/1; old reclaim 0/1; marker filter 0/1; parent scope 0/1; workflow filter 0/1; preview suppression 0/1; unconditional recovery-pin unlink 0/4; parent snapshot comparison 0/1; old README 0/1. Every negative run exits 1 with zero skips/cancellations. Exact node --test patterns and the real-storage interleavings are recorded in docs/fenced-leases-verification.md under Orchestrator review on c920bef. Self-review covers synchronous Git operations in exclusive and sync, reclaim receiver/pool paths, custom workflow states and parent revalidation."
+  "2026-10-22T20:56:51.435Z",codex-agent,"Final PM-linked regression command passes 24/24, exit 0, no failures/skips/cancellations after adding missing-pin and branch-only legacy ownership checks. Git sync generation refusal separately passes 1/1. Initial local npm release run loads the earlier 244-test inventory and encounters an unchanged watch readiness deadline with empty output plus the obsolete Git sync time-expiry fixture; the latter is corrected to supersede ownership, matching the Git policy. The watch retry also fails 0/1 before first output. Stop the already-failed npm process tree (exit 143, incomplete); no full local npm pass is claimed. Full Bun gate is running; exact-head CI must verify the current 246-test inventory and both full release gates. Dedicated CI confirmation is required before attributing local watch readiness to host contention."
+files[35]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -151,6 +158,7 @@ files[34]{path,scope}:
   test/process-helpers.ts,project
   test/review-r10.test.ts,project
   test/review-r11.test.ts,project
+  test/review-r12.test.ts,project
   test/review-r4.test.ts,project
   test/review-r5.test.ts,project
   test/review-r6.test.ts,project
@@ -163,7 +171,7 @@ files[34]{path,scope}:
   test/shared-helpers.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[22]:
+tests[23]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -318,6 +326,13 @@ tests[22]:
     provenance:
       author: codex-agent
       created_at: "2026-10-22T19:08:50.396Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+  - command: node --test --test-reporter=tap test/review-r12.test.ts test/review-r9.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-22T20:36:22.773Z"
       source_kind: local_mutation
       source_ref: feat/fenced-leases-handoff
 docs[3]{path,scope}:

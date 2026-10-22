@@ -207,31 +207,34 @@ export class SharedTracker {
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
-  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease: Lease) {
+  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease: Lease, dryRun = false) {
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
     const files = itemFootprint(item);
     const comments = (item.comments as { text: string; author: string; created_at: string }[]).slice(-3).map(row => ({ ...row, text: row.text.slice(0, 1024) }));
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-    await lease.write(() => this.engine.client.update(id, {
+    if (!dryRun) await lease.write(() => this.engine.client.update(id, {
       author: this.engine.author, force: true, ...(to === undefined ? { status: statuses.open_status } : { assignee: to }),
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
     }));
-    this.tokens.delete(id);
+    if (!dryRun) this.tokens.delete(id);
     return { id, previous_owner: item.assignee, agent: to ?? null, token, context };
   }
 
-  /** Recover nonterminal claims whose principal has stopped heartbeating. */
-  async reclaim(staleAfter: number, to?: string) {
+  /** Preview or recover stale swarm work, preserving unrelated owners and workflow states. */
+  async reclaim(staleAfter: number, to?: string, dryRun = false, parent?: string) {
     to = to?.trim();
     if (!Number.isFinite(staleAfter) || staleAfter <= 0 || (to !== undefined && !to)) throw new Error('reclaim requires --stale-after as positive seconds and a nonempty optional --to');
-    return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
+    /** Share eligibility and fresh-snapshot checks between preview and mutation. */
+    const evaluate = async (lease?: Lease) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const recovered = []; const refused: { id: string; reason: string }[] = [];
       for (const row of (await this.engine.corpus()).items) {
-        if (!row.assignee?.trim() || statusIsTerminal(row.status, statuses)) continue;
+        if (!row.assignee?.trim() || statusIsTerminal(row.status, statuses) || (parent !== undefined && row.parent !== parent)) continue;
+        if (row.swarm_token === undefined && row.swarm_claimed_at === undefined && row.swarm_branch === undefined) continue;
+        if (row.status !== statuses.open_status && row.status !== statuses.in_progress_status) { refused.push({ id: row.id, reason: 'Workflow status is outside open or in-progress work; preserve it for explicit review' }); continue; }
         const recorded = typeof row.swarm_claimed_at === 'string' ? row.swarm_claimed_at : row.updated_at;
         const observed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         const times = [recorded, observed].map(value => value === undefined ? NaN : Date.parse(value)).filter(Number.isFinite);
@@ -245,10 +248,11 @@ export class SharedTracker {
         const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        recovered.push(await this.transfer(item, to, note, lease));
+        recovered.push(await this.transfer(item, to, note, lease!, dryRun));
       }
-      return { recovered, refused };
-    });
+      return { dry_run: dryRun, recovered, refused };
+    };
+    return dryRun ? evaluate() : withSwarmLease(this.engine.pmRoot, this.engine.author, evaluate);
   }
 
   /** Finish a fenced claim and release its ownership in one durable mutation. */
