@@ -6,11 +6,11 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-22T10:45:42.636Z"
+updated_at: "2026-10-22T12:12:38.738Z"
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[102]{created_at,author,text}:
+comments[105]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -113,7 +113,10 @@ comments[102]{created_at,author,text}:
   "2026-10-22T10:16:22.089Z",codex-agent,"Independent continuation verification: node --test test/review-r7.test.ts passes 4/4, zero failures/skips/cancellations. Isolated behavior reverts retain the final tests and pinned SDK: node --test --test-name-pattern=\"malformed swarm_token\" test/review-r7.test.ts fails 0/2 when only decimalFencingGeneration is restored to unconditional BigInt; node --test --test-reporter=tap --test-name-pattern=\"does not abort reclaim\" test/review-r7.test.ts fails 0/1 when only the reclaim token guard is removed; node --test --test-reporter=tap --test-name-pattern=\"Git lane pool return\" test/review-r7.test.ts fails 0/1 when only gitLanePoolRefusal permits pool return. Each exits 1 with zero cancellations; failures are the expected raw SyntaxError or incorrect recovered IDs. Reverting only the README sentences also fails its one documentation assertion. Package source was never mutated for proof. Existing file/doc/test links are reused; the registered test is running through pm test with --only-last --progress --timeout 600. Typecheck, lint, duplication and changelog generation passed. Strict health passes with fresh global configuration; default local health fails only because an externally installed pm-github host version differs from the pinned host. Full npm and Bun gates follow at unchanged thresholds."
   "2026-10-22T10:34:36.351Z",codex-agent,"Registered regression receipt: pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600 passed 4/4, exit 0, zero test failures/skips/cancellations; runner elapsed 282252 ms. Project test-result tracking is disabled, so preserve this receipt in comments. Local isolated npm release:check passed identity, types, lint, duplication (0/5148 lines, 49 sources), build and docstrings (25 files, 74 declarations). Its full suite reached both unchanged watch-process output deadline failures under high host contention; the new review regression still passed all four cases in that run. Stopped the already-failed local gate rather than claiming incomplete checks. No timeout, exclusion, threshold or dependency changed. Push this candidate for complete npm and Bun validation on CI; release acceptance remains pending until the exact candidate passes."
   "2026-10-22T10:45:36.769Z",codex-agent,"Candidate 684ce997bde8f25a42fe23dbee78fafb76dd7e04 passes CI https://github.com/unbraind/pm-swarm/actions/runs/39764229670 on the first attempt. Node 22 npm and Node 26 npm pipelines each pass 196/196 source tests and 3/3 packed npm/Bun acceptance; full bun run release:check also passes 196/196 and 3/3. All successful suites have zero failures/skips/cancellations. All 25 authored source files meet unchanged 100 percent statements/branches/functions/lines; duplication is 0/5148 lines across 49 sources, zero clones; all 74 declarations are documented; production audit zero vulnerabilities. Strict clean-clone pm health, identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Both unchanged watch tests that missed initial output deadlines locally pass in CI with no retry. The interrupted local gate remains incomplete evidence, not a pass. Fresh review read still has exactly the original two unresolved threads and the same latest review, with complete pagination; no Outside diff range findings or new PM CLI/SDK bugs. The following handoff commit changes only PM receipts, claim release and verification docs, and will receive complete CI too. Leave in_progress for orchestrator verification."
-files[28]{path,scope}:
+  "2026-10-22T11:46:46.232Z",codex-agent,"New review round on 8fa9283: clean worktree, remote head pulled and origin/main already an ancestor. One unresolved thread PRRT_kwDOVLY-P86vKOZC with all comments and no remaining pagination; latest CodeRabbit review has no Outside diff range findings. Valid: receiver next parses free-string swarm_handoff without guarding JSON or object shape, leaking SyntaxError/TypeError. Validate decoded object shape and fencing generation before returning context or remembering a token. Cover SDK preview/claim, CLI typed classification, immutable item histories and valid receiver continuation in real non-Git trackers. Review other parsers for the same packet defect; retain earlier round evidence and unchanged release gates."
+  "2026-10-22T11:51:34.323Z",codex-agent,"PRRT_kwDOVLY-P86vKOZC fixed and independently verified. node --test test/review-r8.test.ts passes 2/2 directly; pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600 passes 2/2, exit 0, zero failures/skips/cancellations (16358 ms runner elapsed). New test file is linked; existing source/doc links reused. Behavioral revert proof: restore ONLY SharedTracker.next from 8fa9283 in an isolated copy, retaining the final helper, tests and pinned SDK. node --test --test-reporter=tap test/review-r8.test.ts exits 1 with 0/2 passing, 2 failures, zero cancellations/skips. SDK failure is raw SyntaxError instead of StaleFenceError; CLI failure is absent structured swarm_stale_fence classification. Package source was never mutated for proof. Whole-PR search finds this as the only handoff JSON reader; malformed/missing packet generations are also refused, even if item evidence is equally absent or malformed. Runtime/settings/internal runner readers have different corruption contracts and are not handoff decoders. Types, lint and duplication pass unchanged (0/5235 lines across 50 sources, zero clones). Full npm and Bun gates follow."
+  "2026-10-22T12:12:36.639Z",codex-agent,"Round 8 local acceptance complete: npm run release:check AND bun run release:check both exit 0 on the unchanged final source/tests/package inputs. Each passes 198/198 source tests and 3/3 packed npm/Bun consumer tests, with zero failures/skips/cancellations. All 25 authored source files meet 100 percent statements/branches/functions/lines at unchanged thresholds; duplication 0/5235 lines across 50 sources, zero clones; all 75 declarations documented; production audit zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish-attestation checks pass. Gates use Node 26 with fresh home/global and isolated Git configuration; strict tracker health passes. No local timeout or retry occurred in this round. Regression 2/2 passes directly and via pinned PM; the isolated next-only revert fails 0/2 by assertion with zero cancellations. One valid thread fixed, none refused; no Outside diff range findings or further handoff decoder instance. Existing follow-ups remain open; no new PM CLI/SDK bug observed. Release the claim without closing the item for orchestrator verification; the commit will receive its complete CI too."
+files[29]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -136,13 +139,14 @@ files[28]{path,scope}:
   test/review-r5.test.ts,project
   test/review-r6.test.ts,project
   test/review-r7.test.ts,project
+  test/review-r8.test.ts,project
   test/scale-helpers.ts,project
   test/scale-worker.ts,project
   test/scale.acceptance.ts,project
   test/shared-helpers.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[18]:
+tests[19]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -269,6 +273,13 @@ tests[18]:
     provenance:
       author: pi-agent
       created_at: "2026-10-22T09:57:47.558Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+  - command: node --test test/review-r8.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-22T11:50:30.625Z"
       source_kind: local_mutation
       source_ref: feat/fenced-leases-handoff
 docs[3]{path,scope}:

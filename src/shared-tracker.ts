@@ -16,6 +16,16 @@ function decimalFencingGeneration(value: unknown): string | undefined {
   return /^\d+$/.test(current) ? current : undefined;
 }
 
+/** Decode receiver context only when its object shape and decimal fence are valid. */
+function parseHandoffContext(id: string, raw: string, token: unknown): Record<string, unknown> {
+  let parsed: unknown;
+  try { parsed = JSON.parse(raw); } catch { throw new StaleFenceError(id); }
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new StaleFenceError(id);
+  const context = parsed as Record<string, unknown>;
+  if (typeof context.token !== 'string' || decimalFencingGeneration(context.token) === undefined || context.token !== token) throw new StaleFenceError(id);
+  return context;
+}
+
 /** Refuse returning a Git lane to the pool; explicit reassignment keeps its branch. */
 function gitLanePoolRefusal(branch: unknown, to: string | undefined): string | undefined {
   if (to !== undefined || !branch) return undefined;
@@ -81,8 +91,7 @@ export class SharedTracker {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const incoming = corpus.items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
       if (incoming !== undefined) {
-        const context = JSON.parse(String(incoming.swarm_handoff)) as Record<string, unknown>;
-        if (context.token !== incoming.swarm_token) throw new StaleFenceError(incoming.id);
+        const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
         if (!dryRun) this.tokens.set(incoming.id, String(incoming.swarm_token));
         return { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
       }

@@ -280,3 +280,34 @@ Every successful suite has zero failures, skips and cancellations. Coverage repo
 The final review refresh retains exactly the original two unresolved threads, the same latest substantive review, complete pagination and no Outside diff range findings. Both findings are valid and fixed; no additional instance was found. No new PM CLI/SDK bug was observed. Existing packed latency, cleanup and other-Git-command error follow-ups remain open.
 
 The handoff commit adds only PM receipts, releases the claim without closing the item, and records this verification. Its full CI is checked separately before handoff. Application source, tests and package inputs remain unchanged from the accepted candidate.
+
+## Review round on 8fa9283
+
+The worktree started clean with no unpushed commits. The remote head was pulled and fresh main was already an ancestor. The prior round remains accepted on its exact pushed head; its tests and evidence were retained. All unresolved threads and comments were fetched without remaining pagination. The latest CodeRabbit review, submitted 2026-10-22T11:10:00Z, has one finding and no Outside diff range section.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vKOZC | Valid. Receiver `next` parsed a free-string packet without checking JSON syntax or decoded shape. Invalid JSON leaked `SyntaxError`; `null` leaked `TypeError`. The decoder now rejects malformed JSON, non-object/array contexts and invalid or mismatched decimal generations with `StaleFenceError` before returning context or remembering a token. CLI classification remains exit 2 with structured `swarm_stale_fence`. |
+
+Whole-PR review found only one reader of `swarm_handoff`; both handoff and reclaim construct its packet with `JSON.stringify`. Missing and malformed packet generations are refused even when the item generation is also missing or equally malformed, preventing an unusable receiver token. The other JSON readers handle runtime records, settings or an internal test-runner protocol, not receiver packets; their existing corruption contracts remain unchanged.
+
+`node --test test/review-r8.test.ts` passes 2/2 with zero failures, skips or cancellations. The SDK case covers malformed JSON, null, string/number/boolean primitives, arrays, absent/numeric/non-decimal/mismatched packet generations, and both preview and claim modes. It verifies unchanged item snapshots and byte-identical histories after refusal. Restoring a valid packet preserves preview without granting ownership, then permits receiver continuation. Real CLI cases cover malformed JSON and null in both modes, inspect the structured error code, preserve history, and accept a repaired valid packet. All fixtures are non-Git trackers, use the pinned real SDK and host, and have no Git executable on the CLI path.
+
+Type checking, lint and the unchanged zero-duplication gate pass (0/5235 lines, 50 sources, zero clones). Dependencies and all release thresholds remain unchanged. Dist remains ignored and is rebuilt by release validation.
+
+The repo-pinned linked runner also passes 2/2, exit 0, zero test failures/skips/cancellations (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 16358 ms including runner overhead).
+
+Behavioral revert proof restores **only `SharedTracker.next` from 8fa9283** in an isolated copy while retaining the final parser helper, regression tests and pinned SDK. `node --test --test-reporter=tap test/review-r8.test.ts` exits 1: **0/2 pass, 2 failures, zero skips/cancellations**. The SDK case receives raw `SyntaxError` instead of `StaleFenceError`; the CLI case loses structured `swarm_stale_fence` classification. Source imports require no dist rebuild. No proof mutation entered the package worktree.
+
+### Local release acceptance
+
+Both full release gates pass on the final source/tests/package inputs with Node 26, fresh home/global configuration and isolated Git configuration:
+
+| Exact gate command | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| `npm run release:check` | 198/198 | 3/3 | 100/100/100/100 |
+| `bun run release:check` | 198/198 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. All 25 authored source files are reported, all 75 declarations are documented, duplication is 0/5235 lines across 50 sources with zero clones, and production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Isolated strict tracker health passes. No local timeout or retry occurred in this round; the prior round's interrupted gate remains separate historical evidence. Dist is ignored and rebuilt by both gates.
+
+The source commit includes the code, regression, README clarification, these verification receipts and append-only PM history. The claim is released without closing the item; the complete pushed-head CI is checked before handoff. Existing packed latency, cleanup and other-Git-command error follow-ups remain open. No new PM CLI/SDK bug was observed. No review reply, resolution, mention, PR merge or package release is performed.
