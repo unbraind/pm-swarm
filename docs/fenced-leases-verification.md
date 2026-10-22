@@ -352,3 +352,41 @@ Every suite has zero failures, skips and cancellations. Neither gate needed a re
 The pinned PM runner passes the focused 11/11 suite (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 5128 ms including runner overhead). Test-result persistence is disabled by project policy, so the receipt is recorded in item comments. Strict isolated `pm health --strict-exit --require-merge-drivers` passes, including integrity and history drift checks. The existing history prefix is byte-identical; only new records are appended.
 
 The final remote/review refresh retains the same head, main ancestry, two unresolved threads, complete comment pagination and latest review; there are no additional or Outside diff range findings. Both findings are fixed; no refusal is needed. No new PM CLI/SDK defect was observed. Existing packed cleanup, packed latency, other-Git-command errors and development-tool advisory follow-ups remain open. The item stays in progress with its claim released for orchestrator verification. The code and PM evidence are committed together; exact pushed-head CI is checked before handoff.
+
+## Review round on 936161b
+
+The worktree began clean, with no draft edits or unpushed commits. The remote head was pulled and main was already an ancestor. All review threads and complete comments were fetched with no remaining pagination. The latest substantive review (2026-10-22T16:34:29Z) has one actionable finding and no Outside diff range findings. Previous fixes and acceptance remain intact.
+
+| Thread | Verified fix |
+| --- | --- |
+| PRRT_kwDOVLY-P86vSKfI | Valid. Reclaim decided eligibility from an old corpus row but transferred a freshly read item without checking for external changes. It now requires matching ownership, status, revision, token, claim timestamp and Git identity fields, then re-reads the independent owner heartbeat before transfer. Observed changes or a fresh heartbeat skip that item while unchanged stale items still recover. |
+
+Same-class whole-PR review also found terminal reap trusting corpus lifecycle/ownership. Shared reap now compares a fresh item before release; Git reap does so before cleanup or release, preserving reopened/reassigned work and its worktree. Both reuse `recoverySnapshotMatches`. Selection and owned mutation paths already read fresh authoritative items, and lease checks continue to guard every SDK mutation attempt. The core SDK can still write after the last check because it does not join the swarm pin; these checks are bounded revalidation, not an atomic conditional-write contract for external writers. The README now describes the final-check boundary, superseding the older round's initial-snapshot heartbeat policy and updating its documentation regression.
+
+`node --test --test-reporter=tap test/review-r10.test.ts test/review-r5.test.ts` passes 15/15, zero failures/skips/cancellations. The ten new cases include two nine-change matrices (pool and receiver transfers), fresh/stale/invalid/removed heartbeat rechecks, and reopened/reassigned terminal reap in both coordination modes. The matrices preserve byte-identical post-external-write histories and complete item snapshots, while unchanged stale controls still recover. A real Git-free CLI performs owner reassignment; all other writes use the real pinned SDK or agent heartbeat. No SDK response is substituted. Reap races mutate real storage after obtaining the old corpus, including when run against the reverted implementation.
+
+Independent isolated copies retain final tests and the pinned SDK. Source imports require no dist rebuild. Each behavioral revert exits 1 with zero skips/cancellations:
+
+| Only reverted behavior | Exact command | Result |
+| --- | --- | --- |
+| `SharedTracker.reclaim` restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="reclaim " test/review-r10.test.ts` | 1/6 pass, five failures: external changes/fresh heartbeat are reclaimed and new stale/invalid heartbeat evidence is omitted; the removed-heartbeat control still passes |
+| `SharedTracker.reap` restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="shared reap" test/review-r10.test.ts` | 0/2; reopened claims are released or foreign reassignment produces an SDK ownership error |
+| `Swarm.reapLanes` restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="Git reap" test/review-r10.test.ts` | 0/2; stale terminal cleanup removes worktrees before release or refusal |
+| Only README restored from 936161b | `node --test --test-reporter=tap --test-name-pattern="README defines" test/review-r5.test.ts` | 0/1; the documented revalidation and final-check boundary are absent |
+
+No proof mutation entered the worktree. Types, lint and unchanged zero duplication pass (0/5494 lines across 53 sources). Dependency pins, deadlines, coverage scope and all release thresholds are unchanged. Dist remains ignored and will be rebuilt by both complete release gates.
+
+### Local release acceptance
+
+Both complete gates pass on final source/tests with Node 26, fresh home/global state and isolated Git configuration:
+
+| Exact command | Source tests | Packed npm/Bun tests | Coverage |
+| --- | --- | --- | --- |
+| `npm run release:check` | 219/219 | 3/3 | 100/100/100/100 |
+| `bun run release:check` | 219/219 | 3/3 | 100/100/100/100 |
+
+Every suite has zero failures, skips and cancellations. Both gates pass first attempt with no timeout or retry. Coverage reports all 26 authored source files, including the new shared recovery predicate; all 76 declarations are documented. Duplication is zero across 53 sources and 5494 lines. Production audit reports zero vulnerabilities. Identity/privacy, types, lint, build, package contents, changelog and publish attestation pass. Dist is ignored and rebuilt by both gates.
+
+The pinned PM linked command also passes 15/15, exit 0 (`pm test pm-swarm-shared-tracker --run --only-last --progress --timeout 600`; 12871 ms including runner overhead). Result persistence is disabled by project policy; receipts are retained in item comments. Strict isolated tracker health passes, including history drift and integrity. The previous history prefix is preserved byte-for-byte with append-only new records.
+
+Final remote/review refresh confirms the same branch head, main ancestry, single valid unresolved thread, complete comments and latest review, with no additional or Outside diff range findings. No refusal is needed. No new PM CLI/SDK defect was observed; existing packed latency, cleanup, other-Git-command error and development-tool advisory follow-ups remain open. The code, tests and PM evidence are committed together. The item remains in progress with its claim released for orchestrator verification; exact pushed-head CI is checked before handoff. Core writers after final revalidation remain outside the documented swarm pin contract.

@@ -43,5 +43,6 @@ for (const transport of ['SDK', 'CLI'] as const) {
 
 test('README defines the per-item reclaim staleness snapshot boundary', () => {
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
-  assert.match(readme, /Each item's eligibility is fixed when reclaim reads that evidence; later heartbeat renewals do not change that decision in the current invocation\./);
+  assert.match(readme, /Before transfer it checks a fresh item against the corpus snapshot and re-reads the owner's heartbeat/);
+  assert.match(readme, /Core SDK writes and agent-wide heartbeats after that final check can still race with recovery/);
 });

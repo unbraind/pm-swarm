@@ -16,6 +16,7 @@ import { settings } from './settings.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
+import { recoverySnapshotMatches } from './recovery.ts';
 
 /** Bind all operations to one real repository, tracker, and caller identity. */
 export class Swarm {
@@ -256,7 +257,8 @@ export class Swarm {
 
   /** Check ancestry and remove registrations under the shared repository lease. */
   private async reapLanes(dryRun: boolean, lease: Lease) {
-    const lanes = await this.lanes(); const config = await settings(this.pmRoot);
+    const corpus = await this.corpus(); const snapshots = new Map(corpus.items.map(item => [item.id, item]));
+    const lanes = await this.lanes(corpus); const config = await settings(this.pmRoot);
     const removed: string[] = []; const released: string[] = [];
     const cleanup: { id: string; action: string }[] = []; const refused: { id: string; reason: string }[] = [];
     for (const lane of lanes) {
@@ -270,6 +272,7 @@ export class Swarm {
       if (refusal !== null) { refused.push({ id: lane.id, reason: refusal }); continue; }
       const missing = !existsSync(path);
       if (matching !== undefined && matching.split('\0').some(field => field.startsWith('locked'))) { refused.push({ id: lane.id, reason: 'Lane worktree is locked' }); continue; }
+      if (!recoverySnapshotMatches(snapshots.get(lane.id)!, (await this.client.get(lane.id, { depth: 'full' })).item)) continue;
       if (matching !== undefined) cleanup.push({ id: lane.id, action: missing ? 'pruned_registration' : 'removed_worktree' });
       else if (!missing) cleanup.push({ id: lane.id, action: 'removed_orphan' });
       if (!dryRun) {

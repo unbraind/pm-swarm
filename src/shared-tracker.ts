@@ -6,6 +6,7 @@ import { Swarm } from './swarm.ts';
 import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
+import { recoverySnapshotMatches } from './recovery.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -147,9 +148,11 @@ export class SharedTracker {
   async reap(dryRun = false) {
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       const released: string[] = []; const refused: { id: string; reason: string }[] = [];
-      for (const lane of await this.sharedLanes(undefined, false)) {
+      const corpus = await this.engine.corpus(); const snapshots = new Map(corpus.items.map(item => [item.id, item]));
+      for (const lane of await this.sharedLanes(corpus, false)) {
         if (!lane.terminal) continue;
         if (lane.agent !== this.engine.author) { refused.push({ id: lane.id, reason: 'Terminal claim belongs to another agent; use reap --agent with its principal' }); continue; }
+        if (!recoverySnapshotMatches(snapshots.get(lane.id)!, (await this.engine.client.get(lane.id, { depth: 'full' })).item)) continue;
         if (!dryRun) await lease.write(() => this.engine.client.release(lane.id, { author: this.engine.author }));
         released.push(lane.id);
       }
@@ -235,10 +238,13 @@ export class SharedTracker {
         if (times.length === 0) { refused.push({ id: row.id, reason: 'No valid claim or heartbeat timestamp; repair liveness evidence before reclaiming' }); continue; }
         if (Date.now() - Math.max(...times) < staleAfter * 1000) continue;
         const item = (await this.engine.client.get(row.id, { depth: 'full' })).item;
+        if (!recoverySnapshotMatches(row, item)) continue;
         if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
         const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
         if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
-        const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
+        const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
+        if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
+        const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
         recovered.push(await this.transfer(item, to, note, lease));
       }
       return { recovered, refused };
