@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { linkSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
@@ -52,7 +53,16 @@ export function touchHeartbeat(pmRoot: string, author: string): string {
 }
 
 /** One process-owned operation lease, never stolen from a living writer. */
-interface Owner { pid: number; process_start?: string; token: string; heartbeat: number }
+interface Owner { pid: number; process_start?: string; locality?: string; token: string; heartbeat: number }
+
+/** Hash host-boot and PID-namespace identity; unavailable probes disable automatic recovery. */
+export function leaseLocality(): string | undefined {
+  try {
+    const boot = readFileSync('/proc/sys/kernel/random/boot_id', 'utf8');
+    const namespace = readlinkSync('/proc/self/ns/pid');
+    return createHash('sha256').update(JSON.stringify([hostname(), boot, namespace])).digest('hex');
+  } catch { return undefined; }
+}
 
 /** Distinguish reused Linux process IDs; unavailable platforms retain conservative live pins. */
 export function processStart(pid: number): string | undefined {
@@ -61,7 +71,8 @@ export function processStart(pid: number): string | undefined {
 }
 
 /** Keep live process pins conservative, including permission-denied probes and PID reuse. */
-function alive(owner: Owner): boolean {
+function alive(owner: Owner, locality: string | undefined): boolean {
+  if (locality === undefined || owner.locality !== locality) return true;
   try {
     process.kill(owner.pid, 0);
     const birth = processStart(owner.pid);
@@ -88,33 +99,36 @@ export interface Lease {
 export async function withSwarmLease<T>(pmRoot: string, author: string, operation: (lease: Lease) => Promise<T>, options: LeaseOptions = {}): Promise<T> {
   const leaseMs = options.leaseMs ?? 30000; const renewMs = options.renewMs ?? 5000; const waitMs = options.waitMs ?? 300000;
   const root = swarmRuntime(pmRoot); const path = join(root, 'operation.json'); const pin = join(root, 'operation-pin.json');
-  const identity = { pid: process.pid, process_start: processStart(process.pid) }; const token = randomUUID(); const started = Date.now();
+  const identity = { pid: process.pid, process_start: processStart(process.pid), locality: leaseLocality() }; const token = randomUUID(); const started = Date.now();
   const candidate = join(root, `request-${String(started).padStart(16, '0')}-${token}.json`);
   let touched = Date.now(); touchHeartbeat(pmRoot, author);
   publish(candidate, { ...identity, token });
   try {
     for (;;) {
-      const first = join(root, readdirSync(root).filter(name => name.startsWith('request-') && name.endsWith('.json')).sort()[0]!);
+      if (readRuntime<Owner>(candidate)?.token !== token) throw new StaleFenceError('operation request');
+      const name = readdirSync(root).filter(name => name.startsWith('request-') && name.endsWith('.json')).sort()[0];
+      if (name === undefined) throw new StaleFenceError('operation request');
+      const first = join(root, name);
       const head = readRuntime<Owner>(first);
       if (head?.token === token) {
         try { linkSync(candidate, pin); break; }
         catch (error) { if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST')) throw error; }
         const owner = readRuntime<Owner>(pin);
-        if (owner !== undefined && !alive(owner)) {
+        if (owner !== undefined && !alive(owner, identity.locality)) {
           const release = await retryLock(() => acquireLock(pmRoot, 'swarm-recovery', 30, author, false, false, 0));
           try {
             const current = readRuntime<Owner>(pin);
-            if (current?.token === owner.token && !alive(current)) unlinkSync(pin);
+            if (current?.token === owner.token && !alive(current, identity.locality)) unlinkSync(pin);
           } finally { await release(); }
         }
-      } else if (head !== undefined && !alive(head)) {
+      } else if (head !== undefined && !alive(head, identity.locality)) {
         rmSync(first, { force: true });
       }
-      if (Date.now() - started >= waitMs) throw new Error('swarm_busy: live operation still holds the tracker; retry after it finishes');
+      if (Date.now() - started >= waitMs) throw new Error('swarm_busy: live or unverifiable owner holds the tracker; retry after it finishes or inspect abandoned runtime records with all writers stopped');
       if (Date.now() - touched >= renewMs) { touchHeartbeat(pmRoot, author); touched = Date.now(); }
       await delay(50 + Math.random() * 150);
     }
-  } finally { unlinkSync(candidate); }
+  } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
   let failure: unknown;
   /** Validate both time and generation before renewing or dispatching a write. */
   const assert = () => {
