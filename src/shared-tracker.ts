@@ -237,6 +237,7 @@ export class SharedTracker {
       const recovered = []; const refused: { id: string; reason: string }[] = [];
       for (const row of (await this.engine.corpus()).items) {
         if (row.tags.includes(RESOURCE_TAG) || !row.assignee?.trim() || statusIsTerminal(row.status, statuses) || (parent !== undefined && row.parent !== parent)) continue;
+        if (row.assignee === this.engine.author) continue;
         if (row.swarm_token === undefined && row.swarm_claimed_at === undefined && row.swarm_branch === undefined) continue;
         if (row.status !== statuses.open_status && row.status !== statuses.in_progress_status) { refused.push({ id: row.id, reason: 'Workflow status is outside open or in-progress work; preserve it for explicit review' }); continue; }
         const recorded = typeof row.swarm_claimed_at === 'string' ? row.swarm_claimed_at : row.updated_at;

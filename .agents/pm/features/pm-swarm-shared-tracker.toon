@@ -6,11 +6,11 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-22T21:08:21.674Z"
+updated_at: "2026-10-22T22:06:09.241Z"
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
-comments[123]{created_at,author,text}:
+comments[126]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
   "2026-10-20T10:07:34.038Z",codex-agent,"Correction after tracing refusal handling: asynchronous method rejections bypassed runCommand catch because it returned promises without awaiting them. This is a package dispatcher issue, not a proven host JSON/human gap. Await operations inside the existing expected-error boundary so refusals consistently preserve the intended exit 2 and full actionable message. Regression assertions cover strict overlap, missing explicit files and Git-only landing refusals."
@@ -134,7 +134,10 @@ comments[123]{created_at,author,text}:
   "2026-10-22T20:44:48.267Z",codex-agent,"All round-12 behavioral revert proofs complete in disposable copies: old lease 0/2; Git policy call-site 0/1; old reclaim 0/1; marker filter 0/1; parent scope 0/1; workflow filter 0/1; preview suppression 0/1; unconditional recovery-pin unlink 0/4; parent snapshot comparison 0/1; old README 0/1. Every negative run exits 1 with zero skips/cancellations. Exact node --test patterns and the real-storage interleavings are recorded in docs/fenced-leases-verification.md under Orchestrator review on c920bef. Self-review covers synchronous Git operations in exclusive and sync, reclaim receiver/pool paths, custom workflow states and parent revalidation."
   "2026-10-22T20:56:51.435Z",codex-agent,"Final PM-linked regression command passes 24/24, exit 0, no failures/skips/cancellations after adding missing-pin and branch-only legacy ownership checks. Git sync generation refusal separately passes 1/1. Initial local npm release run loads the earlier 244-test inventory and encounters an unchanged watch readiness deadline with empty output plus the obsolete Git sync time-expiry fixture; the latter is corrected to supersede ownership, matching the Git policy. The watch retry also fails 0/1 before first output. Stop the already-failed npm process tree (exit 143, incomplete); no full local npm pass is claimed. Full Bun gate is running; exact-head CI must verify the current 246-test inventory and both full release gates. Dedicated CI confirmation is required before attributing local watch readiness to host contention."
   "2026-10-22T21:08:13.554Z",codex-agent,"CI run 39853393648, attempt 1, passes exact code head 6048f8508d176ff0c1052e7087ecf889ba3818fb. Node 22 npm release steps, Node 26 npm release steps and the complete Bun release command each pass 246/246 source plus 3/3 packed npm/native Bun acceptance, zero failures/skips/cancellations. All four coverage dimensions remain 100 percent across 26 authored files; strict clean-clone health, identity/privacy, typecheck, lint, zero duplication, 78 documented declarations, production audit with zero vulnerabilities, package allowlist, changelog and publish attestation pass. The unchanged watch checks pass in each CI execution, providing retry evidence for local readiness timeouts. Final PM-linked command passes 24/24 in 240738 ms. Stop redundant local Bun after full CI passes; its local run remains incomplete. All ten revert proofs are recorded in the verification document. Release this claim without closing the item; portable recovery stays open in pm-swarm-portable-recovery."
-files[35]{path,scope}:
+  "2026-10-22T21:52:38.971Z",codex-agent,"Late review round: final fetch found two valid new threads from the review on 060c407, PRRT_kwDOVLY-P86vYdNt (verification introduction understates Git operation/pin fencing) and PRRT_kwDOVLY-P86vYdN9 (own stale assignments differ between preview and apply because apply renews the invoker heartbeat). The latest CodeRabbit body has no separate Outside diff range findings and all thread/comment pages are complete. First PR #15 receipt c79f544 passes full CI 39859607819 at 253 source plus 3 packed per npm/Bun execution. Return to #12 now, skip invoking-principal assignments consistently, correct the current documentation boundary, add native CLI/document regressions and isolated revert proofs, and refresh #15 after the new #12 gate."
+  "2026-10-22T21:58:06.668Z",codex-agent,"Late-review fixes pass PM-linked node --test --test-reporter=tap test/review-r13.test.ts: 2/2, zero failures/skips/cancellations, 12536 ms. Isolated function behavior revert removes only the invoker assignment guard and fails the native preview/apply regression 0/1, exit 1; restoring only the old Git ownership sentence fails the current-introduction regression 0/1, exit 1. Both have no skips/cancellations and use current real SDK fixtures. Current verification introduction also distinguishes shared expiry, blocking Git process pins and locality-gated recovery. Post-install typecheck/lint and zero duplication pass. The first typecheck ran during npm ci and found tsc unavailable; post-install checks supersede that setup failure. Latest SDK reads 2026.10.22; pinned 2026.10.17 remains unchanged. Exact commands and thread mapping are in docs/fenced-leases-verification.md under Late review on 060c407. Full corrected-head release CI follows before updating the dependent resource branch again."
+  "2026-10-22T22:06:06.122Z",codex-agent,"Corrected-head full CI 39861462556, attempt 1, passes 78b5d64a8a58dcfcec81d2ecaf3d24ec9ef1c1b5. npm Node 22, npm Node 26 and the complete Bun release gate each pass 248/248 source plus 3/3 packed acceptance, zero suite failures/skips/cancellations. Four coverage dimensions remain 100 percent across 26 authored files; strict tracker health, identity/privacy, typecheck, lint, zero duplication, 78 documented declarations, zero production vulnerabilities, package contents, changelog and publish attestation pass. Both new thread regressions and all prior slow-Git/recovery/ownership tests are included. Both new behavioral reverts fail 0/1 as recorded. Release this claim without closing the item; the receipt leaves application/package inputs unchanged and receives its own CI before refreshing PR #15 again. Threads are not replied to or resolved."
+files[36]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -158,6 +161,7 @@ files[35]{path,scope}:
   test/review-r10.test.ts,project
   test/review-r11.test.ts,project
   test/review-r12.test.ts,project
+  test/review-r13.test.ts,project
   test/review-r4.test.ts,project
   test/review-r5.test.ts,project
   test/review-r6.test.ts,project
@@ -170,7 +174,7 @@ files[35]{path,scope}:
   test/shared-helpers.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[23]:
+tests[24]:
   - command: node --test test/shared-tracker.test.ts
     scope: project
     provenance:
@@ -332,6 +336,13 @@ tests[23]:
     provenance:
       author: codex-agent
       created_at: "2026-10-22T20:36:22.773Z"
+      source_kind: local_mutation
+      source_ref: feat/fenced-leases-handoff
+  - command: node --test --test-reporter=tap test/review-r13.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-22T21:55:47.440Z"
       source_kind: local_mutation
       source_ref: feat/fenced-leases-handoff
 docs[3]{path,scope}:

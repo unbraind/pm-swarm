@@ -6,9 +6,11 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-21T21:01:06.878Z"
-updated_at: "2026-10-22T21:43:34.476Z"
+updated_at: "2026-10-22T22:21:18.227Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
-comments[21]{created_at,author,text}:
+comments[23]{created_at,author,text}:
   "2026-10-21T21:01:11.602Z",codex-agent,"Overlap recheck: core CLI exposes item claim/release and SDK locks/workspace transactions, not named non-file resource reservations. PR #12 owns shared operation lease correctness and fenced item handoff. pm-rl process.ts reserveProcessJob reserves trainer budget allowances per job, not exclusive named environments, ports, datasets or deployment slots. This feature reuses tracker claims and #12 operation leases, adds a resource model and refuses unsupported backend coordination; no worktree lanes are added. Registry reports pm CLI 2026.10.21; tracker writes use the pinned 2026.10.17 host."
   "2026-10-21T21:06:36.873Z",codex-agent,"Design: one explicitly tagged resource item per physical slot, using native assignee plus the existing decimal swarm_token and a durable resource expiry. Reserve, renew, release and bounded publication update through the same operation lease as PR #12 claims. Resource items are excluded from work selection and stale-agent recovery. A typed ResourceBackend owns serialization and atomic publication; its refusal propagates with no fallback. The built-in local tracker adapter refuses service-capable storage configurations before creating a local operation pin. Hosted provider acceptance is not claimed."
   "2026-10-21T21:10:14.329Z",codex-agent,"Public-corpus proof passed: committed public pm-ops tracker at eba7d5262fd75e67afce0caad29dae7dc7dfbaeb; 146 certified items, 300 baseline files, 3689055 bytes made read-only in a non-Git scratch tracker. One new synthetic resource completed 7 successful mutations, 1 busy refusal and 1 stale refusal, ending generation 4. All 300 baseline SHA-256 digests remained unchanged. Compact final JSON was 89 bytes. Measured coordination/read phase: 41224 ms; test case: 42723 ms. Git was absent from PATH for the actual CLI status check. No source tracker or hosted data was changed."
@@ -30,7 +32,9 @@ comments[21]{created_at,author,text}:
   "2026-10-22T21:31:18.426Z",codex-agent,"Combined PM-linked regression run completes 27/28, no skips/cancellations, 301569 ms. The sole failure is the unchanged native resource CLI case: its final release correctly refuses an expired token after a 185562 ms scenario with an explicit 120-second renewal. Every resource SDK/process/exclusion and prerequisite round-12/Git sync case passes. A focused CLI retry is running unchanged; full dedicated-runner npm/Bun CI must validate this timing-sensitive scenario before acceptance. No TTL, assertion or existing deadline is changed. The failed local run remains failed evidence, while the reclaim-filter negative proof is 0/1 as expected."
   "2026-10-22T21:32:40.879Z",codex-agent,"The unchanged native CLI retry passes 1/1, exit 0, no skips/cancellations, 121993 ms total and 116915 ms case time. The earlier combined 27/28 result remains a failed run; the sole failing case now has an unchanged successful retry. Main merge e04d441 and prerequisite merge 1e5b2a2 retain origin/main and #12 head 060c407 as ancestors. Strict tracker health passes with no pending merge receipts; no reconciliation, history repair or re-anchor is required. Full combined-head npm/Bun CI follows; claimed acceptance is still pending that complete gate."
   "2026-10-22T21:43:31.998Z",codex-agent,"Full combined-head CI 39858167503, attempt 1, passes e0ce509b71f5092e93089ed74119e336642ff3ca. Node 22 npm release steps, Node 26 npm release steps and complete Bun release each pass 253/253 source plus 3/3 packed npm/native Bun acceptance, with zero failures/skips/cancellations. All four coverage dimensions remain 100 percent across 28 authored files; strict clean-clone health, identity/privacy, typecheck, lint, zero duplication, 85 documented declarations, zero production vulnerabilities, package contents, changelog and publish attestation pass. The unchanged resource CLI case, strengthened resource reclaim exclusion and slow Git prerequisite cases pass in every execution. Existing local 27/28 failure and unchanged CLI 1/1 retry retain their provenance. New reclaim-filter revert proof fails 0/1 as expected. Release the claim, retain in-progress status and preserve append-only history; final receipt head has no application/package input changes and will receive its own CI."
-files[13]{path,scope}:
+  "2026-10-22T22:15:35.221Z",codex-agent,"Second prerequisite refresh: PR #12 received two late valid review threads after the first restack. Its corrected final receipt 0f5fbdcc14b5ab339a629d94f0a0f85eabd807d2 now passes CI 39862491701: npm Node 22/26 and full Bun each 248 source plus 3 packed, all four coverage dimensions 100 percent. Pull the clean resource remote head, preserve main ancestry, merge that verified correction, retain resource exclusions alongside the invoking-principal guard, run focused real resource/preview/document checks, repeat the reclaim-filter revert proof against the combined logic, and validate complete npm/Bun gates before releasing this claim again."
+  "2026-10-22T22:21:18.224Z",codex-agent,"Second refresh combines verified #12 head 0f5fbdc with the resource branch. The sole reclaim conflict retains the RESOURCE_TAG exclusion and the new invoking-principal guard before marker/workflow/snapshot checks. PM-linked focused command covering own preview/apply, current verification introduction and resource exclusions passes 3/3, no failures/skips/cancellations, 22241 ms. Fresh resource-only filter revert retains the new self guard and fails 0/1, exit 1, no skips/cancellations; the foreign resource-owner fixture prevents either liveness or own-claim preservation from masking the filter. Typecheck/lint/build/docstrings pass, 28 source files and 85 declarations, duplication 0/6224 across 60 sources. The dependency pin, thresholds, TTLs and existing deadlines remain unchanged. Exact commands and proof are in docs/resource-verification.md under Late prerequisite refresh on 0f5fbdc. Full updated-head npm/Bun CI follows."
+files[14]{path,scope}:
   CHANGELOG.md,project
   index.ts,project
   src/commands.ts,project
@@ -43,14 +47,16 @@ files[13]{path,scope}:
   test/resource-corpus.acceptance.ts,project
   test/resources.test.ts,project
   test/review-r12.test.ts,project
+  test/review-r13.test.ts,project
   test/review-r6.test.ts,project
-tests[6]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+tests[7]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
   "node --test --test-name-pattern=\"tracker|expired|validation|backend|records\" test/resources.test.ts",project,codex-agent,"2026-10-21T21:13:24.960Z",local_mutation,feat/resource-reservations
   node --test --test-name-pattern=CLI test/resources.test.ts,project,codex-agent,"2026-10-21T21:13:29.191Z",local_mutation,feat/resource-reservations
   node --test --test-name-pattern=process test/resources.test.ts,project,codex-agent,"2026-10-21T21:13:33.098Z",local_mutation,feat/resource-reservations
   "node --test --test-name-pattern=\"shared assigned-only lanes\" test/mixed-tracker.test.ts",project,codex-agent,"2026-10-21T21:18:25.604Z",local_mutation,feat/resource-reservations
   node --test test/review-r6.test.ts,project,codex-agent,"2026-10-21T21:27:06.876Z",local_mutation,feat/resource-reservations
   node --test --test-reporter=tap test/resources.test.ts test/review-r12.test.ts test/review-r6.test.ts,project,codex-agent,"2026-10-22T21:23:09.475Z",local_mutation,feat/resource-reservations
+  "node --test --test-reporter=tap --test-name-pattern=\"reclaim preview and apply|verification introduction|resource records never\" test/review-r13.test.ts test/resources.test.ts",project,codex-agent,"2026-10-22T22:19:52.283Z",local_mutation,feat/resource-reservations
 docs[3]{path,scope}:
   docs/resource-reservations.md,project
   docs/resource-verification.md,project
