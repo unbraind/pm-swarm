@@ -4,6 +4,7 @@ export interface SwarmSettings {
   root: string;
   branch_prefix: string;
   lane_limit: number;
+  progress_orchestrator?: string;
 }
 /** A ready item projected from the certified SDK corpus. */
 export interface Candidate {

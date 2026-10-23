@@ -44,7 +44,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
   const packageDir = join(extracted, 'package');
   for (const runtime of ['npm', 'bun']) {
     const cwd = join(scratch, runtime); mkdirSync(cwd); writeFileSync(join(cwd, 'package.json'), '{"name":"swarm-consumer","private":true,"type":"module"}\n');
-    run(cwd, runtime, [runtime === 'npm' ? 'install' : 'add', '--ignore-scripts', '@unbrained/pm-cli@2026.10.15']);
+    run(cwd, runtime, [runtime === 'npm' ? 'install' : 'add', '--ignore-scripts', '@unbrained/pm-cli@2026.10.23']);
     run(cwd, 'git', ['init', '-b', 'main', cwd]);
     assertFixtureRepo(cwd);
     const runner = runtime === 'npm' ? 'npx' : 'bunx'; const prefix = runtime === 'npm' ? ['--no-install', 'pm'] : ['--bun', '--no-install', 'pm'];
@@ -159,6 +159,7 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
   invoke(process.execPath, ['install', `./${filename}`, '--project']);
   const nodeBin = join(scratch, 'node-only'); mkdirSync(nodeBin); symlinkSync(process.execPath, join(nodeBin, 'node'));
   env.PATH = nodeBin;
+  invoke(process.execPath, ['swarm', 'settings', '--progress-orchestrator', 'coordinator', '--apply']);
   for (const runtime of [process.execPath, bun]) {
     const id = invoke(runtime, ['create', 'Task', 'Packed shared lane']).id as string;
     invoke(runtime, ['files', id, '--add', 'src/work.ts']);
@@ -172,6 +173,24 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
     invoke(runtime, ['claim', id, '--force']);
     assert.deepEqual(invoke(runtime, ['swarm', 'reap', '--dry-run']).released, [id]);
     assert.deepEqual(invoke(runtime, ['swarm', 'reap']).released, [id]);
+    const plan = invoke(runtime, ['plan', 'create', '--title', 'Packed progress', '--step', 'Produce artifact']);
+    const planId = plan.id as string;
+    assert.equal(typeof planId, 'string');
+    let progress = invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']);
+    const step = (progress.steps as { id: string }[])[0].id;
+    invoke(runtime, ['plan', 'update-step', planId, step, '--step-owner', 'packed-worker']);
+    invoke(runtime, ['plan', 'complete-step', planId, step, '--step-evidence', 'Packed production verified']);
+    progress = invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']);
+    const witness = ['--step', step, '--revision', String(progress.revision), '--evidence', 'Packed evidence verified', '--apply'];
+    env.PM_AUTHOR = 'reviewer';
+    invoke(runtime, ['swarm', 'progress', planId, '--agent', 'reviewer', '--stage', 'reviewed', ...witness]);
+    env.PM_AUTHOR = 'coordinator';
+    invoke(runtime, ['swarm', 'progress', planId, '--agent', 'coordinator', '--orchestrator', 'coordinator', '--stage', 'accepted', ...witness]);
+    assert.equal((invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']).counts as { accepted: number }).accepted, 1);
+    env.PM_AUTHOR = 'packed-worker';
+    invoke(runtime, ['plan', 'update-step', planId, step, '--step-body', 'Changed packed criterion']);
+    assert.equal((invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']).counts as { accepted: number }).accepted, 0);
+    invoke(runtime, ['update', planId, '--status', 'closed', '--message', 'Packed Plan progress verified']);
     assert.equal(invoke(runtime, ['health', '--strict-exit']).ok, true);
   }
   assert.equal(existsSync(join(repo, '.git')), false);

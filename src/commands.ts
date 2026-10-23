@@ -12,6 +12,8 @@ import { runWatch, watchInterval } from './watch.ts';
 import type { SwarmSettings } from './types.ts';
 import { ResourceReservations, ResourceRefusal } from './resources.ts';
 import { trackerResourceBackend } from './resource-tracker.ts';
+import { PlanProgress, ProgressRefusal } from './progress.ts';
+import type { ProgressStage } from './progress.ts';
 
 /** Read a scalar flag without accepting repeated or non-text values. */
 function textOption(value: unknown): string | undefined {
@@ -23,6 +25,7 @@ function textOption(value: unknown): string | undefined {
 function overrides(options: Record<string, unknown>): Partial<SwarmSettings> {
   const result: Partial<SwarmSettings> = {};
   for (const key of ['base', 'root'] as const) { const value = textOption(options[key]); if (value !== undefined) result[key] = value; }
+  const orchestrator = textOption(options.progressOrchestrator); if (orchestrator !== undefined) result.progress_orchestrator = orchestrator;
   const prefix = textOption(options.branchPrefix); if (prefix !== undefined) result.branch_prefix = prefix;
   const limit = textOption(options.limit); if (limit !== undefined) result.lane_limit = Number(limit);
   return result;
@@ -32,14 +35,24 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
   try {
     if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
     const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-    const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource'].includes(command) ? undefined : repositoryRoot(workspace);
+    const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress'].includes(command) ? undefined : repositoryRoot(workspace);
     const client = ctx.sdk.client;
     const opts = overrides(ctx.options);
     const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
     const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
     const id = ctx.args[0];
-    if (['start', 'sync', 'handoff', 'close', 'resource'].includes(command) && id === undefined) throw new Error('An item id is required');
+    if (['start', 'sync', 'handoff', 'close', 'resource', 'progress'].includes(command) && id === undefined) throw new Error('An item id is required');
     switch (command) {
+      case 'progress': {
+        const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, true);
+        const options = { agent: textOption(ctx.options.agent), orchestrator: textOption(ctx.options.orchestrator), revision: textOption(ctx.options.revision), offset: ctx.options.offset === undefined ? undefined : Number(textOption(ctx.options.offset)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)) };
+        const stage = textOption(ctx.options.stage);
+        if (stage === undefined) {
+          if (ctx.options.apply === true || ctx.options.step !== undefined || ctx.options.evidence !== undefined) throw new ProgressRefusal('progress_invalid', 'Supply --stage, --step, --revision and --evidence to declare a witness; omit --apply to preview.');
+          return { ...await progress.view(id, options) };
+        }
+        return { ...await progress.witness(id, { ...options, stage: stage as ProgressStage, step: textOption(ctx.options.step) ?? '', revision: options.revision ?? '', evidence: textOption(ctx.options.evidence) ?? '', apply: ctx.options.apply === true }) };
+      }
       case 'resource': {
         const resources = new ResourceReservations(trackerResourceBackend((swarm as SharedTracker).engine), author);
         const action = textOption(ctx.options.action) ?? 'status'; const token = textOption(ctx.options.token) ?? '';
@@ -100,7 +113,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
       default: throw new Error('Unknown swarm command');
     }
   } catch (error) {
-    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof ResourceRefusal ? { context: { code: error.code, required: error.remedy } } : error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
+    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { context: { code: error.code, required: error.remedy } } : error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
   }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
@@ -111,6 +124,7 @@ export function register(api: ExtensionApi): void {
   });
   api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at'].map(name => ({ name, type: 'string', optional: true })));
   const definitions = {
+    progress: { description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
     resource: { description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
     next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
@@ -123,7 +137,7 @@ export function register(api: ExtensionApi): void {
     close: { description: 'Finish and release a fenced claim atomically', flags: ['agent', 'note', 'token'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
     reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
-    settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'apply'], id: false },
+    settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'progress-orchestrator', 'apply'], id: false },
   };
   for (const [name, definition] of Object.entries(definitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));

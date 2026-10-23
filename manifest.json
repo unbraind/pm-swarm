@@ -4,7 +4,7 @@
   "description": "Coordinate many agents on one shared tracker with heartbeats, fenced claims and context handoff; Git lanes optional",
   "author": "@unbraind",
   "entry": "./dist/index.js",
-  "pm_min_version": "2026.10.15",
+  "pm_min_version": "2026.10.23",
   "priority": 90,
   "capabilities": [
     "commands",
