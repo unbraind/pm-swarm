@@ -1,3 +1,7 @@
+/** Expose revision-bound parallel Plan progress and typed recovery instructions. */
+export { PlanProgress, ProgressRefusal, PROGRESS_PREFIX } from './src/progress.ts';
+/** Expose portable witness, declaration and compact progress contracts. */
+export type { ProgressWitness, ProgressStage, ProgressView, ProgressStep, ProgressOptions, ProgressDeclaration, ProgressRefusalCode } from './src/progress.ts';
 import { defineExtension } from '@unbrained/pm-cli/sdk/authoring';
 import { register } from './src/commands.ts';
 /** Expose the same tracker-bound engine used by host commands. */

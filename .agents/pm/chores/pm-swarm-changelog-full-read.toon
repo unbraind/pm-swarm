@@ -1,0 +1,13 @@
+id: pm-swarm-changelog-full-read
+title: Remove changelog full-read bridge after reader compatibility update
+description: "Pinned pm-changelog prepends pm-arg values as global flags, so command-scoped list --full cannot be forwarded directly. Keep the measured bridge until an approved dependency update supports full core list projections. Preserve completeness certification, custom-type schema discovery and Git release history."
+type: Chore
+status: open
+priority: 2
+tags: []
+created_at: "2026-10-23T07:06:24.243Z"
+updated_at: "2026-10-23T07:06:24.243Z"
+author: codex-agent
+acceptance_criteria: Remove bridge only after the pinned changelog reader requests complete metadata directly and the npm/Bun release gates pass without weakening completeness checks.
+parent: pm-swarm-plan-progress
+body: ""

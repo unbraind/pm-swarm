@@ -1,0 +1,69 @@
+id: pm-swarm-plan-progress
+title: Aggregate revision-bound shared plan progress witnesses
+description: Compose core Plan steps and evidence with explicit independent review and orchestrator acceptance witnesses; no branch landing or second task tracker.
+type: Feature
+pm_format_version: 2
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-23T06:41:20.604Z"
+updated_at: "2026-10-23T07:07:38.481Z"
+author: codex-agent
+acceptance_criteria: Changed criteria invalidate acceptance; agent self-report never becomes orchestrator approval; progress is read-only by default; concurrent writers on one non-Git tracker retain correct evidence.
+comments[9]{created_at,author,text}:
+  "2026-10-23T06:41:28.331Z",codex-agent,"Overlap rechecked: core Plan owns ordered steps, owners, evidence, decisions, validation and approval mode. pm-review owns exact-head GitHub review findings and round completion. pm-context assembles context. pm-swarm composes declared parallel-step evidence into a revision-bound view with explicit independent review and orchestrator acceptance; no branch landing or new task tracker. Reuse SDK Plan decoding, item reads and atomic comment mutations. Progress reads must not need Git."
+  "2026-10-23T06:47:21.562Z",codex-agent,"Design: PlanProgress reuses one full unbounded SDK item snapshot plus atomic ifAbsent comment appends. Content revisions bind criteria, Plan metadata, linked artifacts and declared production evidence. Worker completion is produced only; independent review plus distinct explicit orchestrator acceptance is required. Reads and witness previews perform no tracker mutations. SDK minimum/dev pin moved to 2026.10.23 because shared concurrent writes require the released mutation lease fencing and queued-writer deadline fixes. Separate-process non-Git regression covers concurrent witnesses and criterion edits."
+  "2026-10-23T06:53:15.570Z",codex-agent,"Public read-only validation passed: unbraind/pm-ops at 08febd274c40d2ec31bfe956438449898af1d885; 149 certified items, zero existing Plans; 306 baseline files and 4075113 bytes unchanged. Labeled synthetic overlay: one Plan with three steps; claimed/produced/reviewed/accepted 1/1/1/1, accepted after criterion edit zero; compact JSON 691 bytes, TOON 548 bytes; reads changed history zero times. Operation time 59082 ms on contended host; not a throughput benchmark. Evidence: docs/plan-progress-validation.md and test/progress-corpus.acceptance.ts."
+  "2026-10-23T06:58:25.542Z",codex-agent,"Behavioral revert proof: in an isolated scratch source copy, restored only runCommand to origin/main while retaining new registration and tests. The native CLI non-Git regression failed (exit 1) because progress returned Unknown swarm command. Final implementation passes that regression. Initial linked test run hit its default 120-second command timeout on the contended host; rerun uses an explicit 900-second allowance without changing assertions or gate thresholds."
+  "2026-10-23T07:01:14.076Z",codex-agent,"Packed acceptance now installs the required SDK version and runs the new progress workflow through Node and native Bun on a non-Git tracker with no Git executable: produce, review, accept, edit criterion, verify acceptance zero. README and validation example document content-revision and author-attribution boundaries. Local full release gates are intentionally deferred to the unchanged CI npm and Bun gates because the shared host is saturated."
+  "2026-10-23T07:01:43.714Z",codex-agent,"Final local validation: linked node --test test/progress.test.ts passed 5/5 with zero failed/skipped/canceled/todo in 106160 ms after explicit timeout adjustment. npm run typecheck and npm run lint passed; docstrings 29 source files and 98 declarations documented; duplication zero percent across 63 sources; strict tracker health passed. Public-copy acceptance passed 1/1. Behavioral revert fails as expected. The unchanged full npm and Bun release gate is CI-owned; final exact-head counts and run URL are recorded in the feature PR. Item remains in progress for orchestrator verification; no merge or release is authorized."
+  "2026-10-23T07:02:36.002Z",codex-agent,"SDK upgrade integration: newer pm list --all --json is brief even with unbounded output. Existing changelog scripts refused its omission receipt. Added explicit --pm-arg=--full to all changelog generation/check/notes scripts, retaining certification and existing dependency pins rather than bypassing the incomplete-read guard."
+  "2026-10-23T07:06:26.418Z",codex-agent,"Changelog compatibility refinement: pm-changelog pm-arg is global-only, so appending --full there was rejected by the core parser. A small typed executable bridge now appends command-scoped --full only to list --all, forwarding schema reads and exit status unchanged. The existing changelog package still owns completeness certification and Git history. A real-tracker executable regression covers full linked metadata, schema discovery, command failure and signal failure. Follow-up pm-swarm-changelog-full-read tracks removing the adapter after an approved dependency update; no sibling repository was changed."
+  "2026-10-23T07:07:36.579Z",codex-agent,"Compatibility bridge validation passed 1/1 through linked pm execution; full linked metadata, schema reads, error exits and signaled readers are verified. Final local total: six focused regressions plus one public-copy acceptance, typecheck/lint passed, 30 source files and 99 declarations documented, zero duplication across 65 sources. Changelog generation and check passed with full original release history. pm-swarm-changelog-full-read remains open as follow-up. Full final-head npm/Bun release gate run and counts will be linked in the PR; implementation item is released for review and remains in progress."
+files[9]{path,scope}:
+  index.ts,project
+  package.json,project
+  scripts/changelog-pm.ts,project
+  src/commands.ts,project
+  src/progress.ts,project
+  test/changelog-pm.test.ts,project
+  test/install.acceptance.ts,project
+  test/progress-corpus.acceptance.ts,project
+  test/progress.test.ts,project
+tests[4]:
+  - command: node --test test/progress.test.ts
+    scope: project
+    timeout_seconds: 900
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-23T06:54:25.876Z"
+      source_kind: local_mutation
+      source_ref: feat/plan-progress-witnesses
+    updated_by: codex-agent
+    updated_at: "2026-10-23T06:58:40.675Z"
+  - command: npm run typecheck
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-23T06:54:25.876Z"
+      source_kind: local_mutation
+      source_ref: feat/plan-progress-witnesses
+  - command: npm run lint
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-23T06:54:25.876Z"
+      source_kind: local_mutation
+      source_ref: feat/plan-progress-witnesses
+  - command: node --test test/changelog-pm.test.ts
+    scope: project
+    timeout_seconds: 300
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-23T07:06:30.978Z"
+      source_kind: local_mutation
+      source_ref: feat/plan-progress-witnesses
+docs[2]{path,scope}:
+  docs/plan-progress-validation.md,project
+  README.md,project
+body: ""

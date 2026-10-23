@@ -2,7 +2,7 @@
 
 Coordinate dozens of agents on one pm tracker, with renewed heartbeats, fenced ownership, dead-agent recovery and context handoff. pm-swarm uses SDK readiness, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
-Install with a current pm host (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. This new package stays unreleased until maintainer approval. After publication:
+Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. This new package stays unreleased until maintainer approval. After publication:
 
 ```sh
 pm install pm-swarm --project
@@ -26,6 +26,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
 | close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim in one mutation |
+| progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
 | resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
 | reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
@@ -33,7 +34,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 
 ## Without git
 
-Resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
+Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
 
 The primary agent loop is `next` → heartbeat while working → `sync --files --token` → `close --token`. Run `pm init` in a plain directory and install the extension there. Mode is detected once per invocation; non-Git workspaces return `mode: shared-tracker`. `settings` works without repository detection. The tracker commands do not start Git in this mode, including when Git is absent from PATH.
 
@@ -175,3 +176,89 @@ pm swarm land --json
 ```
 
 `status` reports conflicts without failing the process; `land` supplies the conflict exit gate. For package development, run `npm run release:check` and `bun run release:check` with isolated HOME and Git configuration. CI verifies tracker health, commit identity, TypeScript, lint, duplication, docstrings, four 100% coverage dimensions, production audit, package allowlist, generated changelog, release attestation and packed npm/native Bun consumers. Packed acceptance also installs the tarball into a non-Git tracker and runs the shared loop. Git acceptance extracts `npm pack`, installs the directory with `pm install <dir> --project` into fresh Git repositories and trackers, and checks real host commands through Node, npx, Bun and bunx, including TOON/JSON watch shutdown. A built artifact import check rejects dependencies outside Node built-ins and the pm SDK. Release has only a manual trigger plus an approval variable; scheduled publication stays disabled.
+
+## Shared plan progress witnesses
+
+`pm swarm progress PLAN_ID` aggregates each core Plan step's owner and declared
+production evidence into one content revision. It works on one shared tracker,
+including a plain directory with no Git executable. It does not land branches,
+execute linked evidence, or create another task tracker. Requires PM CLI/SDK
+2026.10.23 or newer for concurrent mutation lease fencing and writer deadlines.
+
+```sh
+pm swarm progress delivery-plan --orchestrator coordinator --json
+pm swarm progress delivery-plan --offset 20 --limit 20 --revision REVISION
+```
+
+The default TOON and JSON projections include exact counts, up to 20 compact
+step rows, `omitted` and `next_offset`; the maximum page size is 100. Continue with
+`--revision` to refuse a page from changed Plan inputs. Evidence bodies and raw
+comments stay in `pm show PLAN_ID --full`. The view distinguishes:
+
+| Level | Required evidence |
+| --- | --- |
+| claimed | A core Plan step has an owner. |
+| produced | That owned step is completed with nonempty core `stepEvidence`. |
+| reviewed | A distinct reviewer explicitly witnesses that revision. |
+| accepted | A further distinct, explicitly trusted orchestrator accepts the reviewed revision. |
+
+Core `pm plan approve`, a completed status, ordinary comments and worker
+self-reports do not establish orchestrator acceptance. Without `--orchestrator`,
+accepted counts are always zero. Author IDs are tracker attribution, not an
+authentication boundary: the caller must control its trusted orchestrator
+identity and backend write access. A caller cannot prove approval by supplying a
+worker identity: the worker, reviewer and accepting orchestrator must differ.
+
+A SHA-256 content revision covers the Plan title, description, body, acceptance
+criteria, readiness definition, all `plan_*` metadata (including step bodies,
+owners, evidence, links and validation), and item artifact/dependency links.
+Any such change invalidates existing review and acceptance. Unchanged comments
+do not invalidate witnesses. This is a content revision, not a Git commit or
+wall-clock version: restoring identical inputs restores the same revision.
+Witnesses refer to declared evidence, not independently verified artifact bytes.
+
+Reads and declarations are read-only by default. Only `--apply` appends an
+attributed, idempotent `swarm-progress/v1` SDK comment. Existing core Plan commands
+remain the source of steps, owners and production evidence. No local lock or
+shadow tracker is introduced: SDK atomic comments preserve concurrent writers.
+A criterion edit racing a witness append leaves an old-revision witness that the
+new view excludes. Provider failures propagate; there is no filesystem fallback.
+
+```sh
+# First create/complete steps with core pm plan commands; inspect their stable IDs.
+pm plan create --title 'Parallel delivery' --step 'Implement parser' --step 'Document API'
+pm plan update-step PLAN_ID STEP_ID --step-owner worker
+pm plan complete-step PLAN_ID STEP_ID --step-evidence 'Parser regression passed'
+pm swarm progress PLAN_ID --orchestrator coordinator --json
+# Copy the returned revision; the first declaration below is only a preview.
+pm swarm progress PLAN_ID --agent reviewer --stage reviewed --step STEP_ID \
+  --revision REVISION --evidence 'Inspected parser and regression'
+pm swarm progress PLAN_ID --agent reviewer --stage reviewed --step STEP_ID \
+  --revision REVISION --evidence 'Inspected parser and regression' --apply
+pm swarm progress PLAN_ID --agent coordinator --orchestrator coordinator \
+  --stage accepted --step STEP_ID --revision REVISION \
+  --evidence 'Review and criterion verified' --apply
+pm swarm progress PLAN_ID --orchestrator coordinator --json
+```
+
+The typed SDK exposes the same behavior:
+
+```ts
+import { PmClient } from '@unbrained/pm-cli/sdk';
+import { PlanProgress } from 'pm-swarm';
+
+const progress = new PlanProgress(new PmClient({ cwd: '.', author: 'coordinator' }), 'coordinator');
+const view = await progress.view('delivery-plan', { orchestrator: 'coordinator', limit: 20 });
+// Preview by default; supply apply: true only after evaluating this exact revision.
+await progress.witness(view.id, {
+  step: view.steps[0].id, revision: view.revision, stage: 'accepted',
+  orchestrator: 'coordinator', evidence: 'Independent review verified',
+});
+```
+
+`ProgressRefusal` provides `code` and `remedy`. CLI expected errors retain both
+as structured context. `progress_stale` requires a fresh read and re-evaluation;
+`progress_role` requires independent principals and explicit orchestrator trust;
+`progress_prerequisite` requires production and then review;
+`progress_invalid` identifies an invalid Plan, step, page or witness. Malformed
+versioned comments fail closed; ordinary comments remain ordinary discussion.

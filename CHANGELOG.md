@@ -4,6 +4,7 @@
 
 ### Added
 
+- Aggregate revision-bound shared plan progress witnesses ([pm-swarm-plan-progress](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-plan-progress.toon))
 - Reserve explicit shared resources with fenced tracker leases ([pm-swarm-resource-reservations](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-resource-reservations.toon))
 - Coordinate parallel agents on a shared tracker without git ([pm-swarm-shared-tracker](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-shared-tracker.toon))
 - Partition ready work by footprints and dependencies ([pm-swarm-9kio](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-9kio.toon))
