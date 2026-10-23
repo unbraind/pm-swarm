@@ -1,3 +1,5 @@
+import { scheduleNext } from './fair-scheduling.ts';
+import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { footprintPath, itemFootprint, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
@@ -86,20 +88,26 @@ export class SharedTracker {
     return { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
   }
 
+  /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
+  async schedule(options: ScheduleOptions): Promise<ScheduleReceipt> {
+    return scheduleNext(this.engine, options, policy => this.next(options.parent, options.dryRun === true, policy));
+  }
+
   /** Pick by shared readiness and rank while holding the tracker coordination lease. */
-  async next(parent?: string, dryRun = false) {
+  async next(parent?: string, dryRun = false, policy?: FairPolicy) {
     /** Keep the read/claim decision inside a single bounded operation. */
     const choose = async (lease?: Lease) => {
       const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       const incoming = corpus.items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
       if (incoming !== undefined) {
+        policy?.handoff(incoming);
         const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
         if (!dryRun) this.tokens.set(incoming.id, String(incoming.swarm_token));
         return { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
       }
       const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
-      const { chosen, unknown, warnings, skipped, reason } = selectNext(candidates, active);
+      const { chosen, unknown, warnings, skipped, reason } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
       const lane = chosen !== undefined && !dryRun ? await this.claimLane(chosen.item.id, !unknown, lease!, corpus) : undefined;
       return { mode: 'shared-tracker', ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
     };

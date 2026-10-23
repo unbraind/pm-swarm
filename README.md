@@ -283,3 +283,83 @@ tracker-configured authority; `progress_prerequisite` requires production and
 then review; `progress_invalid` identifies invalid settings, a Plan, step, page
 or witness. Malformed current-version comments fail closed; ordinary comments
 remain ordinary discussion.
+
+## Fair assignment by skills, age and handoff cost
+
+`pm swarm schedule` is an opt-in policy over the same certified SDK readiness,
+dependencies, ownership and footprint checks as `next`. It assigns work and never
+launches an agent. It works without Git, including with no Git executable on PATH;
+inside Git it retains measured changed-path checks and optional worktree lanes.
+
+Declare hard item requirements with `skill:<name>` tags. Names are case sensitive,
+1–64 letters, digits, underscores, dots or dashes; an agent may declare up to 64.
+Every required skill must match. Untagged work requires no skills. Optionally set
+`swarm_preferred_agent` and `swarm_handoff_cost` through the extension's registered
+fields. Cost is a nonnegative integer up to 1000000, default 1; it is zero when
+there is no preferred agent or the caller matches that agent. It is a ranking
+unit, not a measured duration or a model's inferred ability.
+
+```sh
+pm create --type Task --title 'Extend parser' --tags skill:typescript \
+  --file path=src/parser.ts --field swarm_preferred_agent=parser-worker \
+  --field swarm_handoff_cost=5
+pm swarm schedule --agent parser-worker --skills typescript,testing --dry-run
+pm swarm schedule --agent parser-worker --skills typescript,testing --json
+# Retain selected and token, then use the existing heartbeat/sync/close loop.
+```
+
+Below `--max-wait` (default 86400 seconds, range 1–31536000), selection orders by
+priority, lower handoff cost, oldest creation timestamp, then ID. At the threshold,
+qualified work moves ahead of fresh work regardless of priority or transfer cost;
+aged work orders by oldest creation timestamp then ID. With equal input and clock,
+selection is deterministic, including when corpus enumeration changes. Creation
+age is the starvation baseline, not time since becoming ready. Future timestamps
+have age zero. Hard skills, dependency readiness and active conflicts are never
+waived: aging cannot make unsafe or unqualified work runnable. Once those
+constraints clear, an aged item precedes newer arrivals. Unknown footprints may
+start only with no active lanes; in that case aging and the same rank apply to
+them too. This is stricter than `next`'s unknown fallback.
+
+Assigned shared-tracker handoffs still take precedence and return the existing
+bounded receiver context and fencing token. Their required skills are checked;
+an unqualified receiver gets `schedule_skills` and must use a qualified receiver.
+An explicit handoff is already assigned, so it adds no ready-candidate rows.
+The scheduler does not reassign someone else's work to reduce a cost.
+
+Both TOON and JSON return `selected`, `agent`, `token` when claimed, `reason`, a
+frozen `now`, exact `counts`, and at most 20 compact `decisions` (set `--limit`
+1–100). The selected row comes first, followed by IDs. `omitted` counts hidden
+rows; decisions distinguish skills, conflicts, lower rank and unknown footprints.
+No corpus, full item bodies or histories are included. `--parent` scopes direct
+children. `--dry-run` writes no claim or history and cannot reserve a later result.
+Real selections hold the existing swarm tracker operation lease across reading,
+ranking and the SDK claim mutation, serializing `schedule`, `next` and `start`
+on the same tracker. External core writers can bypass swarm's footprint protocol;
+all cooperating selectors must use swarm. Local coordination conservatively
+refuses storage-service extensions; hosted Postgres/MCP scheduling is not certified.
+
+```ts
+import { SharedTracker, Swarm, SchedulingRefusal } from 'pm-swarm';
+import { PmClient } from '@unbrained/pm-cli/sdk';
+
+const client = new PmClient({ cwd: '.', pmRoot: '.agents/pm', author: 'parser-worker' });
+const tracker = new SharedTracker(new Swarm('.', '.agents/pm', client, 'parser-worker'));
+try {
+  const choice = await tracker.schedule({
+    skills: ['typescript', 'testing'], maxWaitSeconds: 3600, dryRun: true,
+    // Optional SDK clock for repeatable policy evaluation:
+    now: '2026-10-23T12:00:00.000Z',
+  });
+  console.log(choice.selected, choice.reason, choice.counts);
+} catch (error) {
+  if (error instanceof SchedulingRefusal) console.error(error.code, error.remedy);
+  else throw error;
+}
+```
+
+`Swarm.schedule` exposes the same typed options and receipt for optional Git lanes.
+`SchedulingRefusal` codes are `schedule_invalid` (fix options, skill tags or item
+metadata), `schedule_skills` (declare the required skills or hand off to a qualified
+receiver), and `schedule_backend_refused` (use supported tracker-wide coordination).
+The CLI exits 2 with the code and remedy. An empty eligible set is a successful
+receipt with `selected: null`, not an ownership transfer.

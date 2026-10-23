@@ -1,3 +1,5 @@
+import { scheduleNext } from './fair-scheduling.ts';
+import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
 import { gitEnvironment } from './git-environment.ts';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -64,16 +66,22 @@ export class Swarm {
     return this.exclusive(lease => this.startLane(id, overrides, strict, lease));
   }
 
+  /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
+  async schedule(options: ScheduleOptions): Promise<ScheduleReceipt> {
+    return scheduleNext(this, options, policy => this.next(options.parent, options.dryRun === true, policy));
+  }
+
   /** Pick and publish under one lease; previews take no lease and perform no mutations. */
-  async next(parent?: string, dryRun = false) {
-    if (dryRun) return this.nextLane(parent, true);
-    return this.exclusive(lease => this.nextLane(parent, false, lease));
+  async next(parent?: string, dryRun = false, policy?: FairPolicy) {
+    if (dryRun) return this.nextLane(parent, true, undefined, policy);
+    return this.exclusive(lease => this.nextLane(parent, false, lease, policy));
   }
 
   /** Rank ready work, exclude active overlaps, and explain every skipped candidate. */
-  private async nextLane(parent: string | undefined, dryRun: boolean, lease?: Lease) {
-    const { candidates } = await this.readyCandidates(parent);
-    const { chosen, unknown, reason, warnings, skipped } = selectNext(candidates, await this.activeFootprints());
+  private async nextLane(parent: string | undefined, dryRun: boolean, lease?: Lease, policy?: FairPolicy) {
+    const { candidates, corpus } = await this.readyCandidates(parent);
+    const active = await this.activeFootprints();
+    const { chosen, unknown, reason, warnings, skipped } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
     const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown, lease!) : undefined;
     return { ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
   }
