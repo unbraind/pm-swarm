@@ -6,7 +6,8 @@ Core Plan owns steps, owners, evidence, decisions, validation and approval mode.
 pm-review owns exact-head GitHub review findings and review rounds. pm-context
 assembles context. pm-swarm composes these existing Plan declarations into one
 parallel progress view; it neither lands branches nor introduces a second task
-tracker. No network call or Git subprocess occurs on the progress path.
+tracker. Progress adds no GitHub transport and never invokes Git; the selected
+SDK storage backend owns any storage I/O.
 
 The SDK minimum/dev pin is 2026.10.23 because concurrent witness comments need
 the released expired-mutation-lease fence and queued-writer deadline fixes.
