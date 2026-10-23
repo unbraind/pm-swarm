@@ -24,14 +24,19 @@ export function footprintOverlaps(files: string[], active: ActiveFootprint[]) {
 }
 
 /** Select known safe work before unknown footprints, retaining every skip reason. */
-export function selectNext(candidates: RankedCandidate[], active: ActiveFootprint[]) {
-  candidates.sort((a, b) => a.priority - b.priority || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id));
+export function selectNext(candidates: RankedCandidate[], active: ActiveFootprint[], rank = defaultRank, strictUnknown = false) {
+  candidates.sort(rank);
   const evaluated = candidates.map(item => ({ item, overlaps: footprintOverlaps(item.files, active) }));
-  const safe = evaluated.find(row => row.item.files.length > 0 && row.overlaps.length === 0);
-  const chosen = safe ?? evaluated.find(row => row.item.files.length === 0);
+  const safe = evaluated.find(row => row.overlaps.length === 0 && (row.item.files.length > 0 || (strictUnknown && active.length === 0)));
+  const chosen = safe ?? (strictUnknown && active.length > 0 ? undefined : evaluated.find(row => row.item.files.length === 0));
   const unknown = chosen !== undefined && chosen.item.files.length === 0;
   const warnings = unknown ? ['Unknown footprint: no known conflict-free candidate exists; inspect the lane before editing.'] : [];
   const skipped = evaluated.filter(row => row !== chosen).map(row => ({ id: row.item.id, reasons: row.overlaps.length > 0 ? row.overlaps.map(overlap => `Overlap with lane ${overlap.lane_id} on path ${overlap.path} (${overlap.lane_path})`) : [row.item.files.length === 0 ? 'Unknown footprint deferred' : 'Lower rank: priority, then oldest creation time, then id'], overlaps: row.overlaps }));
   const reason = chosen === undefined ? 'No ready unclaimed candidate can start safely' : unknown ? 'Unknown footprint fallback after checking all known candidates' : 'Best non-overlapping candidate by priority, then oldest creation time, then id';
   return { chosen, unknown, warnings, skipped, reason };
+}
+
+/** Preserve next's original priority ordering unless an explicit policy is supplied. */
+function defaultRank(a: RankedCandidate, b: RankedCandidate): number {
+  return a.priority - b.priority || a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id);
 }

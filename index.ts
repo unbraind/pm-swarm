@@ -1,3 +1,7 @@
+/** Expose opt-in fair assignment options, compact decisions and actionable refusals. */
+export { SchedulingRefusal } from './src/fair-scheduling.ts';
+/** Typed policy inputs and bounded scheduling receipts. */
+export type { ScheduleOptions, ScheduleReceipt, SchedulingDecision, SchedulingRefusalCode } from './src/fair-scheduling.ts';
 /** Expose revision-bound parallel Plan progress and typed recovery instructions. */
 export { PlanProgress, ProgressRefusal, PROGRESS_PREFIX } from './src/progress.ts';
 /** Expose portable witness, declaration and compact progress contracts. */

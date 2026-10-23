@@ -1,3 +1,4 @@
+import { SchedulingRefusal } from './fair-scheduling.ts';
 import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { createPmCliExpectedError, readSettings, resolveAuthor } from '@unbrained/pm-cli/sdk';
@@ -71,6 +72,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
         const { complete_list: _complete, read_output: _read, ...compact } = result;
         return compact;
       }
+      case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true }) };
       case 'next': {
         const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
         return repo === undefined ? await operation : operation;
@@ -113,7 +115,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
       default: throw new Error('Unknown swarm command');
     }
   } catch (error) {
-    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { context: { code: error.code, required: error.remedy } } : error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
+    throw createPmCliExpectedError(String(error), { exitCode: 2, ...(error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { context: { code: error.code, required: error.remedy } } : error instanceof StaleFenceError ? { context: { code: error.code } } : {}) });
   }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
@@ -122,11 +124,12 @@ export function register(api: ExtensionApi): void {
     commands: ['swarm status'],
     resultDiscriminator: result => typeof result === 'object' && result !== null && 'swarm_watch_complete' in result && result.swarm_watch_complete === true,
   });
-  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
   const definitions = {
     progress: { description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
     resource: { description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
     plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
+    schedule: { description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
     next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
     start: { description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'strict'], id: true },
     status: { description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
