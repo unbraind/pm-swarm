@@ -186,6 +186,7 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
     assert.equal((invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']).counts as { accepted: number }).accepted, 1);
     invoke(runtime, ['plan', 'update-step', planId, step, '--step-body', 'Changed packed criterion']);
     assert.equal((invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']).counts as { accepted: number }).accepted, 0);
+    invoke(runtime, ['update', planId, '--status', 'closed', '--message', 'Packed Plan progress verified']);
     assert.equal(invoke(runtime, ['health', '--strict-exit']).ok, true);
   }
   assert.equal(existsSync(join(repo, '.git')), false);
