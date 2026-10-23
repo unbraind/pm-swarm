@@ -67,6 +67,10 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     const plan = JSON.parse(pm('swarm', 'plan', '--json')) as { suggested_start_set: string[] }; assert.deepEqual(plan.suggested_start_set, [id]); assert.match(pm('swarm', 'plan'), /suggested_start_set/);
     assert.doesNotMatch(pm('swarm', 'plan'), /complete_list|read_output|estimated_tokens/);
     assert.match(pm('swarm', 'plan', '--full'), /complete_list/);
+    pm('update', id, '--add-tags', 'skill:typescript', '--field', 'swarm_preferred_agent=install-test', '--field', 'swarm_handoff_cost=5');
+    const scheduled = JSON.parse(pm('swarm', 'schedule', '--skills', 'typescript', '--dry-run', '--json')) as { selected: string; decisions: { handoff_cost: number }[] };
+    assert.equal(scheduled.selected, id); assert.equal(scheduled.decisions[0].handoff_cost, 0);
+    assert.match(pm('swarm', 'schedule', '--skills', 'typescript', '--dry-run'), /selected:/);
     const next = JSON.parse(pm('swarm', 'next', '--dry-run', '--agent', 'install-test', '--json')) as { selected: string; dry_run: boolean };
     assert.equal(next.selected, id); assert.equal(next.dry_run, true);
     const start = JSON.parse(pm('swarm', 'start', id, '--agent', 'install-test', '--json')) as { branch: string; worktree: string };
@@ -163,6 +167,9 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
   for (const runtime of [process.execPath, bun]) {
     const id = invoke(runtime, ['create', 'Task', 'Packed shared lane']).id as string;
     invoke(runtime, ['files', id, '--add', 'src/work.ts']);
+    invoke(runtime, ['update', id, '--add-tags', 'skill:typescript']);
+    const preview = invoke(runtime, ['swarm', 'schedule', '--skills', 'typescript', '--dry-run']);
+    assert.equal(preview.selected, id); assert.equal(preview.mode, 'shared-tracker');
     const selected = invoke(runtime, ['swarm', 'next', '--agent', 'packed-worker']);
     assert.equal(selected.selected, id); assert.equal(selected.mode, 'shared-tracker'); assert.equal('branch' in selected, false);
     const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply', '--token', String(selected.token)]);

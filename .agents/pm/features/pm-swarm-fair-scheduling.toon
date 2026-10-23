@@ -6,15 +6,17 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-23T14:29:54.153Z"
-updated_at: "2026-10-23T14:45:08.084Z"
+updated_at: "2026-10-23T14:53:52.537Z"
 author: codex-agent
 acceptance_criteria: Aging work eventually becomes eligible; selection is deterministic for equal input; concurrent selectors cannot double-claim.
-comments[4]{created_at,author,text}:
+comments[6]{created_at,author,text}:
   "2026-10-23T14:30:08.130Z",codex-agent,"Overlap rechecked against pinned PM CLI/SDK 2026.10.23 and sibling package public surfaces: core next/actionability ranks readiness and claimNext owns atomic item ownership; swarm next supplies conflict-free ranking and fenced shared claims; pm-context builds handoff packets, pm-ops owns quality gates, and pm-rl owns training/resource policy. None exposes skill-aware, bounded-age work assignment with handoff costs. Reuse certified corpus, SDK actionability, current next/start conflict checks and tracker operation lease. Add opt-in schedule command and typed SDK policy, without launching agents. Hard skills and conflicts remain safety constraints; starvation promotion overrides priority and soft transfer costs only."
   "2026-10-23T14:39:15.485Z",codex-agent,"Implemented opt-in schedule through existing next engines and tracker lease: skill tags are hard requirements; creation age promotes overdue work ahead of priority/transfer costs; selected-first bounded receipts carry exact totals. Unknown footprints run only without active lanes. Service-capable storage refuses unsupported local scheduling with a typed remedy. Public committed pm-ops corpus preview: 149 items, 306 baseline files, 4075113 baseline bytes, zero baseline changes; 10 ready/qualified/aged, 3 conflicting, no safe selection while active lanes constrain unknown work; 863 JSON bytes and 596 TOON bytes at five rows. Native corpus contains no skill tags or preferences; targeted real trackers cover those policies separately."
   "2026-10-23T14:44:34.808Z",codex-agent,"Verification: node --test test/fair-scheduling.test.ts passed 8/8, including real concurrent schedule/schedule/next processes with exactly one assignee patch per selected item, hard skills, continuity cost, handoff context/fence, SDK readiness, Git conflicts and non-Git PATH coverage. Linked suite also passed via pm test --run --progress. Behavioral revert: replacing only FairPolicy.select with the original priority selector made the aging regression fail (fresh work selected instead of aged work); restored implementation passes. Focused c8 coverage for the new policy module is 100% statements, branches, functions and lines. Typecheck, lint, docstring and zero-duplication gates pass. Full unchanged-threshold npm and Bun release gates are delegated to CI because the shared host is saturated."
   "2026-10-23T14:45:04.038Z",codex-agent,"Implementation and targeted verification complete. CI now invokes exact npm run release:check on Node 22/26 and bun run release:check on Node 26, preserving strict health, identity and unchanged coverage/duplication thresholds. Releasing the implementation claim for orchestrator review; item remains in progress and is not closed. Public-corpus final rerun passed 1/1 with unchanged counts and hashes."
-files[9]{path,scope}:
+  "2026-10-23T14:53:06.495Z",codex-agent,"Final acceptance review found that packed consumers covered existing commands but did not explicitly invoke the new schedule command. Add scheduler previews through installed npm/npx and native Bun/bunx, plus packed non-Git Node/Bun consumers with Git absent from PATH. Re-run the exact-head CI gates after this acceptance-only addition."
+  "2026-10-23T14:53:50.467Z",codex-agent,"Packed consumers now explicitly preview schedule with hard skill tags in Git and non-Git npm/Node and native Bun consumers, checking continuity cost and TOON/JSON registration. Typecheck, lint and zero-duplication passed after the acceptance addition. The prior commit passed both npm matrix gates (275 unit tests and 3 packed tests each); final evidence must come from the updated head. Implementation claim released again for orchestrator verification; item remains in progress."
+files[10]{path,scope}:
   .github/workflows/ci.yml,project
   index.ts,project
   src/commands.ts,project
@@ -23,6 +25,7 @@ files[9]{path,scope}:
   src/shared-tracker.ts,project
   src/swarm.ts,project
   test/fair-scheduling.test.ts,project
+  test/install.acceptance.ts,project
   test/scheduling-corpus.acceptance.ts,project
 tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,source_ref}}:
   node --test test/fair-scheduling.test.ts,project,300,codex-agent,"2026-10-23T14:42:19.959Z",local_mutation,feat/fair-scheduling
