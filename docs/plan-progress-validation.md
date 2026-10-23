@@ -36,15 +36,19 @@ Measured public snapshot: `unbraind/pm-ops` at
 | Copied baseline bytes | 4,075,113 |
 | Baseline files changed | 0 |
 | Labeled synthetic overlay Plans / steps | 1 / 3 |
-| Claimed / produced / reviewed / accepted steps | 1 / 1 / 1 / 1 |
+| Claimed / produced / reviewed / accepted steps | 1 / 1 / 1 / 0 |
+| Acceptance refusals without configured orchestrator | 1 |
 | Accepted after criterion change | 0 |
-| Compact JSON / TOON bytes | 691 / 548 |
+| Compact JSON / TOON bytes | 683 / 521 |
 | Item-history mutations from reads | 0 |
-| Measured operation time, milliseconds | 59,082 |
+| Measured operation time, milliseconds | 39,415 |
 
 The source contains no Plan items. The three-step Plan is explicitly synthetic
 and tests integration with the public tracker's actual settings and corpus;
-these measurements do not imply organic Plan usage, hosted-provider acceptance,
+the copy has no configured orchestrator, so acceptance is refused without
+mutating its settings. The separate recorded-author regressions configure a
+principal and prove the three-author happy path. These measurements do not imply
+organic Plan usage, hosted-provider acceptance,
 or a throughput benchmark. SDK storage-provider dispatch is retained; no hosted
 service is accessed for this validation.
 
@@ -60,3 +64,22 @@ without a package-local process pin or a Git repository.
 Targeted validation includes the real CLI's TOON/JSON parsing, read-only previews,
 SDK idempotent appends, owner/reviewer/orchestrator separation, stale revisions,
 malformed witness refusals and 102-step pagination with exact denominators.
+
+## Recorded-author review follow-up
+
+Witness actors now come from the same SDK author resolution used for their
+mutation history, using SDK author options or PM_AUTHOR. Agent/orchestrator
+flags are assertions and cannot select actors or approval authority. Approval
+uses tracker `swarm.progress_orchestrator`; authority changes are part of the
+revision. Old v1 witnesses are excluded; new writes use v2.
+
+Regression scenarios cover the exact CLI spoof sequence, a recorded worker
+borrowing the configured principal flag, a non-configured accepting author, a
+configured orchestrator reviewing its own work, and the three-distinct-author
+happy path. The happy path checks comment authors against the actual last three
+item history entry authors. Missing/invalid authority, SDK environment defaults,
+legacy witnesses and configuration changes are also exercised.
+
+Identities are asserted; changing SDK author options, PM_AUTHOR or tracker
+configuration is not cryptographic proof of independent actors. Adversarial
+settings need signed provenance and stronger authorization.

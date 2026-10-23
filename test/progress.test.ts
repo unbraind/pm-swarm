@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { PlanProgress, ProgressRefusal, PROGRESS_PREFIX } from '../index.ts';
@@ -8,13 +8,19 @@ import type { ProgressStage } from '../index.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { runProcess } from './process-helpers.ts';
 
+/** Bind each worker to the author option the SDK itself records in mutation history. */
+function progress(f: Awaited<ReturnType<typeof sharedFixture>>, author: string) {
+  return new PlanProgress({ cwd: f.repo, pmRoot: f.pmRoot, author });
+}
+
 /** Create core Plan steps and production evidence through actual SDK operations. */
 async function plan(f: Awaited<ReturnType<typeof sharedFixture>>, count = 1) {
+  f.run('swarm', 'settings', '--progress-orchestrator', 'lead', '--apply');
   const result = await f.client.plan('create', undefined, { title: 'Parallel delivery', step: Array.from({ length: count }, (_, i) => `Criterion ${i}`) });
   const id = result.plan.id;
   const steps = (await f.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult).item.plan_steps!;
   await f.client.plan('update-step', id, { stepOwner: 'worker' }, steps[0].id);
-  return { id, steps, worker: new PlanProgress(f.client, 'worker'), reviewer: new PlanProgress(f.client, 'reviewer'), lead: new PlanProgress(f.client, 'lead') };
+  return { id, steps, worker: progress(f, 'worker'), reviewer: progress(f, 'reviewer'), lead: progress(f, 'lead') };
 }
 
 /** Build one valid revision-bound declaration without mutating the tracker. */
@@ -47,10 +53,10 @@ test('core Plan production never implies review or approval; witnesses are revis
   const length = readFileSync(history, 'utf8').length;
   await p.lead.witness(p.id, declaration(step, view.revision, 'accepted'));
   assert.equal(readFileSync(history, 'utf8').length, length, 'SDK idempotent append preserves history');
-  assert.equal((await p.lead.view(p.id)).counts.accepted, 0, 'no implicitly trusted orchestrator');
+  assert.equal((await p.lead.view(p.id)).counts.accepted, 1, 'tracker configuration supplies the orchestrator without a caller hint');
   assert.equal((await p.lead.view(p.id, { orchestrator: 'lead' })).counts.accepted, 1);
-  assert.equal((await p.lead.view(p.id, { orchestrator: 'worker' })).counts.accepted, 0);
-  assert.equal((await p.lead.view(p.id, { orchestrator: 'reviewer' })).counts.accepted, 0);
+  await assert.rejects(p.lead.view(p.id, { orchestrator: 'worker' }), { code: 'progress_role' });
+  await assert.rejects(p.lead.view(p.id, { orchestrator: 'reviewer' }), { code: 'progress_role' });
   await f.client.update(p.id, { acceptanceCriteria: 'Additional criterion' });
   const changed = await p.lead.view(p.id, { orchestrator: 'lead' });
   assert.notEqual(changed.revision, view.revision); assert.equal(changed.counts.accepted, 0); assert.equal(changed.counts.reviewed, 0);
@@ -93,6 +99,7 @@ test('native CLI progress works with no Git executable and requires explicit app
   const before = readFileSync(join(f.pmRoot, 'history', `${p.id}.jsonl`), 'utf8');
   const result = f.run('swarm', 'progress', p.id); assert.equal(result.revision, view.revision);
   const toon = f.cli('swarm', 'progress', p.id); assert.equal(toon.status, 0, toon.stderr); assert.match(toon.stdout, /counts:/);
+  f.env.PM_AUTHOR = 'worker';
   const args = ['swarm', 'progress', p.id, '--agent', 'worker', '--stage', 'claimed', '--step', p.steps[0].id, '--revision', view.revision, '--evidence', 'claim'];
   assert.equal(f.run(...args).dry_run, true); assert.equal(readFileSync(join(f.pmRoot, 'history', `${p.id}.jsonl`), 'utf8'), before);
   assert.equal(f.run(...args, '--apply').dry_run, false);
@@ -109,7 +116,7 @@ test('independent concurrent writers on one non-Git tracker retain every witness
   const source = `import { PmClient } from ${JSON.stringify(import.meta.resolve('@unbrained/pm-cli/sdk'))};
 import { PlanProgress } from ${JSON.stringify(new URL('../src/progress.ts', import.meta.url).href)};
 const client = new PmClient({ cwd: process.cwd(), pmRoot: process.env.PM_PATH, author: process.env.WITNESS_AUTHOR });
-await new PlanProgress(client, process.env.WITNESS_AUTHOR).witness(process.env.PLAN_ID, JSON.parse(process.env.DECLARATION));`;
+await new PlanProgress({ cwd: process.cwd(), pmRoot: process.env.PM_PATH, author: process.env.WITNESS_AUTHOR }).witness(process.env.PLAN_ID, JSON.parse(process.env.DECLARATION));`;
   const results = await Promise.all(Array.from({ length: 4 }, (_, i) => runProcess(process.execPath, ['--input-type=module', '-e', source], f.repo, { ...f.env, WITNESS_AUTHOR: `reviewer-${i}`, PLAN_ID: p.id, DECLARATION: JSON.stringify(declaration(step, view.revision, 'reviewed')) })));
   for (const result of results) assert.equal(result.code, 0, result.stdout + result.stderr);
   const reviewed = await p.lead.view(p.id, { orchestrator: 'lead' });
@@ -124,4 +131,88 @@ await new PlanProgress(client, process.env.WITNESS_AUTHOR).witness(process.env.P
   const changed = await p.lead.view(p.id, { orchestrator: 'lead' }); assert.equal(changed.counts.accepted, 0); assert.equal(changed.counts.reviewed, 0); assert.equal(changed.stale_witnesses, 6);
   const comments = (await f.client.get(p.id, { depth: 'full' })).item.comments!;
   assert.equal(comments.filter(comment => comment.text.startsWith(PROGRESS_PREFIX)).length, 6);
+});
+
+/** Complete one real core step before testing recorded-author approval boundaries. */
+async function produced(f: Awaited<ReturnType<typeof sharedFixture>>) {
+  const p = await plan(f); const step = p.steps[0].id;
+  await f.client.plan('complete-step', p.id, { stepEvidence: 'Recorded-author regression artifact' }, step);
+  const view = await p.worker.view(p.id);
+  return { ...p, step, revision: view.revision };
+}
+
+test('recorded authors refuse the exact CLI agent and orchestrator spoofing sequence', async t => {
+  const f = await sharedFixture(t); const p = await produced(f); f.env.PM_AUTHOR = 'worker';
+  f.run('swarm', 'settings', '--progress-orchestrator', 'coordinator', '--apply');
+  const revision = (await p.worker.view(p.id)).revision;
+  const history = join(f.pmRoot, 'history', `${p.id}.jsonl`); const before = readFileSync(history, 'utf8');
+  for (const [agent, stage] of [['reviewer', 'reviewed'], ['coordinator', 'accepted']]) {
+    const refused = f.cli('swarm', 'progress', p.id, '--agent', agent, '--orchestrator', 'coordinator', '--stage', stage, '--step', p.step, '--revision', revision, '--evidence', 'Spoofed declaration', '--apply', '--json');
+    assert.equal(refused.status, 2, refused.stdout + refused.stderr); assert.match(refused.stdout + refused.stderr, /progress_role/); assert.match(refused.stdout + refused.stderr, /SDK-recorded author/);
+  }
+  assert.equal(readFileSync(history, 'utf8'), before);
+  assert.equal((await p.worker.view(p.id)).counts.accepted, 0);
+});
+
+test('a recorded worker cannot accept its own witness by borrowing the configured principal flag', async t => {
+  const f = await sharedFixture(t); const p = await produced(f);
+  await p.reviewer.witness(p.id, declaration(p.step, p.revision, 'reviewed'));
+  const before = readFileSync(join(f.pmRoot, 'history', `${p.id}.jsonl`), 'utf8');
+  await assert.rejects(p.worker.witness(p.id, { ...declaration(p.step, p.revision, 'accepted'), agent: 'lead' }), { code: 'progress_role' });
+  await assert.rejects(p.worker.witness(p.id, declaration(p.step, p.revision, 'accepted')), { code: 'progress_role' });
+  assert.equal(readFileSync(join(f.pmRoot, 'history', `${p.id}.jsonl`), 'utf8'), before);
+  assert.equal((await p.worker.view(p.id)).counts.accepted, 0);
+});
+
+test('a recorded non-configured principal cannot appoint itself as orchestrator', async t => {
+  const f = await sharedFixture(t); const p = await produced(f);
+  await p.reviewer.witness(p.id, declaration(p.step, p.revision, 'reviewed'));
+  const outsider = progress(f, 'outsider');
+  await assert.rejects(outsider.witness(p.id, { ...declaration(p.step, p.revision, 'accepted'), orchestrator: 'outsider' }), { code: 'progress_role' });
+  await assert.rejects(outsider.witness(p.id, declaration(p.step, p.revision, 'accepted')), { code: 'progress_role' });
+  assert.equal((await outsider.view(p.id)).counts.accepted, 0);
+});
+
+test('three distinct SDK-recorded authors approve using tracker configuration and history attribution', async t => {
+  const f = await sharedFixture(t); const p = await produced(f);
+  await p.worker.witness(p.id, { ...declaration(p.step, p.revision, 'produced'), orchestrator: undefined });
+  await p.reviewer.witness(p.id, { ...declaration(p.step, p.revision, 'reviewed'), orchestrator: undefined });
+  const receipt = await p.lead.witness(p.id, { ...declaration(p.step, p.revision, 'accepted'), orchestrator: undefined });
+  assert.equal(receipt.actor, 'lead');
+  const view = await p.lead.view(p.id); assert.equal(view.orchestrator, 'lead'); assert.equal(view.counts.accepted, 1);
+  const comments = (await f.client.get(p.id, { depth: 'full' })).item.comments!.filter(row => row.text.startsWith(PROGRESS_PREFIX));
+  assert.deepEqual(comments.map(row => row.author), ['worker', 'reviewer', 'lead']);
+  const history = readFileSync(join(f.pmRoot, 'history', `${p.id}.jsonl`), 'utf8').trim().split('\n').map(line => JSON.parse(line) as { author: string });
+  assert.deepEqual(history.slice(-3).map(row => row.author), ['worker', 'reviewer', 'lead']);
+  f.run('swarm', 'settings', '--progress-orchestrator', 'successor', '--apply');
+  assert.equal((await p.lead.view(p.id)).counts.accepted, 0, 'authority changes invalidate acceptance');
+});
+
+test('unconfigured authority and legacy flag-authored witnesses fail closed; SDK environment author stays recorded', async t => {
+  const f = await sharedFixture(t); const p = await produced(f);
+  await f.client.comments(p.id, { add: 'swarm-progress/v1 ' + JSON.stringify(declaration(p.step, p.revision, 'accepted')), author: 'lead' });
+  assert.equal((await p.lead.view(p.id)).counts.accepted, 0);
+  const path = join(f.pmRoot, 'settings.json'); const settings = JSON.parse(readFileSync(path, 'utf8')) as { swarm: { progress_orchestrator?: unknown } };
+  delete settings.swarm.progress_orchestrator; writeFileSync(path, JSON.stringify(settings));
+  const bare = new PlanProgress({ pmRoot: f.pmRoot, author: 'lead' }); const view = await bare.view(p.id); assert.equal(view.orchestrator, null);
+  await assert.rejects(bare.witness(p.id, { ...declaration(p.step, view.revision, 'accepted'), orchestrator: undefined }), { code: 'progress_role' });
+  for (const invalid of ['', 7, 'bad\nname', 'bad\0name']) {
+    settings.swarm.progress_orchestrator = invalid; writeFileSync(path, JSON.stringify(settings));
+    await assert.rejects(bare.view(p.id), { code: 'progress_invalid' });
+  }
+  settings.swarm.progress_orchestrator = 'lead'; writeFileSync(path, JSON.stringify(settings));
+  process.env.PM_PATH = f.pmRoot; process.env.PM_AUTHOR = 'worker';
+  const environment = new PlanProgress();
+  const current = await environment.view(p.id);
+  await environment.witness(p.id, declaration(p.step, current.revision, 'produced'));
+  assert.equal((await f.client.get(p.id, { depth: 'full' })).item.comments!.at(-1)!.author, 'worker');
+});
+
+test('the configured orchestrator cannot accept a review recorded under its own author', async t => {
+  const f = await sharedFixture(t); const p = await produced(f);
+  f.run('swarm', 'settings', '--progress-orchestrator', 'reviewer', '--apply');
+  const revision = (await p.worker.view(p.id)).revision;
+  await p.reviewer.witness(p.id, { ...declaration(p.step, revision, 'reviewed'), orchestrator: undefined });
+  await assert.rejects(p.reviewer.witness(p.id, { ...declaration(p.step, revision, 'accepted'), orchestrator: undefined }), { code: 'progress_role' });
+  assert.equal((await p.reviewer.view(p.id)).counts.accepted, 0);
 });

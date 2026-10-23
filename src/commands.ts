@@ -25,6 +25,7 @@ function textOption(value: unknown): string | undefined {
 function overrides(options: Record<string, unknown>): Partial<SwarmSettings> {
   const result: Partial<SwarmSettings> = {};
   for (const key of ['base', 'root'] as const) { const value = textOption(options[key]); if (value !== undefined) result[key] = value; }
+  const orchestrator = textOption(options.progressOrchestrator); if (orchestrator !== undefined) result.progress_orchestrator = orchestrator;
   const prefix = textOption(options.branchPrefix); if (prefix !== undefined) result.branch_prefix = prefix;
   const limit = textOption(options.limit); if (limit !== undefined) result.lane_limit = Number(limit);
   return result;
@@ -43,8 +44,8 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     if (['start', 'sync', 'handoff', 'close', 'resource', 'progress'].includes(command) && id === undefined) throw new Error('An item id is required');
     switch (command) {
       case 'progress': {
-        const progress = new PlanProgress(client, author);
-        const options = { orchestrator: textOption(ctx.options.orchestrator), revision: textOption(ctx.options.revision), offset: ctx.options.offset === undefined ? undefined : Number(textOption(ctx.options.offset)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)) };
+        const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, true);
+        const options = { agent: textOption(ctx.options.agent), orchestrator: textOption(ctx.options.orchestrator), revision: textOption(ctx.options.revision), offset: ctx.options.offset === undefined ? undefined : Number(textOption(ctx.options.offset)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)) };
         const stage = textOption(ctx.options.stage);
         if (stage === undefined) {
           if (ctx.options.apply === true || ctx.options.step !== undefined || ctx.options.evidence !== undefined) throw new ProgressRefusal('progress_invalid', 'Supply --stage, --step, --revision and --evidence to declare a witness; omit --apply to preview.');
@@ -136,7 +137,7 @@ export function register(api: ExtensionApi): void {
     close: { description: 'Finish and release a fenced claim atomically', flags: ['agent', 'note', 'token'], id: true },
     land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
     reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
-    settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'apply'], id: false },
+    settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'progress-orchestrator', 'apply'], id: false },
   };
   for (const [name, definition] of Object.entries(definitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));

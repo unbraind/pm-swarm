@@ -185,80 +185,101 @@ including a plain directory with no Git executable. It does not land branches,
 execute linked evidence, or create another task tracker. Requires PM CLI/SDK
 2026.10.23 or newer for concurrent mutation lease fencing and writer deadlines.
 
+Configure the accepting principal once through the tracker's audited settings
+operation. Acceptance commands cannot appoint their own orchestrator:
+
 ```sh
-pm swarm progress delivery-plan --orchestrator coordinator --json
+pm swarm settings --progress-orchestrator coordinator --apply
+pm swarm progress delivery-plan --json
 pm swarm progress delivery-plan --offset 20 --limit 20 --revision REVISION
 ```
 
+`swarm.progress_orchestrator` is the authority for both reads and writes. Without
+it, accepted counts remain zero and acceptance is refused. `--orchestrator` is
+an optional assertion that must match this setting; it never selects authority.
+`--agent` must match the SDK-recorded mutation author from `PM_AUTHOR`, the global
+SDK author option, or the configured SDK default. A disagreement produces a
+`progress_role` refusal with a remedy before any witness is written.
+
 The default TOON and JSON projections include exact counts, up to 20 compact
 step rows, `omitted` and `next_offset`; the maximum page size is 100. Continue with
-`--revision` to refuse a page from changed Plan inputs. Evidence bodies and raw
-comments stay in `pm show PLAN_ID --full`. The view distinguishes:
+`--revision` to refuse changed Plan inputs or approval authority. Evidence bodies
+and raw comments stay in `pm show PLAN_ID --full`. The view distinguishes:
 
 | Level | Required evidence |
 | --- | --- |
 | claimed | A core Plan step has an owner. |
 | produced | That owned step is completed with nonempty core `stepEvidence`. |
-| reviewed | A distinct reviewer explicitly witnesses that revision. |
-| accepted | A further distinct, explicitly trusted orchestrator accepts the reviewed revision. |
+| reviewed | A reviewer whose SDK-recorded author differs from the worker explicitly witnesses the revision. |
+| accepted | The configured orchestrator's SDK-recorded author differs from both worker and reviewers and accepts the reviewed revision. |
 
 Core `pm plan approve`, a completed status, ordinary comments and worker
-self-reports do not establish orchestrator acceptance. Without `--orchestrator`,
-accepted counts are always zero. Author IDs are tracker attribution, not an
-authentication boundary: the caller must control its trusted orchestrator
-identity and backend write access. A caller cannot prove approval by supplying a
-worker identity: the worker, reviewer and accepting orchestrator must differ.
+self-reports do not establish orchestrator acceptance. Witness actors are the
+SDK mutation authors also written to item history. Flags cannot override that
+attribution. The receipt includes the resolved `actor`; regression tests verify
+it against both comment authors and the corresponding history entry authors.
+
+Identities in pm are asserted. This prevents accidental or casual self-approval
+by one agent changing progress flags. Changing `PM_AUTHOR`, an SDK author option,
+or tracker settings remains an asserted identity/configuration change, not proof
+of a distinct person or process. Adversarial settings need **signed provenance**
+and stronger authorization. These witnesses are not signed and do not provide
+that boundary; protect tracker configuration and write access accordingly.
 
 A SHA-256 content revision covers the Plan title, description, body, acceptance
 criteria, readiness definition, all `plan_*` metadata (including step bodies,
-owners, evidence, links and validation), and item artifact/dependency links.
-Any such change invalidates existing review and acceptance. Unchanged comments
-do not invalidate witnesses. This is a content revision, not a Git commit or
-wall-clock version: restoring identical inputs restores the same revision.
-Witnesses refer to declared evidence, not independently verified artifact bytes.
+owners, evidence, links and validation), item artifact/dependency links, and the
+configured orchestrator. Any such change invalidates existing review and
+acceptance. Unchanged comments do not invalidate witnesses. This is a content
+revision, not a Git commit or wall-clock version: restoring identical inputs
+restores the same revision. Witnesses refer to declared evidence, not
+independently verified artifact bytes.
 
 Reads and declarations are read-only by default. Only `--apply` appends an
-attributed, idempotent `swarm-progress/v1` SDK comment. Existing core Plan commands
-remain the source of steps, owners and production evidence. No local lock or
-shadow tracker is introduced: SDK atomic comments preserve concurrent writers.
-A criterion edit racing a witness append leaves an old-revision witness that the
-new view excludes. Provider failures propagate; there is no filesystem fallback.
+attributed, idempotent `swarm-progress/v2` SDK comment. Previous v1 comments are
+excluded because their actors could have been selected by progress flags;
+re-evaluate and submit new review/acceptance witnesses. Existing core Plan
+commands remain the source of steps, owners and production evidence. SDK atomic
+comments preserve concurrent writers on the same tracker. A criterion or
+configured-authority edit racing a witness append leaves an old-revision
+witness that the new view excludes. Provider failures propagate without a
+filesystem fallback.
 
 ```sh
-# First create/complete steps with core pm plan commands; inspect their stable IDs.
 pm plan create --title 'Parallel delivery' --step 'Implement parser' --step 'Document API'
 pm plan update-step PLAN_ID STEP_ID --step-owner worker
 pm plan complete-step PLAN_ID STEP_ID --step-evidence 'Parser regression passed'
-pm swarm progress PLAN_ID --orchestrator coordinator --json
+pm swarm progress PLAN_ID --json
 # Copy the returned revision; the first declaration below is only a preview.
-pm swarm progress PLAN_ID --agent reviewer --stage reviewed --step STEP_ID \
-  --revision REVISION --evidence 'Inspected parser and regression'
-pm swarm progress PLAN_ID --agent reviewer --stage reviewed --step STEP_ID \
-  --revision REVISION --evidence 'Inspected parser and regression' --apply
-pm swarm progress PLAN_ID --agent coordinator --orchestrator coordinator \
+PM_AUTHOR=reviewer pm swarm progress PLAN_ID --agent reviewer --stage reviewed \
+  --step STEP_ID --revision REVISION --evidence 'Inspected parser and regression'
+PM_AUTHOR=reviewer pm swarm progress PLAN_ID --agent reviewer --stage reviewed \
+  --step STEP_ID --revision REVISION --evidence 'Inspected parser and regression' --apply
+PM_AUTHOR=coordinator pm swarm progress PLAN_ID --agent coordinator \
   --stage accepted --step STEP_ID --revision REVISION \
   --evidence 'Review and criterion verified' --apply
-pm swarm progress PLAN_ID --orchestrator coordinator --json
+pm swarm progress PLAN_ID --json
 ```
 
-The typed SDK exposes the same behavior:
+The typed SDK binds the same options used by its owned pm client. The actor is
+never a separate positional identity that can disagree with that client:
 
 ```ts
-import { PmClient } from '@unbrained/pm-cli/sdk';
 import { PlanProgress } from 'pm-swarm';
 
-const progress = new PlanProgress(new PmClient({ cwd: '.', author: 'coordinator' }), 'coordinator');
-const view = await progress.view('delivery-plan', { orchestrator: 'coordinator', limit: 20 });
-// Preview by default; supply apply: true only after evaluating this exact revision.
+const progress = new PlanProgress({ cwd: '.', pmRoot: '.agents/pm', author: 'coordinator' });
+const view = await progress.view('delivery-plan', { limit: 20 });
+// Preview by default; supply apply: true after evaluating this exact revision.
 await progress.witness(view.id, {
   step: view.steps[0].id, revision: view.revision, stage: 'accepted',
-  orchestrator: 'coordinator', evidence: 'Independent review verified',
+  evidence: 'Independent review verified',
 });
 ```
 
 `ProgressRefusal` provides `code` and `remedy`. CLI expected errors retain both
 as structured context. `progress_stale` requires a fresh read and re-evaluation;
-`progress_role` requires independent principals and explicit orchestrator trust;
-`progress_prerequisite` requires production and then review;
-`progress_invalid` identifies an invalid Plan, step, page or witness. Malformed
-versioned comments fail closed; ordinary comments remain ordinary discussion.
+`progress_role` requires matching SDK attribution, independent principals and
+tracker-configured authority; `progress_prerequisite` requires production and
+then review; `progress_invalid` identifies invalid settings, a Plan, step, page
+or witness. Malformed current-version comments fail closed; ordinary comments
+remain ordinary discussion.

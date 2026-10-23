@@ -159,6 +159,7 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
   invoke(process.execPath, ['install', `./${filename}`, '--project']);
   const nodeBin = join(scratch, 'node-only'); mkdirSync(nodeBin); symlinkSync(process.execPath, join(nodeBin, 'node'));
   env.PATH = nodeBin;
+  invoke(process.execPath, ['swarm', 'settings', '--progress-orchestrator', 'coordinator', '--apply']);
   for (const runtime of [process.execPath, bun]) {
     const id = invoke(runtime, ['create', 'Task', 'Packed shared lane']).id as string;
     invoke(runtime, ['files', id, '--add', 'src/work.ts']);
@@ -181,9 +182,12 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
     invoke(runtime, ['plan', 'complete-step', planId, step, '--step-evidence', 'Packed production verified']);
     progress = invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']);
     const witness = ['--step', step, '--revision', String(progress.revision), '--evidence', 'Packed evidence verified', '--apply'];
+    env.PM_AUTHOR = 'reviewer';
     invoke(runtime, ['swarm', 'progress', planId, '--agent', 'reviewer', '--stage', 'reviewed', ...witness]);
+    env.PM_AUTHOR = 'coordinator';
     invoke(runtime, ['swarm', 'progress', planId, '--agent', 'coordinator', '--orchestrator', 'coordinator', '--stage', 'accepted', ...witness]);
     assert.equal((invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']).counts as { accepted: number }).accepted, 1);
+    env.PM_AUTHOR = 'packed-worker';
     invoke(runtime, ['plan', 'update-step', planId, step, '--step-body', 'Changed packed criterion']);
     assert.equal((invoke(runtime, ['swarm', 'progress', planId, '--orchestrator', 'coordinator']).counts as { accepted: number }).accepted, 0);
     invoke(runtime, ['update', planId, '--status', 'closed', '--message', 'Packed Plan progress verified']);
