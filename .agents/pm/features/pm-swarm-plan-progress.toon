@@ -3,13 +3,18 @@ title: Aggregate revision-bound shared plan progress witnesses
 description: Compose core Plan steps and evidence with explicit independent review and orchestrator acceptance witnesses; no branch landing or second task tracker.
 type: Feature
 pm_format_version: 2
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-23T06:41:20.604Z"
-updated_at: "2026-10-23T08:14:08.249Z"
+updated_at: "2026-10-24T21:48:47.431Z"
+closed_at: "2026-10-24T21:48:47.410Z"
+completed_at: "2026-10-24T21:48:47.410Z"
 author: codex-agent
 acceptance_criteria: Changed criteria invalidate acceptance; agent self-report never becomes orchestrator approval; progress is read-only by default; concurrent writers on one non-Git tracker retain correct evidence.
+resolution: Revision-bound witnesses distinguish claimed/produced/reviewed/accepted progress; changed criteria invalidate acceptance and agent self-reports never become approval on shared non-git trackers.
+expected_result: Changed criteria invalidate acceptance; agent self-report never becomes orchestrator approval; progress is read-only by default; concurrent writers on one non-Git tracker retain correct evidence.
+actual_result: "https://github.com/unbraind/pm-swarm/pull/19, merged 2026-10-23T08:26:40Z, merge 5ee0f91957aa0ca884d14592ac3184205933dbf6: Revision-bound witnesses distinguish claimed/produced/reviewed/accepted progress; changed criteria invalidate acceptance and agent self-reports never become approval on shared non-git trackers."
 comments[15]{created_at,author,text}:
   "2026-10-23T06:41:28.331Z",codex-agent,"Overlap rechecked: core Plan owns ordered steps, owners, evidence, decisions, validation and approval mode. pm-review owns exact-head GitHub review findings and round completion. pm-context assembles context. pm-swarm composes declared parallel-step evidence into a revision-bound view with explicit independent review and orchestrator acceptance; no branch landing or new task tracker. Reuse SDK Plan decoding, item reads and atomic comment mutations. Progress reads must not need Git."
   "2026-10-23T06:47:21.562Z",codex-agent,"Design: PlanProgress reuses one full unbounded SDK item snapshot plus atomic ifAbsent comment appends. Content revisions bind criteria, Plan metadata, linked artifacts and declared production evidence. Worker completion is produced only; independent review plus distinct explicit orchestrator acceptance is required. Reads and witness previews perform no tracker mutations. SDK minimum/dev pin moved to 2026.10.23 because shared concurrent writes require the released mutation lease fencing and queued-writer deadline fixes. Separate-process non-Git regression covers concurrent witnesses and criterion edits."
@@ -82,4 +87,5 @@ tests[5]:
 docs[2]{path,scope}:
   docs/plan-progress-validation.md,project
   README.md,project
+close_reason: "https://github.com/unbraind/pm-swarm/pull/19, merged 2026-10-23T08:26:40Z, merge 5ee0f91957aa0ca884d14592ac3184205933dbf6: Revision-bound witnesses distinguish claimed/produced/reviewed/accepted progress; changed criteria invalidate acceptance and agent self-reports never become approval on shared non-git trackers."
 body: ""

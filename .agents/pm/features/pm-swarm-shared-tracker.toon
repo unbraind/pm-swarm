@@ -2,14 +2,19 @@ id: pm-swarm-shared-tracker
 title: Coordinate parallel agents on a shared tracker without git
 description: "Make tracker coordination primary and Git worktree lanes optional, with real concurrent-process acceptance."
 type: Feature
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-20T09:59:13.604Z"
-updated_at: "2026-10-22T22:06:09.241Z"
+updated_at: "2026-10-24T21:48:47.684Z"
+closed_at: "2026-10-24T21:48:47.649Z"
+completed_at: "2026-10-24T21:48:47.649Z"
 author: codex-agent
 acceptance_criteria: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
 parent: pm-swarm-07o2
+resolution: "Latest implementing PR extends PRs 10/12 shared non-git coordination with fenced resource reservations, preserving command refusals, concurrent healthy claims and packed/release acceptance."
+expected_result: All eight commands have explicit no-git behavior; existing Git tests and unchanged release gates pass; packed no-git consumer and concurrent claims retain healthy history.
+actual_result: "https://github.com/unbraind/pm-swarm/pull/15, merged 2026-10-22T23:07:56Z, merge e1d0f59e9297326e7738d9343c2b145b3607ee91: Latest implementing PR extends PRs 10/12 shared non-git coordination with fenced resource reservations, preserving command refusals, concurrent healthy claims and packed/release acceptance."
 comments[126]{created_at,author,text}:
   "2026-10-20T09:59:21.844Z",codex-agent,"Design: detect workspace mode once without invoking Git on non-repository paths; settings bypasses repository detection. Reuse certified SDK readiness, deterministic selection and overlap rules. Shared lanes are claimed items, with SDK claim provenance for age and no branch/base fields. Hold a tracker-local SDK lease across selection, claim and terminal reaping. Shared status reports declared overlaps, explicitly omitting Git measurements; watch emits overlap changes without claim-age polling noise. Sync accepts explicit portable files and retains preview/apply semantics; land explains the Git requirement. Preserve existing Git behavior and ownership checks; release terminal claims only for the invoking principal, reporting foreign claims as refused."
   "2026-10-20T10:06:16.141Z",codex-agent,"Implementation: shared tracker uses the host-bound SDK client, certified readiness and a tracker-local 60-second bounded operation lease. Eight simultaneous CLI processes retained eight distinct claims in the first run. Source-loaded test extension metadata causes strict health extension warnings, while integrity/history checks pass; test health isolates extension discovery and packed acceptance separately verifies the managed tarball. Pinned host gap: some expected extension refusals return exit 1 with human diagnostics and exit 2 with JSON. No CLI/SDK changes or dependency bumps."
@@ -349,4 +354,5 @@ docs[3]{path,scope}:
   docs/fenced-leases-verification.md,project
   docs/shared-tracker-verification.md,project
   README.md,project
+close_reason: "https://github.com/unbraind/pm-swarm/pull/15, merged 2026-10-22T23:07:56Z, merge e1d0f59e9297326e7738d9343c2b145b3607ee91: Latest implementing PR extends PRs 10/12 shared non-git coordination with fenced resource reservations, preserving command refusals, concurrent healthy claims and packed/release acceptance."
 body: ""
