@@ -2,13 +2,18 @@ id: pm-swarm-fair-scheduling
 title: "Select ready work fairly using skills, age and handoff costs"
 description: "Add an opt-in shared assignment policy over SDK readiness and existing conflict checks, without launching agents."
 type: Feature
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-23T14:29:54.153Z"
-updated_at: "2026-10-23T14:53:52.537Z"
+updated_at: "2026-10-24T23:14:57.332Z"
+closed_at: "2026-10-24T21:48:47.244Z"
+completed_at: "2026-10-23T15:09:59.000Z"
 author: codex-agent
 acceptance_criteria: Aging work eventually becomes eligible; selection is deterministic for equal input; concurrent selectors cannot double-claim.
+resolution: "Deterministic ready-work selection includes skills, age and handoff costs; aging makes work eligible and atomic claims prevent double selection."
+expected_result: Aging work eventually becomes eligible; selection is deterministic for equal input; concurrent selectors cannot double-claim.
+actual_result: "https://github.com/unbraind/pm-swarm/pull/21, merged 2026-10-23T15:09:59Z, merge 1e349c5d5133a5f4807bd1077d604479843d857a: Deterministic ready-work selection includes skills, age and handoff costs; aging makes work eligible and atomic claims prevent double selection."
 comments[6]{created_at,author,text}:
   "2026-10-23T14:30:08.130Z",codex-agent,"Overlap rechecked against pinned PM CLI/SDK 2026.10.23 and sibling package public surfaces: core next/actionability ranks readiness and claimNext owns atomic item ownership; swarm next supplies conflict-free ranking and fenced shared claims; pm-context builds handoff packets, pm-ops owns quality gates, and pm-rl owns training/resource policy. None exposes skill-aware, bounded-age work assignment with handoff costs. Reuse certified corpus, SDK actionability, current next/start conflict checks and tracker operation lease. Add opt-in schedule command and typed SDK policy, without launching agents. Hard skills and conflicts remain safety constraints; starvation promotion overrides priority and soft transfer costs only."
   "2026-10-23T14:39:15.485Z",codex-agent,"Implemented opt-in schedule through existing next engines and tracker lease: skill tags are hard requirements; creation age promotes overdue work ahead of priority/transfer costs; selected-first bounded receipts carry exact totals. Unknown footprints run only without active lanes. Service-capable storage refuses unsupported local scheduling with a typed remedy. Public committed pm-ops corpus preview: 149 items, 306 baseline files, 4075113 baseline bytes, zero baseline changes; 10 ready/qualified/aged, 3 conflicting, no safe selection while active lanes constrain unknown work; 863 JSON bytes and 596 TOON bytes at five rows. Native corpus contains no skill tags or preferences; targeted real trackers cover those policies separately."
@@ -32,4 +37,5 @@ tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,
 docs[2]{path,scope}:
   docs/fair-scheduling-verification.md,project
   README.md,project
+close_reason: "https://github.com/unbraind/pm-swarm/pull/21, merged 2026-10-23T15:09:59Z, merge 1e349c5d5133a5f4807bd1077d604479843d857a: Deterministic ready-work selection includes skills, age and handoff costs; aging makes work eligible and atomic claims prevent double selection."
 body: ""
