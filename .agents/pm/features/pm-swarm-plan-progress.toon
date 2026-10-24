@@ -7,9 +7,9 @@ status: closed
 priority: 2
 tags: []
 created_at: "2026-10-23T06:41:20.604Z"
-updated_at: "2026-10-24T21:48:47.431Z"
+updated_at: "2026-10-24T23:14:58.121Z"
 closed_at: "2026-10-24T21:48:47.410Z"
-completed_at: "2026-10-24T21:48:47.410Z"
+completed_at: "2026-10-23T08:26:40.000Z"
 author: codex-agent
 acceptance_criteria: Changed criteria invalidate acceptance; agent self-report never becomes orchestrator approval; progress is read-only by default; concurrent writers on one non-Git tracker retain correct evidence.
 resolution: Revision-bound witnesses distinguish claimed/produced/reviewed/accepted progress; changed criteria invalidate acceptance and agent self-reports never become approval on shared non-git trackers.

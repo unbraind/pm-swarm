@@ -6,9 +6,9 @@ status: closed
 priority: 2
 tags: []
 created_at: "2026-10-23T14:29:54.153Z"
-updated_at: "2026-10-24T21:48:47.322Z"
+updated_at: "2026-10-24T23:14:57.332Z"
 closed_at: "2026-10-24T21:48:47.244Z"
-completed_at: "2026-10-24T21:48:47.244Z"
+completed_at: "2026-10-23T15:09:59.000Z"
 author: codex-agent
 acceptance_criteria: Aging work eventually becomes eligible; selection is deterministic for equal input; concurrent selectors cannot double-claim.
 resolution: "Deterministic ready-work selection includes skills, age and handoff costs; aging makes work eligible and atomic claims prevent double selection."
