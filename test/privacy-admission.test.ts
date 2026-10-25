@@ -5,8 +5,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scanMutationSecrets, isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import type { CommandHandlerContext } from '@unbrained/pm-cli/sdk/authoring';
-import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
-import extension from '../index.ts';
 import { validateCommandInputs } from '../src/admission.ts';
 import { runCommand } from '../src/commands.ts';
 import { assertPrivatePathSafe, SettingsRefusal, updateSettings } from '../src/settings.ts';
@@ -19,7 +17,7 @@ import { PlanProgress } from '../src/progress.ts';
 import { privacyCorpus, rejectedCorpus } from './privacy-corpus.ts';
 import { absoluteFuzz, allowedFuzz } from './privacy-fuzz.ts';
 import { sharedFixture } from './shared-helpers.ts';
-import { hostSdk } from './settings-helpers.ts';
+import { hostSdk, swarmHost, assertPrivacyRendering } from './settings-helpers.ts';
 import { mutationInputs, mutationVariants, ownedPlan } from './privacy-mutations.ts';
 import { snapshot, unchanged } from './privacy-snapshot.ts';
 
@@ -115,7 +113,7 @@ test('native CLI handoff admission leaves ownership, fence, history and the enti
 });
 
 test('host rendering refuses every encoded private value before JSON or TOON serialization', async () => {
-  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const host = await swarmHost();
   for (const [, value] of rejectedCorpus) for (const format of ['toon', 'json'] as const) {
     for (const output of [value, [value], { unexpected: value }, { id: 'public-item', note: value }]) {
       const result = await host.runRendererOverride({ command: 'swarm handoff', format, result: output });
@@ -234,18 +232,8 @@ function fuzzCommands(): [string, string[], Record<string, unknown>][] {
 /** Use a real shared tracker, injected SDK and registered renderer for both generators. */
 async function fuzzFixture(t: TestContext) {
   const fixture = await sharedFixture(t);
-  return { ...fixture, sdk: await hostSdk(fixture.pmRoot), host: await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] }) };
+  return { ...fixture, sdk: await hostSdk(fixture.pmRoot), host: await swarmHost() };
 }
-/** Assert host ownership and the expected privacy decision in both output formats. */
-async function fuzzRendering(host: Awaited<ReturnType<typeof createExtensionTestHarness>>, value: string, refused: boolean): Promise<void> {
-  for (const format of ['json', 'toon'] as const) {
-    const result = await host.runRendererOverride({ command: 'swarm handoff', format, result: { id: 'public-item', note: value } });
-    assert.equal(result.overridden, true); assert.deepEqual(result.warnings, []);
-    assert.equal(result.rendered!.includes('swarm_private_path'), refused);
-    if (refused) assert.equal(result.rendered!.includes(value), false);
-  }
-}
-
 test('seeded compositional absolute paths are refused by every mutator and both renderers', async t => {
   const f = await fuzzFixture(t); const { sdk, host } = f;
   const before = snapshot(f.pmRoot); const seed = 0x51a7c0de;
@@ -256,7 +244,7 @@ test('seeded compositional absolute paths are refused by every mutator and both 
       const ctx: CommandHandlerContext = { command: `swarm ${command}`, args, options: { ...options }, global: { author: value }, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk };
       await assert.rejects(runCommand(command, ctx), (error: unknown) => isPmCliExpectedError(error) && error.code === 'swarm_private_path', `${index}/${command}`);
     }
-    await fuzzRendering(host, value, true);
+    await assertPrivacyRendering(host, value, true);
   }
   assert.equal(snapshot(f.pmRoot), before);
   console.log(JSON.stringify({ absolute_seed: seed, absolute_cases: cases.length, command_refusals: cases.length * fuzzCommands().length, renderer_refusals: cases.length * 2, tracker_changes: 0 }));
@@ -268,7 +256,7 @@ test('seeded relative paths and web URLs have no false privacy refusals', async 
   for (const [index, value] of cases.entries()) {
     assert.equal(containsPrivatePath(value), false, `allowed seed=${seed} case=${index} ${JSON.stringify(value)}`);
     for (const [command, args, options] of fuzzCommands()) validateCommandInputs(command, { command: `swarm ${command}`, args, options: { ...options }, global: { author: value }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo });
-    await fuzzRendering(host, value, false);
+    await assertPrivacyRendering(host, value, false);
   }
   console.log(JSON.stringify({ allowed_seed: seed, relative_paths: cases.length / 2, web_urls: cases.length / 2, admitted_command_inputs: cases.length * fuzzCommands().length, false_refusals: 0 }));
 });

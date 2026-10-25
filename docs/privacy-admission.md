@@ -36,6 +36,12 @@ separately supplied absolute values in a URL query remain subject to the guard.
 Normalization never changes a persisted input. Credential findings retain the
 native host's separate secret policy.
 
+File URLs are absolute in URL grammar even when they omit explicit slashes.
+The additional identities `file-implicit-path`, `file-dot-relative`,
+`file-parent-relative` and `file-empty-root` cover those forms. All four are
+missed by the raw SDK oracle and refused across nineteen mutating variants
+(76 unchanged-tracker refusals) and both renderers (eight safe documents).
+
 The corpus is defined exactly in `test/privacy-corpus.ts`. Synthetic locations
 are constructed from segments, and no local coordinates are recorded here.
 Unicode fixtures use fullwidth slash/letters, division slash U+2215, fraction
@@ -186,6 +192,9 @@ SDK during fixture setup; the cold-read limitation below remains explicit.
 Local mutation-guard lookups use the SDK's `createMutationGuardSdk.get`, retaining
 SDK schema, identity and parsing behavior without client usage/cache writes.
 Service declarations defer to the bound client rather than reading a local shadow.
+The local-only resource adapter instead refuses if a provider appears between
+ownership discovery and metadata inspection; it never falls back to a bound
+client whose storage cannot satisfy that adapter's fencing contract.
 Shared start checks prospective files and overlap warnings before ownership;
 Git start checks its portable receipt before claiming. Tests inject a real peer
 file transition after corpus enumeration and before the client read, proving that

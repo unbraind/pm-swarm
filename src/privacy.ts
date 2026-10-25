@@ -44,6 +44,8 @@ function absoluteToken(token: string): boolean {
   let path = unwrapToken(token);
   for (;;) {
     if (/^https?:\/\//i.test(path)) return false;
+    // File URLs always resolve to a local absolute root, even without explicit slashes.
+    if (/^file:/i.test(path)) return true;
     const next = unwrapToken(path.replace(/^[\w-]{2,}[:=]/u, ''));
     if (next === path) break;
     path = next;

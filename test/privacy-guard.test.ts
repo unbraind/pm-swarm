@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, promises as filesystem, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { syncBuiltinESMExports } from 'node:module';
 import { getHistoryPath, locateItem } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from '../src/inspection.ts';
 import { PlanProgress } from '../src/progress.ts';
 import { assertPrivatePathSafe, SettingsRefusal } from '../src/settings.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { ownedPlan, declareService } from './privacy-mutations.ts';
+import { trackerResourceBackend } from '../src/resource-tracker.ts';
 
 test('service declarations defer metadata reads to the bound client without using a local shadow', async t => {
   const f = await sharedFixture(t); const id = await f.item(['src/provider.ts']);
@@ -62,4 +64,21 @@ test('reclaim propagates real storage failures instead of misreporting foreign p
   const rerun = await f.shared.reclaim(60, 'receiver'); assert.deepEqual(rerun.recovered.map(row => row.id), [id]);
   assert.deepEqual((await f.shared.reclaim(60, 'receiver')).recovered, []);
   assert.equal((await f.client.get(id)).item.swarm_token, '2');
+});
+
+test('resource reads refuse a provider installed between ownership discovery and metadata inspection', async t => {
+  const f = await sharedFixture(t); const id = await f.item();
+  let discoveries = 0; const directory = join(f.pmRoot, 'extensions');
+  const original = filesystem.readdir;
+  const observer = t.mock.method(filesystem, 'readdir', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    if (String(args[0]) === directory && ++discoveries === 2) declareService(f);
+    return Reflect.apply(target, receiver, args);
+  } }));
+  syncBuiltinESMExports();
+  const located = await locateItem(f.pmRoot, id); assert.ok(located);
+  const history = getHistoryPath(f.pmRoot, id); const before = readFileSync(history, 'utf8');
+  try { await assert.rejects(trackerResourceBackend(f.shared.engine).read(id), { code: 'resource_backend_refused' }); }
+  finally { observer.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(discoveries >= 2, true, 'A real provider declaration reaches the second discovery boundary');
+  assert.equal(readFileSync(history, 'utf8'), before);
 });
