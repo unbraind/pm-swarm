@@ -26,7 +26,8 @@ Each string reaches a bounded fixed point (at most sixteen rounds) of URI percen
 decoding, JSON Unicode/hex/slash escapes, numeric and named HTML escapes, Unicode
 NFKC and explicit confusable folding, and zero-width/bidi stripping. Malformed
 URI octets cannot conceal adjacent valid ASCII; unresolved excessive nesting is
-refused. Tokens strip file URL schemes and presentation wrappers, then pass through
+refused. Tokens peel repeated labels and file URL schemes, preserve web URL schemes,
+handle brace wrappers and shell-variable braces, then pass through
 both `path.posix.normalize` and `path.win32.normalize`. Either absolute grammar,
 drive roots, UNC authorities, tilde roots and shell variable roots cause refusal.
 Dot segments and duplicate/mixed separators cannot turn an absolute path into an

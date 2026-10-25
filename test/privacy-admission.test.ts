@@ -302,15 +302,15 @@ test('seeded relative paths and web URLs have no false privacy refusals', async 
 test('canonicalization handles bounded nested escapes and both filesystem grammars', () => {
   const root = ['', 'var', 'data', 'work'].join('/');
   const paths = [
-    root, root.replaceAll('/', '&#47;'), root.replaceAll('/', '&sol;'),
+    root, root.replaceAll('/', '&#47;'), root.replaceAll('/', '&sol;'), root.replaceAll('/', '&frasl;'), root.replaceAll('/', '&Backslash;'),
     root.replaceAll('/', String.raw`\u{2f}`), root.replaceAll('/', String.raw`\x2f`),
     root.replaceAll('/', String.raw`\u002f`), root.replaceAll('/', String.raw`\uFF0F`),
     root.replaceAll('/', '\u2216'), root.replaceAll('/', '&bsol;'),
-    `file:${root}`, `path:${root}`, root.replaceAll('/', '//../'),
+    `file:${root}`, `path:${root}`, `note:file:${root}`, `context{${root}}`, `note:${'${HOME}'}/work`, root.replaceAll('/', '//../'),
     'Z:relative-drive-root', '$env:USERPROFILE/work', '${HOME}/work',
   ];
   for (const path of paths) assert.equal(containsPrivatePath(path), true, JSON.stringify(path));
-  for (const safe of ['&#x110000; public', '&#1114112; public', '&unknown; public', 'public &amp; text', 'src/../work', 'http://example.test/a', 'https://example.test/a']) assert.equal(containsPrivatePath(safe), false, safe);
+  for (const safe of ['&#x110000; public', '&#1114112; public', '&unknown; public', 'public &amp; text', 'src/../work', 'http://example.test/a', 'https://example.test/a', 'link:https://example.test/a']) assert.equal(containsPrivatePath(safe), false, safe);
   let nested = root;
   for (let round = 0; round < 18; round++) nested = encodeURIComponent(nested);
   assert.equal(containsPrivatePath(nested), true, 'bounded decoder refuses unresolved nesting');
