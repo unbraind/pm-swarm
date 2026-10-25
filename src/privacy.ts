@@ -22,11 +22,12 @@ function pathCandidates(value: string): string[] {
   const normalized = unescapePath(value).normalize('NFKC')
     .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, '')
     .replace(/[\u043e\u041e\u0455\u0405\u0435\u0415\u04bb\u0430\u0456]/gu, character => CONFUSABLES[character])
+    .replace(/\\\\[^\\/\s]+\\(?=(?:home|Users|root)(?:\\|$))/giu, '/')
     .replace(/[\u2215\u2044\u29f8\\]/gu, '/')
     .replace(/\$(?:\{(?:HOME|USERPROFILE)\}|HOME\b|USERPROFILE\b|env:USERPROFILE\b)|%(?:USERPROFILE|HOMEPATH)%/gi, HOME_REFERENCE);
   return normalized.replace(/file:\/\/[^/\s]*/gi, '').split(/[^\p{L}\p{N}_./~%$-]+/u).map(token => token
     .replace(/\/{2,}/gu, '/')
-    .replace(/^\/(?:Users|root)(?=\/|$)/u, HOME_REFERENCE)
+    .replace(/^\/(?:home|users|root)(?=\/|$)/iu, HOME_REFERENCE)
     .replace(/^~[^/]*(?:\/|$)/u, `${HOME_REFERENCE}/`));
 }
 /** Use the pinned SDK detector for raw text and each normalized path candidate. */

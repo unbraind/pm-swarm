@@ -25,7 +25,7 @@ package does not maintain an independent Unix home-path detector. Its stricter
 normalization layer exists because the pinned oracle misses the forms measured
 below: URI escape decoding (including nested and malformed octets), NFKC,
 explicit Cyrillic confusables, invisible/bidi controls, slash folding, file URL
-authorities, shell home references and alternate home directory layouts. Only
+and Windows UNC authorities, case-folded home layouts, shell home references and alternate home directory layouts. Only
 canonical candidates are scanned; normalization never changes a persisted input.
 Credential findings retain the native host's separate secret policy.
 
@@ -33,7 +33,9 @@ The corpus is defined exactly in `test/privacy-corpus.ts`. Synthetic locations
 are constructed from segments, and no local coordinates are recorded here.
 Unicode fixtures use fullwidth slash/letters, division slash U+2215, fraction
 slash U+2044, Cyrillic o U+043E, Cyrillic s U+0455, zero-width U+200B and bidi
-U+202E; the combined fixture URI-encodes the fullwidth slash form.
+U+202E; the combined fixture URI-encodes the fullwidth slash form. The Windows
+UNC fixture includes a server authority; forward-slash and mixed fixtures use
+lowercase and mixed-case directory names, respectively.
 
 The raw SDK detects **10 of 50** fixtures. The normalized guard refuses **all 50**.
 Every row marked missed is an exact SDK-gap encoding identity for upstream reports.
