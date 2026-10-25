@@ -6,12 +6,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T01:28:55.715Z"
+updated_at: "2026-10-25T01:35:05.289Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[14]{created_at,author,text}:
+comments[15]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -26,7 +26,8 @@ comments[14]{created_at,author,text}:
   "2026-10-25T01:28:10.425Z",codex-agent,"Behavioral revert proofs: eight isolated source reversions each produced exactly one regression failure (exit 1): stale pre-lock settings snapshot; removed typed validation; removed recursive private-path check; ignored replay ID; disabled host renderer; absolute CLI lane location; unredacted host error recovery; removed watch path guard. Restored each source immediately. Targeted settings/commands suite before the added watch case: 28 passed, 0 failed. SIGKILL recovery passed at all four package write boundaries with no appended audit event on replay."
   "2026-10-25T01:28:11.722Z",codex-agent,"Read-only public corpus acceptance: unbraind/pm-ops origin/main 7ad4a726d67c2d933c028db335463c36f51015fb, 151 items, 310 baseline files, 4323759 bytes, 0 changed. No Git in the copied tracker or command PATH. SDK settings and two identical planning previews plus CLI settings/plan/status and TOON/JSON rendering passed. Settings output: JSON 221 bytes, TOON 209 bytes; plan JSON 1312 bytes. Corpus had 1 active lane and 0 start candidates; no synthetic readiness claim."
   "2026-10-25T01:28:54.950Z",codex-agent,"Pinned pm test --run --progress ran the new link: 29 passed, 0 failed. The two inherited links were correctly refused as foreign branch provenance (trust_refusal=2); no approval claimed for them. Local typecheck, lint, build, docstring (31 files, 118 declarations), duplication (0 clones at 0 percent threshold), changelog generation/check passed. Full npm/Bun release checks are delegated to CI because the host is saturated."
-files[23]{path,scope}:
+  "2026-10-25T01:35:04.348Z",codex-agent,"CI run 40150822836 exercised 297 tests: 295 passed, 2 failed; statements/functions/lines 100 percent, branches 99.93 percent, settings module 100 in every dimension. Fixed the prerequisite test selector after splitting packed npm/Bun consumers, retained asynchronous Git generic/native expected exit codes through sanitized transport, and exercised private underlying error redaction. Targeted fixes: 6 tests passed. Three additional behavioral revert proofs each failed one test (exit 1): generic Git status retention, native SDK status retention, and private underlying-error sanitization. All fixes restored; no thresholds changed."
+files[25]{path,scope}:
   index.ts,project
   package.json,project
   scripts/identity-gate.ts,project
@@ -40,6 +41,7 @@ files[23]{path,scope}:
   test/edges.test.ts,project
   test/git-helpers.ts,project
   test/helpers.ts,project
+  test/install-prerequisites.test.ts,project
   test/install.acceptance.ts,project
   test/next-watch.test.ts,project
   test/prepare-merge-driver.test.ts,project
@@ -49,8 +51,9 @@ files[23]{path,scope}:
   test/settings-corpus.acceptance.ts,project
   test/settings-helpers.ts,project
   test/settings-worker.ts,project
+  test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[3]:
+tests[4]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -76,6 +79,13 @@ tests[3]:
     provenance:
       author: codex-agent
       created_at: "2026-10-25T01:24:53.601Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: "node --test --test-name-pattern=\"Git refusal exit codes|Git missing-item|reports missing Bun\" test/shared-tracker.test.ts test/install-prerequisites.test.ts"
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-25T01:35:03.227Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[2]{path,scope}:

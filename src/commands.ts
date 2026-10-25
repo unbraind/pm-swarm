@@ -1,7 +1,7 @@
 import { SchedulingRefusal } from './fair-scheduling.ts';
 import { relative } from 'node:path';
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
-import { createPmCliExpectedError, readSettings, resolveAuthor } from '@unbrained/pm-cli/sdk';
+import { createPmCliExpectedError, isPmCliExpectedError, readSettings, resolveAuthor } from '@unbrained/pm-cli/sdk';
 import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
 import { repositoryRoot } from './workspace.ts';
@@ -16,6 +16,18 @@ import { trackerResourceBackend } from './resource-tracker.ts';
 import { PlanProgress, ProgressRefusal } from './progress.ts';
 import type { ProgressStage } from './progress.ts';
 
+/** Retain the exit status of asynchronous Git lane failures while sanitizing host errors. */
+class GitCommandFailure extends Error {
+  /** Existing host exit status for the failed Git operation. */
+  readonly exitCode: number;
+  /** Keep native expected statuses and the generic Git failure status. */
+  constructor(error: unknown) { super(String(error)); this.exitCode = isPmCliExpectedError(error) ? error.exitCode : 1; }
+}
+/** Await a lane result without changing the established Git error transport. */
+async function laneOperation<T>(operation: Promise<T>, repo: string | undefined): Promise<T> {
+  try { return await operation; }
+  catch (error) { if (repo === undefined) throw error; throw new GitCommandFailure(error); }
+}
 /** Read a scalar flag without accepting repeated or non-text values. */
 function textOption(value: unknown): string | undefined {
   if (value === undefined) return undefined;
@@ -76,11 +88,11 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
     case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true }) };
     case 'next': {
       const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
-      return await operation;
+      return laneOperation(operation, repo);
     }
     case 'start': {
       const operation = swarm.start(id, opts, ctx.options.strict === true);
-      return await operation;
+      return laneOperation(operation, repo);
     }
     case 'status': {
       if (ctx.options.watch === true) {
@@ -89,7 +101,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       }
       if (ctx.options.interval !== undefined) throw new Error('--interval requires --watch');
       const operation = swarm.status(ctx.options.full === true);
-      return repo === undefined ? await operation : operation;
+      return laneOperation(operation, repo);
     }
     case 'sync': {
       const operation = swarm.sync(id, ctx.options.apply === true && ctx.options.dryRun !== true, textOption(ctx.options.files)?.split(',').map(path => path.trim()), textOption(ctx.options.token));
@@ -101,11 +113,11 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
     case 'close': return await (swarm as SharedTracker).close(id, textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
     case 'land': {
       if (repo === undefined) throw new Error(SHARED_LAND_REFUSAL);
-      return swarm.land(ctx.options.execute === true);
+      return laneOperation(swarm.land(ctx.options.execute === true), repo);
     }
     case 'reap': {
       const operation = swarm.reap(ctx.options.dryRun === true);
-      return repo === undefined ? await operation : operation;
+      return laneOperation(operation, repo);
     }
     case 'settings': return { ...await updateSettings(ctx.sdk, ctx.pm_root, opts, { apply: ctx.options.apply === true, operationId: textOption(ctx.options.operationId) }) };
     default: throw new Error('Unknown swarm command');
@@ -120,7 +132,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     return result;
   } catch (error) {
     try { assertPrivatePathSafe(String(error)); } catch (refusal) { error = refusal; }
-    throw createPmCliExpectedError(String(error), { exitCode: 2, context: {
+    throw createPmCliExpectedError(String(error), { exitCode: error instanceof GitCommandFailure ? error.exitCode : 2, context: {
       ...(error instanceof SettingsRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
       recovery: { recovery_mode: 'compact', attempted_command: 'pm swarm [values withheld]', normalized_args: ['swarm', '[values withheld]'], parsed_positionals: [{ role: 'arguments', value: '[values withheld]' }], provided_fields: ['[values withheld]'] },
     } });

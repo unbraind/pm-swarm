@@ -152,6 +152,9 @@ for (const boundary of boundaries) test(`settings survive SIGKILL at ${boundary}
 test('watch refuses private lane values before emitting either format and restores its signal listener', async t => {
   const f = await sharedFixture(t); const id = await f.item(['src/public.ts']);
   await f.client.update(id, { assignee: join('/', 'home', 'private', 'worker') });
+  const refusal = f.cli('swarm', 'start', id, '--json');
+  assert.equal(refusal.status, 2); assert.match(refusal.stdout + refusal.stderr, /swarm_private_path/);
+  assert.equal((refusal.stdout + refusal.stderr).includes(join('/', 'home', 'private', 'worker')), false);
   const listeners = process.listenerCount('SIGINT');
   for (const json of [false, true]) {
     const interrupt = setTimeout(() => process.emit('SIGINT'), 100);

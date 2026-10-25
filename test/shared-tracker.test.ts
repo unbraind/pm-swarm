@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { writeFileSync, readFileSync } from 'node:fs';
@@ -318,6 +319,15 @@ test('Git refusal exit codes retain the existing dispatcher behavior', async t =
   assert.match(result.stdout + result.stderr, /claimed by foreign-worker/);
 });
 
+
+test('Git missing-item refusals retain the native SDK exit code', async t => {
+  const f = await fixture(t); const id = 'swarm-test-absent'; let expected = 0;
+  try { await f.client.get(id); }
+  catch (error) { assert.ok(isPmCliExpectedError(error)); expected = error.exitCode; }
+  assert.notEqual(expected, 0);
+  const result = swarmCli(f, ['start', id]);
+  assert.equal(result.status, expected, result.stdout + result.stderr);
+});
 
 for (const operation of ['plan', 'preview', 'next', 'start', 'sync', 'reap'] as const) {
   test(`shared ${operation} reuses one corpus without per-lane claim reads`, async t => {
