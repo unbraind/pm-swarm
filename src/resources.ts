@@ -66,6 +66,7 @@ export class ResourceReservations {
     if (!record.resource || !/^(0|[1-9][0-9]*)$/.test(record.token) || (record.owner === null ? record.expires_at !== null : record.expires_at === null || !Number.isFinite(Date.parse(record.expires_at)))) {
       throw new ResourceRefusal('resource_invalid', 'Use an active item tagged swarm-resource with intact token, owner and expiry fields; inspect its history before repairing state.');
     }
+    assertPrivatePathSafe(record);
     return record;
   }
 

@@ -3,13 +3,14 @@ import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-schedu
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { footprintPath, itemFootprint, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
-import { assertPrivatePathSafe, settings } from './settings.ts';
+import { assertPrivatePathSafe, settings, SettingsRefusal } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoverySnapshotMatches } from './recovery.ts';
+import { inspectItem } from './inspection.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -75,18 +76,39 @@ export class SharedTracker {
 
   /** Validate terminal status, ownership and declared overlap before claiming. */
   private async claimLane(id: string, strict: boolean, lease: Lease, corpus?: Awaited<ReturnType<Swarm['corpus']>>) {
-    const view = await this.engine.client.get(id, { depth: 'full' }); const item = view.item;
+    const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
+    if (local !== null) assertPrivatePathSafe(itemFootprint(local.item));
+    const preliminary = local ?? await this.engine.client.get(id, { depth: 'full' });
+    await this.claimState(preliminary.item);
+    corpus ??= await this.engine.corpus();
+    const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== id);
+    this.claimWarnings(itemFootprint(preliminary.item), active, strict);
+    const view = local === null ? preliminary : await this.engine.client.get(id, { depth: 'full' }); const item = view.item;
+    const token = await this.claimState(item); const heartbeat = new Date().toISOString();
+    const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
+    const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
+    assertPrivatePathSafe(receipt);
+    await lease.write(() => this.engine.client.update(id, { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }));
+    this.tokens.set(id, token);
+    return receipt;
+  }
+
+  /** Validate a guard or authoritative client snapshot without recording a claim or read receipt. */
+  private async claimState(item: Record<string, unknown>): Promise<string> {
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot start a terminal item');
-    if (view.claim_state?.claimed && view.claim_state.assignee !== this.engine.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
-    const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== id);
-    const overlap_warnings = footprintOverlaps(itemFootprint(item), active);
-    if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
-    const token = this.nextToken(item); const heartbeat = new Date().toISOString();
-    await lease.write(() => this.engine.client.update(id, { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }));
-    this.tokens.set(id, token);
-    return { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
+    const owner = String(item.assignee ?? '').trim();
+    if (owner && owner !== this.engine.author) throw new Error(`Item claimed by ${owner}`);
+    return this.nextToken(item);
+  }
+
+  /** Check prospective overlap output before the ownership write or effectful client read. */
+  private claimWarnings(files: string[], active: { id: string; files: string[] }[], strict: boolean) {
+    const warnings = footprintOverlaps(files, active);
+    assertPrivatePathSafe(warnings);
+    if (strict && warnings.length > 0) throw new Error(`Overlapping start refused: ${warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
+    return warnings;
   }
 
   /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
@@ -110,6 +132,7 @@ export class SharedTracker {
       }
       const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
       const { chosen, unknown, warnings, skipped, reason } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
+      assertPrivatePathSafe({ warnings, skipped, reason });
       const lane = chosen !== undefined && !dryRun ? await this.claimLane(chosen.item.id, !unknown, lease!, corpus) : undefined;
       return { mode: 'shared-tracker', ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
     };
@@ -138,19 +161,27 @@ export class SharedTracker {
     const files = [...new Set(explicitFiles.map(footprintPath))];
     /** Preserve preview and legacy no-op behavior while fencing every actual mutation. */
     const evaluate = async (lease?: Lease) => {
+      const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
+      if (local !== null) await this.syncDecision(local.item, apply, files, token);
       const item = (await this.engine.client.get(id, { depth: 'full' })).item;
-      if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for sync.');
-      if (apply && token !== undefined) this.assertFence(item, token);
-      const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      if (!String(item.assignee ?? '').trim() || statusIsTerminal(String(item.status), statuses)) throw new Error('No active lane for item');
-      const linked = itemFootprint(item); const add = files.filter(path => !linked.includes(path));
+      const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
-        if (token === undefined) this.assertFence(item);
         await lease!.write(() => this.engine.client.files(id, { add, author: this.engine.author }));
       }
       return { mode: 'shared-tracker', id, dry_run: !apply, add };
     };
     return apply ? withSwarmLease(this.engine.pmRoot, this.engine.author, evaluate) : evaluate();
+  }
+
+  /** Validate sync ownership and prospective links without materializing SDK read receipts. */
+  private async syncDecision(item: Record<string, unknown>, apply: boolean, files: string[], token?: string): Promise<string[]> {
+    if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for sync.');
+    if (apply && token !== undefined) this.assertFence(item, token);
+    const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
+    if (!String(item.assignee ?? '').trim() || statusIsTerminal(String(item.status), statuses)) throw new Error('No active lane for item');
+    const linked = itemFootprint(item as { files?: { path: string }[] }); const add = files.filter(path => !linked.includes(path));
+    if (apply && add.length > 0 && token === undefined) this.assertFence(item);
+    return add;
   }
 
   /** Explain why branch landing is unnecessary for work already on the shared tracker. */
@@ -192,6 +223,8 @@ export class SharedTracker {
 
   /** Read and check ownership under the operation pin before dispatching mutations. */
   private async fence(id: string, token?: string) {
+    const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
+    if (local !== null) this.assertFence(local.item, token);
     const item = (await this.engine.client.get(id, { depth: 'full' })).item;
     this.assertFence(item, token); return item;
   }
@@ -208,8 +241,14 @@ export class SharedTracker {
   }
 
   /** Bind an ownership-dependent mutation to one checked item generation. */
-  private async owned<T>(id: string, token: string | undefined, operation: (item: Record<string, unknown>, lease: Lease) => Promise<T>): Promise<T> {
-    return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => operation(await this.fence(id, token), lease));
+  private async owned<T>(id: string, token: string | undefined, operation: (item: Record<string, unknown>, lease: Lease) => Promise<T>, preview?: (item: Record<string, unknown>, lease: Lease) => Promise<unknown>): Promise<T> {
+    return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
+      if (preview !== undefined) {
+        const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
+        if (local !== null) { this.assertFence(local.item, token); await preview(local.item, lease); }
+      }
+      return operation(await this.fence(id, token), lease);
+    });
   }
 
   /** Atomically transfer owner, generation and bounded receiver context in one SDK update. */
@@ -217,18 +256,22 @@ export class SharedTracker {
     assertPrivatePathSafe({ id, to, note, token, author: this.engine.author });
     to = to.trim();
     if (!to || to === this.engine.author || !note.trim() || note.length > 4096) throw new Error('handoff requires a different --to agent and a nonempty --note of at most 4096 characters');
-    return this.owned(id, token, async (item, lease) => {
+    /** Reuse the exact transfer preparation for preflight and the fresh fenced commit. */
+    const transfer = async (item: Record<string, unknown>, lease: Lease, dryRun = false) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot hand off a terminal item');
-      return this.transfer(item, to, note, lease);
-    });
+      return this.transfer(item, to, note, lease, dryRun);
+    };
+    return this.owned(id, token, (item, lease) => transfer(item, lease), (item, lease) => transfer(item, lease, true));
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
   private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease: Lease, dryRun = false) {
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
-    const files = itemFootprint(item);
-    const comments = (item.comments as { text: string; author: string; created_at: string }[]).slice(-3).map(row => ({ ...row, text: row.text.slice(0, 1024) }));
+    let files: string[];
+    try { files = itemFootprint(item); }
+    catch { throw new SettingsRefusal('swarm_input_invalid', 'Repair foreign footprint declarations before transferring this item.'); }
+    const comments = ((item.comments as { text: string; author: string; created_at: string }[] | undefined) ?? []).slice(-3).map(row => ({ ...row, text: row.text.slice(0, 1024) }));
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     assertPrivatePathSafe(context);
@@ -269,7 +312,11 @@ export class SharedTracker {
         const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        recovered.push(await this.transfer(item, to, note, lease!, dryRun));
+        try { recovered.push(await this.transfer(item, to, note, lease!, dryRun)); }
+        catch (error) {
+          if (!(error instanceof SettingsRefusal)) throw error;
+          refused.push({ id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
+        }
       }
       return { dry_run: dryRun, recovered, refused };
     };

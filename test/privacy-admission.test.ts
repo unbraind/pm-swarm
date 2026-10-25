@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
-import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync, lstatSync, readlinkSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { scanMutationSecrets, isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import type { CommandHandlerContext } from '@unbrained/pm-cli/sdk/authoring';
@@ -21,24 +20,8 @@ import { privacyCorpus, rejectedCorpus } from './privacy-corpus.ts';
 import { absoluteFuzz, allowedFuzz } from './privacy-fuzz.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk } from './settings-helpers.ts';
-
-/** Fingerprint every directory, file byte and symlink in the tracker, including runtime and history. */
-function snapshot(root: string): string {
-  const entries = readdirSync(root, { recursive: true, encoding: 'utf8' }).sort().map(name => {
-    const path = join(root, name); const stat = lstatSync(path);
-    return [name, stat.isSymbolicLink() ? ['link', readlinkSync(path)] : stat.isDirectory() ? ['directory'] : ['file', createHash('sha256').update(readFileSync(path)).digest('hex')]];
-  });
-  return JSON.stringify(entries);
-}
-/** Refusal must have no returned receipt, stream bytes or partial tracker write. */
-async function unchanged(root: string, action: () => Promise<unknown>, label: string, accepts: (error: unknown) => boolean = () => true): Promise<void> {
-  const before = snapshot(root); let writes = 0; const original = process.stdout.write;
-  process.stdout.write = new Proxy(original, { apply() { writes++; return true; } });
-  try { await assert.rejects(action, accepts, label); }
-  finally { process.stdout.write = original; }
-  assert.equal(writes, 0, `${label}: partial output`);
-  assert.equal(snapshot(root), before, `${label}: tracker changed`);
-}
+import { mutationInputs, mutationVariants, ownedPlan } from './privacy-mutations.ts';
+import { snapshot, unchanged } from './privacy-snapshot.ts';
 
 test('SDK privacy oracle results are measured for every encoding and normalized guards refuse all', () => {
   let detected = 0;
@@ -59,23 +42,23 @@ test('every mutating command cross rejected encoding and input position is byte-
   const resource = (await f.client.create({ type: 'Task', title: 'Resource', tags: 'swarm-resource' })).item.id;
   const resources = new ResourceReservations(trackerResourceBackend(f.shared.engine), 'shared-test');
   const reservation = await resources.reserve(resource);
-  const plan = f.run('plan', 'create', '--title', 'Privacy plan', '--step', 'Produce');
-  const progress = new PlanProgress({ cwd: f.repo, pmRoot: f.pmRoot, author: 'shared-test' }, true);
-  let view = await progress.view(String(plan.id));
-  f.run('plan', 'update-step', String(plan.id), view.steps[0].id, '--step-owner', 'shared-test');
-  view = await progress.view(String(plan.id));
-  const scenarios = [
-    ['schedule', [], { skills: 'typescript' }], ['next', [], { parent: 'public-parent' }],
-    ['start', [ready], { root: 'lanes', base: 'main', branchPrefix: 'work/' }],
-    ['sync', [id], { files: 'src/work.ts,test/work.ts', token: claim.token, apply: true }],
-    ['heartbeat', [id], { token: claim.token }], ['reclaim', [], { staleAfter: '120', to: 'receiver' }],
-    ['handoff', [id], { token: claim.token, to: 'receiver', note: 'Public context' }],
-    ['close', [id], { token: claim.token, note: 'Public completion' }],
-    ['land', [], { execute: true }], ['reap', [], { agent: 'shared-test' }],
-    ['settings', [], { apply: true, base: 'main', root: 'lanes', branchPrefix: 'work/', progressOrchestrator: 'coordinator', limit: '2', operationId: 'public-operation' }],
-    ['progress', [String(plan.id)], { apply: true, stage: 'claimed', step: view.steps[0].id, revision: view.revision, evidence: 'Public proof', agent: 'shared-test' }],
-    ...['reserve', 'renew', 'release', 'publish'].map(action => ['resource', [resource], { action, token: reservation.token, ttl: '300', note: 'Public publication' }] as const),
-  ] as const;
+  const { plan, view } = await ownedPlan(f);
+  const inputs: Record<string, { args: string[]; options: Record<string, unknown> }> = {
+    schedule: { args: [], options: { skills: 'typescript' } }, next: { args: [], options: { parent: 'public-parent' } },
+    start: { args: [ready], options: { root: 'lanes', base: 'main', branchPrefix: 'work/' } },
+    sync: { args: [id], options: { files: 'src/work.ts,test/work.ts', token: claim.token, apply: true } },
+    heartbeat: { args: [id], options: { token: claim.token } }, reclaim: { args: [], options: { staleAfter: '120', to: 'receiver' } },
+    handoff: { args: [id], options: { token: claim.token, to: 'receiver', note: 'Public context' } },
+    close: { args: [id], options: { token: claim.token, note: 'Public completion' } },
+    land: { args: [], options: { execute: true } }, reap: { args: [], options: { agent: 'shared-test' } },
+    settings: { args: [], options: { apply: true, base: 'main', root: 'lanes', branchPrefix: 'work/', progressOrchestrator: 'coordinator', limit: '2', operationId: 'public-operation' } },
+    progress: { args: [String(plan.id)], options: { apply: true, stage: 'claimed', step: view.steps[0].id, revision: view.revision, evidence: 'Public proof', agent: 'shared-test' } },
+    resource: { args: [resource], options: { token: reservation.token, ttl: '300', note: 'Public publication' } },
+  };
+  const scenarios = mutationVariants().map(variant => {
+    const input = inputs[variant.command]; assert.ok(input, `Missing fixture for registered mutator ${variant.command}`);
+    return [variant.command, input.args, { ...input.options, ...variant.options }] as const;
+  });
   let checked = 0;
   for (const [command, args, options] of scenarios) {
     const base: CommandHandlerContext = { command: `swarm ${command}`, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk, args: [...args], options: { ...options }, global: { author: 'shared-test' } };
@@ -93,7 +76,7 @@ test('every mutating command cross rejected encoding and input position is byte-
       await unchanged(f.pmRoot, () => runCommand(command, ctx), `${command}/invalid-scalar`); checked++;
     }
   }
-  assert.equal(scenarios.length, 16); assert.ok(checked > 2000);
+  assert.equal(scenarios.length, 19); assert.ok(checked > 2000);
   console.log(JSON.stringify({ mutating_variants: scenarios.length, encodings: rejectedCorpus.length, refused_input_cases: checked, tracker_changes: 0, partial_receipts: 0 }));
 });
 
@@ -245,15 +228,7 @@ test('native schedule preserves an admitted max-wait override without claiming w
 
 /** Valid command domains keep privacy as the only reason a fuzz command can be refused. */
 function fuzzCommands(): [string, string[], Record<string, unknown>][] {
-  return [
-    ['schedule', [], {}], ['next', [], {}], ['start', ['public-item'], {}],
-    ['sync', ['public-item'], { apply: true }], ['heartbeat', ['public-item'], {}],
-    ['reclaim', [], { staleAfter: '120' }], ['handoff', ['public-item'], { to: 'receiver', note: 'Public' }],
-    ['close', ['public-item'], { note: 'Public' }], ['land', [], { execute: true }], ['reap', [], {}],
-    ['settings', [], { apply: true }],
-    ['progress', ['public-plan'], { apply: true, stage: 'claimed', step: 'public-step', revision: 'a'.repeat(64), evidence: 'Public' }],
-    ...['reserve', 'renew', 'release', 'publish'].map(action => ['resource', ['public-resource'], { action, token: '1', note: 'Public' }] as [string, string[], Record<string, unknown>]),
-  ];
+  return mutationVariants().map(variant => { const input = mutationInputs(variant); return [variant.command, input.args, input.options]; });
 }
 
 /** Use a real shared tracker, injected SDK and registered renderer for both generators. */
@@ -306,7 +281,7 @@ test('canonicalization handles bounded nested escapes and both filesystem gramma
     root.replaceAll('/', String.raw`\u{2f}`), root.replaceAll('/', String.raw`\x2f`),
     root.replaceAll('/', String.raw`\u002f`), root.replaceAll('/', String.raw`\uFF0F`),
     root.replaceAll('/', '\u2216'), root.replaceAll('/', '&bsol;'),
-    `file:${root}`, `path:${root}`, `note:file:${root}`, `context{${root}}`, `note:${'${HOME}'}/work`, root.replaceAll('/', '//../'),
+    `file:${root}`, `path:${root}`, `note:file:${root}`, `[outer]([inner](${root}))`, `![image](<${root}>)`, `{${root}}`, `note:${'${HOME}'}/work`, root.replaceAll('/', '//../'),
     'Z:relative-drive-root', '$env:USERPROFILE/work', '${HOME}/work',
   ];
   for (const path of paths) assert.equal(containsPrivatePath(path), true, JSON.stringify(path));

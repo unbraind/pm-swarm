@@ -6,12 +6,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T07:34:28.737Z"
+updated_at: "2026-10-25T11:05:29.393Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[37]{created_at,author,text}:
+comments[43]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -49,7 +49,13 @@ comments[37]{created_at,author,text}:
   "2026-10-25T07:24:24.160Z",codex-agent,"Relative-root fixture corrections pass all four targeted Git rollback/fencing cases. Settings invalid-input and peer-race follow-up passes 4/4; typecheck, lint and zero-duplication checks pass after removing unreachable narrower checks. The canonical rule and its recorded behavioral revert proof are unchanged."
   "2026-10-25T07:28:18.332Z",codex-agent,"Final fuzz refinement supplies every generated candidate through the real global author input, shared by all mutating commands. Both seeded tests pass again: 5000 absolute candidates produce 80000 command refusals and 10000 safe renderer refusals; 2500 relative paths plus 2500 HTTP(S) URLs produce 80000 admissions and 10000 successful renders with zero false refusals. Tracker unchanged. Typecheck, lint and zero-duplication checks pass."
   "2026-10-25T07:34:27.955Z",codex-agent,"Final canonical boundary audit adds repeated labels before file URLs, brace wrappers and HTML fraction/backslash entities while retaining web URLs with labels. Seeded generators and focused canonicalization pass 3/3; restored fixed-oracle/native-handoff/canonical tests pass 3/3. Repeated behavioral revert proof: restored only src/privacy.ts from pre-round-2 head cf7b9f6, rebuilt, then node --test --test-name-pattern=\"seeded compositional|native CLI handoff|canonicalization handles\" test/privacy-admission.test.ts failed all 3 tests, exit 1. Native handoff returned success, fuzz missed non-home UNC case 2 and canonical root validation failed. Restored exact source and rebuilt; no coverage threshold changes."
-files[36]{path,scope}:
+  "2026-10-25T09:24:26.914Z",codex-agent,"Round-3 review resumes: preserve delimiters inside relative path tokens, validate real tracked fleet paths read-only without committing their list, retain absolute-path fuzz, and derive mutation refusal coverage from the registered command definitions. Audit start admission so refusals cannot leave ownership writes; record both behavioral revert proofs and exact-head CI gates."
+  "2026-10-25T10:11:50.298Z",codex-agent,"Round-3 evidence: 17835 tracked relative paths across 35 local fleet checkouts pass 7 bare/prose/Markdown forms (124845 checks), with zero false refusals and no source writes. No path list is committed. The registry drives 13 mutating commands and 16 action variants; 374 scalar, domain and privacy input refusals preserve the complete tracker and emit no partial receipt. Cold private stored-footprint start now refuses before ownership, history, heartbeat or runtime changes via the public SDK mutation-guard lookup. SDK current-read side effects are tracked separately in pm-swarm-write-free-reads; no SDK-owned derived records are rolled back or removed."
+  "2026-10-25T11:01:28.535Z",codex-agent,"Final round-3 path oracle: 17837 tracked relative paths across 35 checkouts, 160533 bare/prose/Markdown presentations, zero false refusals and zero source writes; inventory SHA-256 edd08af33aa0b0dd02ae2d6c9a995ab690e8943ac9e9666c6726b2960ff3068f. Path inventory stays uncommitted. This inventory has 0 parenthesis paths, 0 bracket paths and 1 slot paths; thirteen committed synthetic route/filename shapes cover the missing framework forms in nine presentations and both renderers."
+  "2026-10-25T11:01:29.927Z",codex-agent,"Round-3 behavioral revert proofs: 18 isolated probes produced 19 expected regression failures. Each changed function body or guard was reverted independently to pre-round-3 behavior (tokenization reverted as its module); every probe exited 1, and exact source bytes were restored. Probes cover token edges, fresh receipt validation, shared/Git start and next, Git coordination liveness, generic admission, lease liveness/cleanup, resource metadata, progress actor and lookup, resource lookup, fence/sync/handoff preflight, unsafe foreign recovery and request publication. Exact targeted commands: fence-inspection: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; foreign-recovery: node --test --test-concurrency=1 '--test-name-pattern=reclaim skips unsafe foreign' test/privacy-guard.test.ts; 1 failed, exit 1; fresh-receipt: node --test --test-concurrency=1 '--test-name-pattern=peer-changed receipt' test/privacy-routes.test.ts; 2 failed, exit 1; git-coordination: node --test --test-concurrency=1 '--test-name-pattern=Git start admits' test/privacy-routes.test.ts; 1 failed, exit 1; git-next: node --test --test-concurrency=1 '--test-name-pattern=Git next validates' test/privacy-routes.test.ts; 1 failed, exit 1; git-start: node --test --test-concurrency=1 '--test-name-pattern=Git start admits' test/privacy-routes.test.ts; 1 failed, exit 1; handoff-preflight: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; input-admission: node --test --test-concurrency=1 '--test-name-pattern=registered mutators refuse every input' test/privacy-refusals.test.ts; 1 failed, exit 1; lease-admission: node --test --test-concurrency=1 '--test-name-pattern=start rejects a private stored receipt' test/privacy-routes.test.ts; 1 failed, exit 1; progress-actor: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; progress-inspection: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; request-publication: node --test --test-concurrency=1 '--test-name-pattern=request publication survives' test/privacy-lease.test.ts; 1 failed, exit 1; resource-inspection: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; resource-record: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; shared-next: node --test --test-concurrency=1 '--test-name-pattern=shared next validates' test/privacy-routes.test.ts; 1 failed, exit 1; shared-start: node --test --test-concurrency=1 '--test-name-pattern=start rejects a private stored receipt' test/privacy-routes.test.ts; 1 failed, exit 1; sync-inspection: node --test --test-concurrency=1 '--test-name-pattern=prepared tracker' test/privacy-refusals.test.ts; 1 failed, exit 1; tokenization: node --test --test-concurrency=1 '--test-name-pattern=path delimiters inside' test/privacy-routes.test.ts; 1 failed, exit 1. Post-restore Git admission tests pass 2/2; full focused restored checks follow through pinned pm test."
+  "2026-10-25T11:01:31.451Z",codex-agent,"Round-3 registry metadata now covers 13 mutating commands and 19 variants, including all four progress stages and resource actions. Input matrix: 509 refusals. State/backend matrix: 35 refusals, prepared SDK cache, no tracker changes or partial receipts; together all 15 typed refusal categories. Original fixed-input matrix expands to 12660 byte-identical refusals across 52 encodings and 242 text positions, plus 1092 public SDK-entry refusals. Absolute fuzz seed 0x51a7c0de stays 5000 cases and now yields 95000 command refusals and 10000 renderer refusals. Allowed seed 0x6a09e667 yields 95000 admissions and 10000 renders over 2500 relative paths and 2500 URLs, zero false refusals. Existing progress/resource/scheduling targeted suites pass 26/26; lease fault/interleaving cases pass 6/6."
+  "2026-10-25T11:05:27.678Z",codex-agent,"Restored round-3 focused suite passes 18/18 through pinned pm test --only-last --run --progress. A separate Git coordination admission fix prevents repository lock acquisition from refreshing principal liveness before validation; its isolated behavioral revert fails one Git byte-invariance regression, and restoring it passes both Git admission cases. Final local build, typecheck, lint, zero duplication and all authored-source docstrings pass; existing progress/resource/scheduling suites pass 26/26. Full release evidence will come from exact-head CI only."
+files[48]{path,scope}:
   index.ts,project
   package.json,project
   scripts/identity-gate.ts,project
@@ -58,8 +64,11 @@ files[36]{path,scope}:
   src/fair-scheduling.ts,project
   src/git-environment.ts,project
   src/git.ts,project
+  src/inspection.ts,project
+  src/lease.ts,project
   src/privacy.ts,project
   src/progress.ts,project
+  src/resource-tracker.ts,project
   src/resources.ts,project
   src/settings.ts,project
   src/shared-tracker.ts,project
@@ -75,18 +84,27 @@ files[36]{path,scope}:
   test/prepare-merge-driver.test.ts,project
   test/privacy-admission.test.ts,project
   test/privacy-corpus.ts,project
+  test/privacy-fleet.acceptance.ts,project
   test/privacy-fuzz.ts,project
+  test/privacy-guard.test.ts,project
+  test/privacy-lease.test.ts,project
+  test/privacy-mutations.ts,project
+  test/privacy-path-samples.ts,project
+  test/privacy-refusals.test.ts,project
+  test/privacy-routes.test.ts,project
+  test/privacy-snapshot.ts,project
   test/public-corpus-helpers.ts,project
   test/review-r12.test.ts,project
   test/review-r9.test.ts,project
   test/scheduling-corpus.acceptance.ts,project
+  test/sdk-read-effects.acceptance.ts,project
   test/settings-and-output.test.ts,project
   test/settings-corpus.acceptance.ts,project
   test/settings-helpers.ts,project
   test/settings-worker.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[6]:
+tests[7]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -133,6 +151,14 @@ tests[6]:
     provenance:
       author: codex-agent
       created_at: "2026-10-25T07:24:23.075Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=1 test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
+    scope: project
+    timeout_seconds: 300
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-25T11:01:53.644Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[3]{path,scope}:

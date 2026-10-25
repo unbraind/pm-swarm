@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
+import { inspectItem } from './inspection.ts';
 import { assertPrivatePathSafe, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
@@ -115,6 +116,7 @@ export class PlanProgress {
     let config: Awaited<ReturnType<typeof settings>>;
     try { config = await settings(this.pmRoot); } catch { throw new ProgressRefusal('progress_invalid', 'Repair swarm settings and configure progress_orchestrator as one nonempty author identity using swarm settings.'); }
     const orchestrator = config.progress_orchestrator?.trim() ?? null;
+    assertPrivatePathSafe({ actor, orchestrator });
     if ((options.agent !== undefined && options.agent !== actor) || (options.orchestrator !== undefined && options.orchestrator !== orchestrator)) throw new ProgressRefusal('progress_role', 'Match --agent to the SDK-recorded author (PM_AUTHOR or SDK author option), and --orchestrator to tracker swarm.progress_orchestrator; flags cannot select either identity.');
     return { actor, orchestrator };
   }
@@ -122,9 +124,10 @@ export class PlanProgress {
   /** Read complete normalized core Plan metadata without agent output ceilings. */
   private async snapshot(id: string): Promise<PlanSnapshot> {
     // Unbounded SDK reads cannot produce the budget-omission union member.
-    const result = await this.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult;
-    if (result.item.type !== 'Plan' || !Array.isArray(result.item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
-    return result.item;
+    const local = await inspectItem(this.pmRoot, this.pmRoot, id);
+    const item = local?.item ?? (await this.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult).item;
+    if (item.type !== 'Plan' || !Array.isArray(item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
+    return item;
   }
 
   /** Derive all levels from the same snapshot before applying bounded pagination. */
@@ -133,7 +136,7 @@ export class PlanProgress {
     if (options.revision !== undefined && options.revision !== revision) throw new ProgressRefusal('progress_stale', 'Read progress again and re-evaluate evidence against its current revision.');
     const offset = options.offset ?? 0; const limit = options.limit ?? 20;
     if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProgressRefusal('progress_invalid', 'Use a nonnegative integer --offset and --limit from 1 through 100.');
-    const witnesses = item.comments!.flatMap(comment => {
+    const witnesses = (item.comments ?? []).flatMap(comment => {
       const witness = decode(comment.text); return witness === undefined ? [] : [{ ...witness, author: comment.author }];
     });
     const steps = item.plan_steps!.map(step => {

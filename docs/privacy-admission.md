@@ -112,8 +112,8 @@ for every encoding; watch frames are checked before the first stream write.
 ## Evidence
 
 The Cartesian command test uses one real non-Git tracker and the actual injected
-SDK: **16 mutating variants, 52 encodings, 197 text input positions, 10,308 refusals**
-(including 64 malformed scalar cases). It snapshots every tracker file byte,
+SDK: **19 mutating variants, 52 encodings, 242 text input positions, 12,660 refusals**
+(including 76 malformed scalar cases). It snapshots every tracker file byte,
 directory entry and symlink, including runtime files and all history, before and
 after every refusal, and captures stdout to prohibit partial receipts. A separate
 **1,092-case** matrix covers 21 SDK mutation entries; 39 malformed domain inputs
@@ -124,7 +124,8 @@ safe refusal. These attest input refusal, rather than promising that I/O failure
 or later concurrent state changes can never need recovery.
 
 ```sh
-node --test --test-concurrency=1 test/privacy-admission.test.ts test/settings-and-output.test.ts test/commands.test.ts
+node --test --test-concurrency=1 test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
+node --test test/privacy-fleet.acceptance.ts test/sdk-read-effects.acceptance.ts
 npm run typecheck
 npm run lint
 # Full gates run in CI on the saturated host's behalf.
@@ -142,10 +143,75 @@ The original native SDK settings-section registration gap remains unchanged; see
 `0x51a7c0de`, applying one through four randomly selected transformations:
 percent encoding, dot segments, duplicate/mixed separators, UNC authorities,
 file URLs, wrappers, confusables, invisible/bidi characters, case, punctuation,
-HTML entities and JSON escapes. Every candidate is refused by all sixteen
-mutating variants (**80,000 command refusals**) and both renderers
+HTML entities and JSON escapes. Every candidate is refused by all nineteen
+mutating variants (**95,000 command refusals**) and both renderers
 (**10,000 safe refusal documents**), on one unchanged non-Git tracker.
 A separate seed `0x6a09e667` generates **2,500 relative paths and 2,500 HTTP(S)
-URLs**: all pass every command's privacy admission (**80,000 admissions**) and
+URLs**: all pass every command's privacy admission (**95,000 admissions**) and
 both renderers (**10,000 successful renders**), with zero false privacy refusals.
 The original fifty fixtures and both review reproducers remain fixed regressions.
+
+## Whole-token path handling
+
+Tokenization separates whitespace, then removes presentation delimiters only at
+token edges. Parentheses, brackets, braces, slots and punctuation inside a path
+never create another path candidate. Whole Markdown links and images unwrap their
+target without splitting nested route folders. Leading labels and file schemes
+are peeled at the edge; HTTP(S) schemes remain intact. Normalization classifies a
+candidate but never rewrites the supplied path or its rendered value.
+
+`test/privacy-path-samples.ts` commits thirteen relative shapes, including grouped,
+dynamic, catch-all and parallel routes. Nine bare/prose/Markdown presentations
+pass both renderer formats, and native non-Git plan/start/status commands preserve
+the exact path values. `test/privacy-fleet.acceptance.ts` additionally generates
+its corpus from read-only `git ls-files` calls in available local fleet checkouts.
+It reports counts and an aggregate inventory digest, never stores the path list,
+and disables optional Git locks. The snapshot's parenthesis/bracket/slot counts
+are reported separately so synthetic route coverage is not confused with fleet
+inventory coverage.
+
+## Registry-driven refusal admission
+
+`src/commands.ts` declares mutation variants beside the actual command definitions.
+The SDK activation registry is reconciled against that metadata: thirteen mutating
+commands, nineteen variants, including every progress stage and resource action.
+The separate property matrix covers **509 input refusals** and **35 state/backend
+refusals**, collectively exercising all fifteen typed refusal categories, plus
+ordinary missing-item, terminal, foreign-owner, malformed-generation, strict
+conflict and no-Git refusals. Each case hashes every tracker byte, directory entry
+and symlink, including history and runtime, and captures stdout to reject partial
+receipts. State cases use a tracker whose complete-list cache was prepared by the
+SDK during fixture setup; the cold-read limitation below remains explicit.
+
+Local mutation-guard lookups use the SDK's `createMutationGuardSdk.get`, retaining
+SDK schema, identity and parsing behavior without client usage/cache writes.
+Service declarations defer to the bound client rather than reading a local shadow.
+Shared start checks prospective files and overlap warnings before ownership;
+Git start checks its portable receipt before claiming. Tests inject a real peer
+file transition after corpus enumeration and before the client read, proving that
+the final fresh receipt is checked again. Next/schedule validate explanations
+before starting selected work. Resource metadata and configured progress actors
+are checked before publication. Recovery skips unsafe foreign context with a
+reason while truthfully retaining other completed transfers.
+
+Lease acquisition keeps its coordination generations transient. Principal
+heartbeats are announced after successful writes or completion, and failed
+validation removes only empty infrastructure directories created by that call.
+Atomic empty-directory removal preserves peer records; a publisher recreates a
+parent removed at its first write boundary. Filesystem interleavings, real I/O
+failures and reruns verify cleanup, liveness and retained data.
+
+## SDK read-effect limit
+
+Pinned SDK 2026.10.23 `PmClient.get()` records current-read context usage, and full
+gets or `listAllComplete()` may materialize metadata caches. `PmClientOptions`,
+`GetOptions` and `PmCompleteListOptions` expose no per-call no-write mode; the
+mutation guard's list method also uses the persistent cache. The package uses the
+public guard's local item lookup where possible and preserves SDK-owned records.
+It never rolls back derived files, disables configuration or reimplements listing.
+
+`test/sdk-read-effects.acceptance.ts` measures a cold strict-overlap refusal:
+item/history bytes remain identical, no package runtime records remain, but five
+SDK metadata-cache files are created. Thus whole-tracker byte identity is measured
+for the prepared-tracker refusal matrix, and is **not a universal cold-cache or
+provider-read guarantee**. Follow-up: [pm-swarm-write-free-reads](../.agents/pm/issues/pm-swarm-write-free-reads.toon).

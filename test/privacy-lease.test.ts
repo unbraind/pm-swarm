@@ -1,0 +1,91 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import type { TestContext } from 'node:test';
+import fs, { existsSync, readFileSync, readdirSync, rmdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { syncBuiltinESMExports } from 'node:module';
+import { setTimeout as delay } from 'node:timers/promises';
+import { withSwarmLease, heartbeatPath, readRuntime } from '../src/lease.ts';
+import { SettingsRefusal } from '../src/settings.ts';
+import { sharedFixture } from './shared-helpers.ts';
+import { unchanged, snapshot } from './privacy-snapshot.ts';
+
+/** A refused input is deliberately raised after real lease acquisition and optional renewals. */
+async function refused(): Promise<never> { await delay(15); throw new SettingsRefusal('swarm_input_invalid', 'Use valid fixture input.'); }
+
+test('refused lease validation neither announces liveness nor changes cold or existing runtime', async t => {
+  const f = await sharedFixture(t); const id = await f.item();
+  await unchanged(f.pmRoot, () => withSwarmLease(f.pmRoot, 'shared-test', refused, { renewMs: 2 }), 'lease/cold-refusal');
+  let first = '';
+  await withSwarmLease(f.pmRoot, 'shared-test', async lease => {
+    await lease.write(() => f.client.comments(id, { add: 'Admitted write' }));
+    first = readFileSync(heartbeatPath(f.pmRoot, 'shared-test'), 'utf8');
+    await delay(20);
+  }, { renewMs: 2 });
+  assert.notEqual(readFileSync(heartbeatPath(f.pmRoot, 'shared-test'), 'utf8'), first);
+  await unchanged(f.pmRoot, () => withSwarmLease(f.pmRoot, 'shared-test', refused, { renewMs: 2 }), 'lease/existing-refusal');
+});
+
+/** Inject one real filesystem transition at the first request write, retaining all actual SDK behavior. */
+function observeRequest(t: TestContext, root: string, transition: (args: unknown[]) => void) {
+  let injected = false; let restored = false; const original = fs.writeFileSync;
+  const observation = t.mock.method(fs, 'writeFileSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    if (!injected && String(args[0]).startsWith(join(root, 'request-'))) { injected = true; transition(args); }
+    return Reflect.apply(target, receiver, args);
+  } }));
+  syncBuiltinESMExports();
+  const restore = () => { if (restored) return; restored = true; observation.mock.restore(); syncBuiltinESMExports(); };
+  t.after(restore);
+  return { injected: () => injected, restore };
+}
+
+test('request publication survives a peer removing the empty runtime at its first write boundary', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm');
+  const observation = observeRequest(t, root, () => rmdirSync(root));
+  await unchanged(f.pmRoot, () => withSwarmLease(f.pmRoot, 'shared-test', refused), 'lease/parent-removal', error => error instanceof SettingsRefusal);
+  assert.equal(observation.injected(), true);
+});
+
+test('refusal cleanup preserves a peer runtime record and removes only its own lease generations', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm');
+  const peer = join(root, 'peer.json');
+  await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => { writeFileSync(peer, '{"owner":"peer"}'); return refused(); }), SettingsRefusal);
+  assert.equal(readFileSync(peer, 'utf8'), '{"owner":"peer"}');
+  assert.deepEqual(readdirSync(root), ['peer.json']);
+  assert.equal(readRuntime(join(root, 'operation-pin.json')), undefined);
+});
+
+test('a real request I/O refusal leaves no receipt or lease residue and a rerun converges', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm');
+  const before = snapshot(f.pmRoot); const observation = observeRequest(t, root, args => { args[0] = root; });
+  try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => 'unreachable'), /EISDIR/); }
+  finally { observation.restore(); }
+  assert.equal(observation.injected(), true); assert.equal(snapshot(f.pmRoot), before);
+  assert.equal(await withSwarmLease(f.pmRoot, 'shared-test', async () => 'admitted'), 'admitted');
+  assert.equal(readdirSync(root).length, 1, 'one principal heartbeat, no duplicate requests or pins');
+});
+
+for (const scenario of ['peer removed empty root', 'cleanup I/O failure'] as const) {
+  test(`owned runtime cleanup handles ${scenario} without deleting foreign state`, async t => {
+    const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm'); let injected = false;
+    const blocker = join(f.repo, 'retained-file'); writeFileSync(blocker, 'Retain this data');
+    const before = snapshot(f.pmRoot); const original = fs.rmdirSync;
+    const observation = t.mock.method(fs, 'rmdirSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+      if (!injected && String(args[0]) === root) {
+        injected = true;
+        if (scenario === 'peer removed empty root') Reflect.apply(target, receiver, args);
+        else args[0] = blocker;
+      }
+      return Reflect.apply(target, receiver, args);
+    } }));
+    syncBuiltinESMExports();
+    try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', refused), scenario === 'cleanup I/O failure' ? /ENOTDIR/ : SettingsRefusal); }
+    finally { observation.mock.restore(); syncBuiltinESMExports(); }
+    assert.equal(injected, true); assert.equal(readFileSync(blocker, 'utf8'), 'Retain this data');
+    if (scenario === 'peer removed empty root') assert.equal(snapshot(f.pmRoot), before);
+    else {
+      assert.equal(existsSync(join(root, 'operation.json')), false);
+      assert.equal(await withSwarmLease(f.pmRoot, 'shared-test', async () => 'recovered'), 'recovered');
+    }
+  });
+}

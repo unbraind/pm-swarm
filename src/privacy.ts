@@ -5,6 +5,8 @@ import { scanMutationSecrets } from '@unbrained/pm-cli/sdk';
 const CONFUSABLES: Record<string, string> = { '\u043e': 'o', '\u041e': 'O', '\u0455': 's', '\u0405': 'S', '\u0435': 'e', '\u0415': 'E', '\u04bb': 'h', '\u0430': 'a', '\u0456': 'i', '\u2215': '/', '\u2044': '/', '\u29f8': '/', '\u2216': '\\' };
 /** HTML punctuation that can conceal filesystem roots or token boundaries. */
 const ENTITIES: Record<string, string> = { sol: '/', frasl: '/', bsol: '\\', backslash: '\\', setminus: '\\', setmn: '\\', smallsetminus: '\\', ssetmn: '\\', colon: ':', period: '.', dollar: '$', percnt: '%', lbrace: '{', rbrace: '}', quot: '"', apos: "'", lt: '<', gt: '>', amp: '&', nbsp: ' ' };
+/** Closing presentation delimiters, used only when an opener begins the whole token. */
+const WRAPPERS: Record<string, string> = { '(': ')', '[': ']', '{': '}', '<': '>', '"': '"', "'": "'", '`': '`', '*': '*' };
 
 /** Decode valid URI octets even when adjacent bytes contain malformed UTF-8. */
 function decodeOctets(encoded: string): string {
@@ -39,10 +41,10 @@ function canonicalize(value: string): string | null {
 }
 /** Recognize local roots independent of home-directory spellings, on both supported path grammars. */
 function absoluteToken(token: string): boolean {
-  let path = token;
+  let path = unwrapToken(token);
   for (;;) {
     if (/^https?:\/\//i.test(path)) return false;
-    const next = path.replace(/^[\w-]{2,}:/u, '');
+    const next = unwrapToken(path.replace(/^[\w-]{2,}[:=]/u, ''));
     if (next === path) break;
     path = next;
   }
@@ -51,10 +53,22 @@ function absoluteToken(token: string): boolean {
   const windows = win32.normalize(path);
   return posix.isAbsolute(unix) || win32.isAbsolute(windows) || /^[a-z]:/i.test(windows);
 }
+/** Strip presentation only at token edges; route folders and other interior punctuation stay intact. */
+function unwrapToken(token: string): string {
+  for (;;) {
+    token = token.replace(/[,.;!?]+$/u, '');
+    const link = /^!?\[(?:\\.|[^\]\\])*\]\((.*)\)$/u.exec(token);
+    if (link !== null) { token = link[1]; continue; }
+    const opener = /^[`"'(<[{*\p{So}]/u.exec(token)?.[0];
+    if (opener === undefined) return token.replace(/[`"')>\]}*]+$/u, '');
+    const closer = WRAPPERS[opener];
+    token = closer !== undefined && token.endsWith(closer) ? token.slice(opener.length, -closer.length) : token.slice(opener.length);
+  }
+}
 /** Keep the SDK as the first layer, then refuse every canonical absolute local path, including non-home roots. */
 export function containsPrivatePath(value: string): boolean {
   if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) return true;
   const canonical = canonicalize(value);
   if (canonical === null) return true;
-  return canonical.split(/[^\p{L}\p{N}_./\\~%$:+-]+/u).some(absoluteToken);
+  return canonical.split(/\s+/u).some(absoluteToken);
 }

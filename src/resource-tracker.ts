@@ -1,4 +1,5 @@
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
+import { inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
 import { RESOURCE_TAG, ResourceRefusal } from './resources.ts';
 import type { ResourceBackend, ResourceRecord } from './resources.ts';
@@ -22,7 +23,7 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
   /** Read only resource metadata; reject terminal items and preserve ordinary claims. */
   const read = async (id: string): Promise<ResourceRecord> => {
     const settings = await supported();
-    const item = (await engine.client.get(id, { depth: 'full' })).item;
+    const item = (await inspectItem(engine.pmRoot, engine.repo, id))?.item ?? (await engine.client.get(id, { depth: 'full' })).item;
     return { id: String(item.id), resource: (item.tags as string[]).includes(RESOURCE_TAG) && !statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(settings.schema)), token: String(item.swarm_token ?? '0'), owner: typeof item.assignee === 'string' && item.assignee.trim() ? item.assignee : null, expires_at: typeof item.swarm_resource_expires_at === 'string' ? item.swarm_resource_expires_at : null };
   };
   return {

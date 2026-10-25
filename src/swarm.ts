@@ -3,7 +3,7 @@ import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-schedu
 import { gitEnvironment } from './git-environment.ts';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { basename, join, resolve, extname } from 'node:path';
+import { basename, join, resolve, extname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal } from '@unbrained/pm-cli/sdk';
@@ -15,8 +15,9 @@ import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { assertPrivatePathSafe, settings } from './settings.ts';
+import { inspectItem } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
-import { StaleFenceError, withSwarmLease } from './lease.ts';
+import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 import { recoverySnapshotMatches } from './recovery.ts';
@@ -84,6 +85,7 @@ export class Swarm {
     const { candidates, corpus } = await this.readyCandidates(parent);
     const active = await this.activeFootprints();
     const { chosen, unknown, reason, warnings, skipped } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
+    assertPrivatePathSafe({ reason, warnings, skipped });
     const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown, lease!) : undefined;
     return { ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
   }
@@ -103,7 +105,8 @@ export class Swarm {
   private async exclusive<T>(operation: (lease: Lease) => Promise<T>): Promise<T> {
     return withSwarmLease(this.pmRoot, this.author, async lease => {
       const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-      const release = await lease.write(() => acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author));
+      // Coordination is not a domain write and must not announce principal liveness before admission.
+      const release = await retryLock(() => { lease.assert(); return acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author); });
       try { return await operation(lease); } finally { await release(); }
     }, { allowBlocking: true });
   }
@@ -111,6 +114,8 @@ export class Swarm {
   /** Publish a lane under the repository operation lease. */
   private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease) {
     const config = await settings(this.pmRoot, overrides);
+    const local = await inspectItem(this.pmRoot, this.repo, id);
+    if (local !== null) assertPrivatePathSafe(itemFootprint(local.item));
     const item = (await this.client.get(id, { depth: 'full' })).item;
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
@@ -122,6 +127,7 @@ export class Swarm {
     const overlap_warnings = footprintOverlaps(itemFootprint(item), (await this.activeFootprints()).filter(lane => lane.id !== id));
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
+    assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
     await lease.write(() => this.client.claim(item.id, { author: this.author }));
     let created = false;
     try {

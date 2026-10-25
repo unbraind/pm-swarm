@@ -140,12 +140,30 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     } });
   }
 }
+/** Registration metadata is also the single source of truth for mutation variants and refusal coverage. */
+export const swarmCommandDefinitions = {
+  progress: { mutations: ['claimed', 'produced', 'reviewed', 'accepted'].map(stage => ({ stage, apply: true })), description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
+  resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
+  plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
+  schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
+  next: { mutations: [{}], description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
+  start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict'], id: true },
+  status: { mutations: [], description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
+  sync: { mutations: [{ apply: true }], description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files', 'token'], id: true },
+  heartbeat: { mutations: [{}], description: 'Renew agent liveness, optionally fencing an item', flags: ['agent', 'token'], id: false },
+  reclaim: { mutations: [{}], description: 'Recover claims from agents that stopped heartbeating', flags: ['agent', 'stale-after', 'to', 'parent', 'dry-run'], id: false },
+  handoff: { mutations: [{}], description: 'Transfer fenced ownership with receiver context atomically', flags: ['agent', 'to', 'note', 'token'], id: true },
+  close: { mutations: [{}], description: 'Finish and release a fenced claim atomically', flags: ['agent', 'note', 'token'], id: true },
+  land: { mutations: [{ execute: true }], description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
+  reap: { mutations: [{}], description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
+  settings: { mutations: [{ apply: true }], description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'progress-orchestrator', 'operation-id', 'apply'], id: false },
+} satisfies Record<string, { description: string; flags: string[]; id: boolean; mutations: Record<string, string | boolean>[] }>;
 /** Every command path owned by the package renderer. */
-export const swarmCommandNames = ['plan', 'schedule', 'next', 'start', 'status', 'sync', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'land', 'reap', 'settings'] as const;
+export const swarmCommandNames = Object.keys(swarmCommandDefinitions);
 /** Return a typed refusal instead of throwing into the host's native-renderer fallback. */
 function safeRendererResult(result: unknown): unknown {
   try { assertPrivatePathSafe(result); return result; }
-  catch { return { code: 'swarm_private_path', required: 'Replace private home paths with project-relative references.' }; }
+  catch { return { code: 'swarm_private_path', required: 'Replace absolute local paths with project-relative references.' }; }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
@@ -161,24 +179,8 @@ export function register(api: ExtensionApi): void {
     },
   });
   api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
-  const definitions = {
-    progress: { description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
-    resource: { description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
-    plan: { description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
-    schedule: { description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
-    next: { description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
-    start: { description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict'], id: true },
-    status: { description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
-    sync: { description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files', 'token'], id: true },
-    heartbeat: { description: 'Renew agent liveness, optionally fencing an item', flags: ['agent', 'token'], id: false },
-    reclaim: { description: 'Recover claims from agents that stopped heartbeating', flags: ['agent', 'stale-after', 'to', 'parent', 'dry-run'], id: false },
-    handoff: { description: 'Transfer fenced ownership with receiver context atomically', flags: ['agent', 'to', 'note', 'token'], id: true },
-    close: { description: 'Finish and release a fenced claim atomically', flags: ['agent', 'note', 'token'], id: true },
-    land: { description: 'Find a clean landing order; --execute tests and merges locally', flags: ['execute', 'full'], id: false },
-    reap: { description: 'Remove only merged terminal lanes and release own stale claims', flags: ['agent', 'dry-run'], id: false },
-    settings: { description: 'Preview or --apply SDK swarm settings', flags: ['base', 'root', 'branch-prefix', 'limit', 'progress-orchestrator', 'operation-id', 'apply'], id: false },
-  };
-  for (const [name, definition] of Object.entries(definitions)) {
+
+  for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
     api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' ? [{ name: 'id', required: definition.id }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }

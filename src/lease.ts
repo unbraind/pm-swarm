@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { linkSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { linkSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
 
@@ -22,7 +22,28 @@ export function readRuntime<T>(path: string): T | undefined {
 /** Replace one runtime record atomically, without truncating readers' data. */
 function publish(path: string, value: unknown): void {
   const temporary = `${path}.${randomUUID()}`;
-  writeFileSync(temporary, JSON.stringify(value)); renameSync(temporary, path);
+  for (;;) {
+    try { writeFileSync(temporary, JSON.stringify(value)); break; }
+    catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+      mkdirSync(dirname(path), { recursive: true });
+    }
+  }
+  renameSync(temporary, path);
+}
+
+/** Remove only empty infrastructure directories this invocation created, preserving every peer record. */
+function removeEmptyRuntime(root: string, created: string | undefined): void {
+  if (created === undefined) return;
+  for (let directory = root;; directory = dirname(directory)) {
+    try { rmdirSync(directory); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (['ENOTEMPTY', 'EEXIST'].includes(String(code))) return;
+      if (code !== 'ENOENT') throw error;
+    }
+    if (directory === created) return;
+  }
 }
 
 /** Retry only the SDK's explicit pre-write contention refusal, with bounded jitter. */
@@ -108,53 +129,57 @@ export interface Lease {
  */
 export async function withSwarmLease<T>(pmRoot: string, author: string, operation: (lease: Lease) => Promise<T>, options: LeaseOptions = {}): Promise<T> {
   const leaseMs = options.leaseMs ?? 30000; const renewMs = options.renewMs ?? 5000; const waitMs = options.waitMs ?? 300000;
-  const root = swarmRuntime(pmRoot); const path = join(root, 'operation.json'); const pin = join(root, 'operation-pin.json');
-  const identity = { pid: process.pid, process_start: processStart(process.pid), locality: leaseLocality() }; const token = randomUUID(); const started = Date.now();
-  const candidate = join(root, `request-${String(started).padStart(16, '0')}-${token}.json`);
-  let touched = Date.now(); touchHeartbeat(pmRoot, author);
-  publish(candidate, { ...identity, token });
+  const root = join(pmRoot, 'runtime/swarm'); const created = mkdirSync(root, { recursive: true });
   try {
-    for (;;) {
-      if (readRuntime<Owner>(candidate)?.token !== token) throw new StaleFenceError('operation request');
-      const name = readdirSync(root).filter(name => name.startsWith('request-') && name.endsWith('.json')).sort()[0];
-      if (name === undefined) throw new StaleFenceError('operation request');
-      const first = join(root, name);
-      const head = readRuntime<Owner>(first);
-      if (head?.token === token) {
-        try { linkSync(candidate, pin); break; }
-        catch (error) { if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST')) throw error; }
-        const owner = readRuntime<Owner>(pin);
-        if (owner !== undefined && !alive(owner, identity.locality)) {
-          await recoverLeasePin(pmRoot, author, identity.locality, owner);
+    const path = join(root, 'operation.json'); const pin = join(root, 'operation-pin.json');
+    const identity = { pid: process.pid, process_start: processStart(process.pid), locality: leaseLocality() }; const token = randomUUID(); const started = Date.now();
+    const candidate = join(root, `request-${String(started).padStart(16, '0')}-${token}.json`);
+    publish(candidate, { ...identity, token });
+    try {
+      for (;;) {
+        if (readRuntime<Owner>(candidate)?.token !== token) throw new StaleFenceError('operation request');
+        const name = readdirSync(root).filter(name => name.startsWith('request-') && name.endsWith('.json')).sort()[0];
+        if (name === undefined) throw new StaleFenceError('operation request');
+        const first = join(root, name);
+        const head = readRuntime<Owner>(first);
+        if (head?.token === token) {
+          try { linkSync(candidate, pin); break; }
+          catch (error) { if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST')) throw error; }
+          const owner = readRuntime<Owner>(pin);
+          if (owner !== undefined && !alive(owner, identity.locality)) {
+            await recoverLeasePin(pmRoot, author, identity.locality, owner);
+          }
+        } else if (head !== undefined && !alive(head, identity.locality)) {
+          rmSync(first, { force: true });
         }
-      } else if (head !== undefined && !alive(head, identity.locality)) {
-        rmSync(first, { force: true });
+        if (Date.now() - started >= waitMs) throw new Error('swarm_busy: live or unverifiable owner holds the tracker; retry after it finishes or inspect abandoned runtime records with all writers stopped');
+        await delay(50 + Math.random() * 150);
       }
-      if (Date.now() - started >= waitMs) throw new Error('swarm_busy: live or unverifiable owner holds the tracker; retry after it finishes or inspect abandoned runtime records with all writers stopped');
-      if (Date.now() - touched >= renewMs) { touchHeartbeat(pmRoot, author); touched = Date.now(); }
-      await delay(50 + Math.random() * 150);
+    } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
+    let failure: unknown;
+    /** Always validate both generations; synchronous Git work retains its live pin past expiry. */
+    const assert = () => {
+      if (failure !== undefined) throw failure;
+      const owner = readRuntime<Owner>(path);
+      if (owner?.token !== token || readRuntime<Owner>(pin)?.token !== token || (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs)) throw new StaleFenceError('operation');
+    };
+    let admitted = false;
+    /** Announce principal liveness only after a successful write or completed operation. */
+    const announce = () => { touchHeartbeat(pmRoot, author); admitted = true; };
+    const lease: Lease = { assert, write: operation => retryLock(async () => { assert(); const result = await operation(); announce(); return result; }) };
+    let timer: ReturnType<typeof setInterval> | undefined;
+    try {
+      publish(path, { ...identity, token, heartbeat: Date.now() });
+      timer = setInterval(() => {
+        try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); if (admitted) announce(); }
+        catch (error) { failure = error; }
+      }, renewMs);
+      assert(); const result = await operation(lease); announce(); return result;
     }
-  } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
-  let failure: unknown;
-  /** Always validate both generations; synchronous Git work retains its live pin past expiry. */
-  const assert = () => {
-    if (failure !== undefined) throw failure;
-    const owner = readRuntime<Owner>(path);
-    if (owner?.token !== token || readRuntime<Owner>(pin)?.token !== token || (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs)) throw new StaleFenceError('operation');
-  };
-  const lease: Lease = { assert, write: operation => retryLock(async () => { assert(); return operation(); }) };
-  let timer: ReturnType<typeof setInterval> | undefined;
-  try {
-    publish(path, { ...identity, token, heartbeat: Date.now() });
-    timer = setInterval(() => {
-      try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); touchHeartbeat(pmRoot, author); }
-      catch (error) { failure = error; }
-    }, renewMs);
-    assert(); return await operation(lease);
-  }
-  finally {
-    clearInterval(timer);
-    try { if (readRuntime<Owner>(path)?.token === token) unlinkSync(path); }
-    finally { if (readRuntime<Owner>(pin)?.token === token) unlinkSync(pin); }
-  }
+    finally {
+      clearInterval(timer);
+      try { if (readRuntime<Owner>(path)?.token === token) unlinkSync(path); }
+      finally { if (readRuntime<Owner>(pin)?.token === token) unlinkSync(pin); }
+    }
+  } finally { removeEmptyRuntime(root, created); }
 }

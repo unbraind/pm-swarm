@@ -77,7 +77,10 @@ worktree locations are relative to the project root.
 Private input is checked before any swarm dispatch or writer lease, including
 notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanner
 runs first; canonical POSIX and Windows root checks also refuse non-home paths.
-Relative paths and HTTP(S) URLs remain supported. See the
+Relative paths, framework route folders and HTTP(S) URLs remain supported.
+Path punctuation is preserved inside whole tokens; only edge wrappers are removed.
+Refusal tests cover every registered mutator. Cold SDK reads can still create
+derived caches; see the documented SDK read-effect limit and the
 [per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
 
 ## Without git
