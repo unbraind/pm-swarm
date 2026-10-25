@@ -14,7 +14,7 @@ import { Swarm } from '../src/swarm.ts';
 import { ResourceReservations } from '../src/resources.ts';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { PlanProgress } from '../src/progress.ts';
-import { privacyCorpus, rejectedCorpus, embeddedCorpus } from './privacy-corpus.ts';
+import { privacyCorpus, rejectedCorpus, embeddedCorpus, malformedCorpus } from './privacy-corpus.ts';
 import { homeFuzz, allowedFuzz } from './privacy-fuzz.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk, swarmHost, assertPrivacyRendering } from './settings-helpers.ts';
@@ -102,7 +102,7 @@ test('native CLI handoff admission leaves ownership, fence, history and the enti
   const f = await sharedFixture(t); const id = await f.item(['src/work.ts']); const claim = await f.shared.start(id);
   // Warm native host reads once so the baseline includes its read caches.
   f.run('swarm', 'settings');
-  const values = [...rejectedCorpus.filter(([name]) => ['unix-home', 'angle-file-url', 'dot-segment-root', 'forward-unc-authority'].includes(name)), ...embeddedCorpus];
+  const values = [...rejectedCorpus.filter(([name]) => ['unix-home', 'angle-file-url', 'dot-segment-root', 'forward-unc-authority'].includes(name)), ...embeddedCorpus, ...malformedCorpus];
   for (const [, value] of values) {
     const before = snapshot(f.pmRoot);
     const result = f.cli('swarm', 'handoff', id, '--token', claim.token, '--to', 'receiver', '--note', value, '--json');

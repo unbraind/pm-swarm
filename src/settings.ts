@@ -31,6 +31,14 @@ export function assertPrivatePathSafe(value: unknown): void {
   if (Array.isArray(value)) for (const entry of value) assertPrivatePathSafe(entry);
   else if (typeof value === 'object' && value !== null) for (const [key, entry] of Object.entries(value)) { assertPrivatePathSafe(key); assertPrivatePathSafe(entry); }
 }
+/** Admit the complete prospective mutation at its sink before invoking its sole writer.
+ * Callbacks consume the admitted payload rather than recapturing uninspected data.
+ * Storage coordinates and lease mechanics are not serialized mutation content.
+ */
+export function commitMutation<Value, Result>(payload: Value, commit: (admitted: Value) => Result): Result {
+  assertPrivatePathSafe(payload);
+  return commit(payload);
+}
 /** Read the extension subtree through public SDK file APIs, never a second settings writer. */
 async function rawSection(pmRoot: string): Promise<Record<string, unknown>> {
   let document: unknown;
@@ -86,8 +94,8 @@ export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorks
   let config: SwarmSettings | undefined; let foreign = 0;
   await options.checkpoint?.('before_transaction');
   const operationId = options.operationId ?? randomUUID();
-  const result = await retryLock(() => sdk.mutateWorkspaceSettings({
-    operationId, dryRun: options.apply !== true,
+  const result = await retryLock(() => commitMutation({ operationId, dryRun: options.apply !== true }, admitted => sdk.mutateWorkspaceSettings({
+    ...admitted,
     /** Derive the patch exclusively from the source protected by the SDK audit lock. */
     mutate: async current => {
       const section = await rawSection(pmRoot);
@@ -97,9 +105,9 @@ export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorks
       validatePersistedRoot(config);
       foreign = Object.keys(section).filter(key => !Object.hasOwn(swarmSettingsSection.flags, key)).length;
       await options.checkpoint?.('validated');
-      return { ...current, swarm: { ...section, ...config } };
+      return commitMutation({ ...current, swarm: { ...section, ...config } }, patch => patch);
     },
-  }));
+  })));
   await options.checkpoint?.('committed');
   // A replay skips the callback. Report current settings rather than claiming our patch ran again.
   const effective = config ?? await settings(pmRoot);

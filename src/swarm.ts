@@ -14,13 +14,13 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { assertPrivatePathSafe, settings } from './settings.ts';
+import { commitMutation, assertPrivatePathSafe, settings } from './settings.ts';
 import { inspectItem } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
-import { recoverySnapshotMatches } from './recovery.ts';
+import { recoveryItem } from './recovery.ts';
 
 /** Bind all operations to one real repository, tracker, and caller identity. */
 export class Swarm {
@@ -106,7 +106,7 @@ export class Swarm {
     return withSwarmLease(this.pmRoot, this.author, async lease => {
       const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
       // Coordination is not a domain write and must not announce principal liveness before admission.
-      const release = await retryLock(() => { lease.assert(); return acquireLock(join(common, 'swarm.local'), 'operation', 1800, this.author); });
+      const release = await retryLock(() => { lease.assert(); return commitMutation({ resource: 'operation', author: this.author }, admitted => acquireLock(join(common, 'swarm.local'), admitted.resource, 1800, admitted.author)); });
       try { return await operation(lease); } finally { await release(); }
     }, { allowBlocking: true });
   }
@@ -128,16 +128,16 @@ export class Swarm {
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
-    await lease.write(() => this.client.claim(item.id, { author: this.author }));
+    await lease.write(() => commitMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.claim(admitted.id, admitted.options)));
     let created = false;
     try {
       git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]);
-      await lease.write(() => this.client.update(item.id, { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }));
+      await lease.write(() => commitMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item }, admitted => this.client.update(admitted.id, admitted.options)));
     } catch (error) {
       if (created) { git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]); git(this.repo, ['worktree', 'remove', path]); }
       if (branchExists(this.repo, branch)) git(this.repo, ['branch', '-D', branch]);
-      if (view.claim_state?.claimed === false) await lease.write(() => this.client.release(item.id, { author: this.author }));
+      if (view.claim_state?.claimed === false) await lease.write(() => commitMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.release(admitted.id, admitted.options)));
       throw error;
     }
     return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
@@ -180,7 +180,7 @@ export class Swarm {
       const lane = (await this.lanes()).find(row => row.id === id);
       if (lane === undefined) throw new Error('No active lane for item');
       if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
-      const files = [...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))];
+      const files = commitMutation([...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))], admitted => admitted);
       const item = apply ? (await this.client.get(id, { depth: 'full' })).item : undefined;
       const linked = item === undefined ? lane.files : itemFootprint(item);
       const add = files.filter(path => !linked.includes(path));
@@ -189,7 +189,7 @@ export class Swarm {
         if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(id);
         const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
         if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
-        if (add.length > 0) await lease!.write(() => this.client.files(id, { add, author: this.author }));
+        if (add.length > 0) await lease!.write(() => commitMutation({ id, options: { add, author: this.author }, item }, admitted => this.client.files(admitted.id, admitted.options)));
       }
       return { id, dry_run: !apply, add };
     };
@@ -207,6 +207,7 @@ export class Swarm {
     const base = commit(this.repo, config.base); const order = maximalCleanOrder(this.repo, base, lanes);
     const blocked = this.blockedLanes(base, config.base, lanes.filter(lane => !order.includes(lane)), order);
     const conflicting_set = blocked.length > 0 ? minimalConflict(this.repo, base, lanes) : [];
+    assertPrivatePathSafe({ lanes, order: order.map(lane => lane.id), conflicting_set, blocked });
     if (execute && order.length > 0) {
       this.assertLandingBase(config.base, base);
       let simulated = base;
@@ -263,7 +264,7 @@ export class Swarm {
     const directory = mkdtempSync(join(tmpdir(), 'pm-swarm-')); const path = join(directory, 'verify');
     git(this.repo, ['worktree', 'add', '--detach', path, sha]);
     try {
-      await acknowledgeLinkedTests(join(path, '.agents/pm'), tests, nowIso());
+      await commitMutation({ tests, at: nowIso() }, admitted => acknowledgeLinkedTests(join(path, '.agents/pm'), admitted.tests, admitted.at));
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
       const environment: NodeJS.ProcessEnv = { ...gitEnvironment(), PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
       const result = spawnSync(process.execPath, [fileURLToPath(runner)], { cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
@@ -291,7 +292,8 @@ export class Swarm {
       if (refusal !== null) { refused.push({ id: lane.id, reason: refusal }); continue; }
       const missing = !existsSync(path);
       if (matching !== undefined && matching.split('\0').some(field => field.startsWith('locked'))) { refused.push({ id: lane.id, reason: 'Lane worktree is locked' }); continue; }
-      if (!recoverySnapshotMatches(snapshots.get(lane.id)!, (await this.client.get(lane.id, { depth: 'full' })).item)) continue;
+      const current = await recoveryItem(this.client, snapshots.get(lane.id)!, refused);
+      if (current === undefined) continue;
       if (matching !== undefined) cleanup.push({ id: lane.id, action: missing ? 'pruned_registration' : 'removed_worktree' });
       else if (!missing) cleanup.push({ id: lane.id, action: 'removed_orphan' });
       if (!dryRun) {
@@ -302,7 +304,7 @@ export class Swarm {
         if (pathResult.status === 0) git(this.repo, ['config', '--local', '--unset', `swarm.lane.${lane.id}`]);
       }
       removed.push(lane.id);
-      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => this.client.release(lane.id, { author: this.author })); released.push(lane.id); }
+      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => commitMutation({ id: lane.id, options: { author: this.author }, item: current }, admitted => this.client.release(admitted.id, admitted.options))); released.push(lane.id); }
     }
     return { dry_run: dryRun, removed, released, cleanup, refused };
   }

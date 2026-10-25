@@ -87,6 +87,11 @@ export const embeddedCorpus = [
   ['relative-home-substring', ['src', 'home', 'page.ts'].join('/')], ['relative-users-substring', ['docs', 'Users', 'guide.md'].join('/')],
   ['relative-root-substring', ['..', 'root', 'example.ts'].join('/')], ['url-prose-home-substring', `See https://example.test/docs then edit ${['src', 'home', 'page.ts'].join('/')}`],
 ] as const;
+/** Malformed octets cannot erase valid encoded Unicode separators in adjacent sequences. */
+export const malformedCorpus = [
+  ['malformed-utf8-fullwidth', `%ff${encodeURIComponent(unix.replaceAll('/', '\uff0f'))}`],
+  ['malformed-utf8-fullwidth-suffix', `%e2%82${encodeURIComponent(unix.replaceAll('/', '\uff0f'))}%ff`],
+] as const;
 /** Scope excludes ordinary prose, remote authorities and absolute locations outside user homes. */
 export const benignCorpus = [
   ['prose-option-currency-time', 'Option A: kept the cache; took ~5 min'],
@@ -105,4 +110,4 @@ export const benignCorpus = [
   ['relative-drive', 'Z:relative-drive-root'], ['ordinary-backslash', String.raw`use \ for escaping`],
 ] as const;
 /** Fixed rejection set used across every admission and rendering boundary. */
-export const rejectedCorpus = [...privacyCorpus, ...reviewCorpus, ...embeddedCorpus];
+export const rejectedCorpus = [...privacyCorpus, ...reviewCorpus, ...embeddedCorpus, ...malformedCorpus];

@@ -1,3 +1,4 @@
+import { commitMutation } from './settings.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
@@ -36,12 +37,12 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
       return withSwarmLease(engine.pmRoot, author, lease => lease.write(async () => {
         const next = decide(await read(id));
         lease.assert();
-        await engine.client.update(next.id, {
+        await commitMutation({ id: next.id, options: {
           author, force: true,
           ...(next.owner === null ? { unset: ['assignee', 'swarm_resource_expires_at'] } : { assignee: next.owner }),
           field: [`swarm_token=${next.token}`, ...(next.expires_at === null ? [] : [`swarm_resource_expires_at=${next.expires_at}`])],
           comment: [next.note === undefined ? `Swarm resource generation ${next.token}: ${next.owner === null ? 'released' : 'reserved until ' + next.expires_at}` : `Swarm resource generation ${next.token}: ${next.note}`],
-        });
+        } }, admitted => engine.client.update(admitted.id, admitted.options));
         const { note: _note, ...record } = next; return record;
       }));
     },

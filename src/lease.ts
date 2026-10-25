@@ -1,3 +1,4 @@
+import { commitMutation } from './settings.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { linkSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
@@ -21,6 +22,10 @@ export function readRuntime<T>(path: string): T | undefined {
 
 /** Replace one runtime record atomically, without truncating readers' data. */
 function publish(path: string, value: unknown): void {
+  commitMutation(value, admitted => publishAdmitted(path, admitted));
+}
+/** Publish only an admitted runtime record; temporary coordinates never become record content. */
+function publishAdmitted(path: string, value: unknown): void {
   const temporary = `${path}.${randomUUID()}`;
   for (;;) {
     try { writeFileSync(temporary, JSON.stringify(value)); break; }
@@ -70,7 +75,7 @@ export function heartbeatPath(pmRoot: string, author: string): string {
 
 /** Renew a principal's liveness without changing item history on each timer tick. */
 export function touchHeartbeat(pmRoot: string, author: string): string {
-  const heartbeat = new Date().toISOString(); publish(heartbeatPath(pmRoot, author), { heartbeat }); return heartbeat;
+  return commitMutation({ author, heartbeat: new Date().toISOString() }, admitted => { publish(heartbeatPath(pmRoot, admitted.author), { heartbeat: admitted.heartbeat }); return admitted.heartbeat; });
 }
 
 /** One process-owned operation lease, never stolen from a living writer. */
@@ -105,7 +110,7 @@ function alive(owner: Owner, locality: string | undefined): boolean {
 /** Revalidate an abandoned pin under the recovery lock before removing its generation. */
 export async function recoverLeasePin(pmRoot: string, author: string, locality: string | undefined, observed: Owner): Promise<void> {
   const pin = join(swarmRuntime(pmRoot), 'operation-pin.json');
-  const release = await retryLock(() => acquireLock(pmRoot, 'swarm-recovery', 30, author, false, false, 0));
+  const release = await retryLock(() => commitMutation({ resource: 'swarm-recovery', author }, admitted => acquireLock(pmRoot, admitted.resource, 30, admitted.author, false, false, 0)));
   try {
     const current = readRuntime<Owner>(pin);
     if (current?.token === observed.token && !alive(current, locality)) unlinkSync(pin);

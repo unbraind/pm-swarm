@@ -88,6 +88,12 @@ Refusal tests cover every registered mutator. Cold SDK reads can still create
 derived caches; see the documented SDK read-effect limit and the
 [per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
 
+Mutation payloads also pass a shared admission helper at each SDK write sink,
+including derived Git links, freshly locked settings, peer context and linked
+evidence. Percent decoding preserves valid Unicode sequences beside malformed
+bytes. Configured and resolved HOME/USERPROFILE spellings use the same
+canonicalization as candidate text; see [privacy admission](docs/privacy-admission.md).
+
 ## Without git
 
 Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.

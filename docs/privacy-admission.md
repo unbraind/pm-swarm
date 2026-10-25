@@ -23,7 +23,9 @@ searches private-home substrings. There is no whitespace tokenization, wrapper
 parser, drive-letter prose classifier or blanket URL acceptance.
 
 At most sixteen fixed-point rounds fold Unicode compatibility/confusables and
-strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes.
+strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes. UTF-8 decoding replaces each
+invalid sequence with a replacement marker while preserving adjacent valid
+multibyte sequences; malformed prefixes cannot erase encoded Unicode separators.
 Folding also precedes percent decoding: fullwidth hex digits must not split valid
 UTF-8 runs into malformed fragments. Excessive unresolved nesting refuses safely.
 Classification then converts backslashes, removes dot-only path segments,
@@ -39,13 +41,15 @@ Ordinary prose, money, approximate times, regex backslashes, remote authorities,
 web URLs without private-home content and non-home absolute paths remain allowed.
 Field-specific domain rules still apply: persisted lane roots and linked
 footprints must remain portable. Local Git root overrides retain their separate
-path constraints. The configured process home and its realpath are captured for
-the module's process lifetime; a filesystem root alone is not a private user folder.
+path constraints. HOME, USERPROFILE, the detected process home and each available
+realpath spelling pass through the identical canonicalizer used for candidates before they are
+captured for the module's process lifetime; a filesystem root alone is not a private user folder.
 
 ## Rejected and benign corpora
 
 `test/privacy-corpus.ts` retains the original **50** private encodings, both
-round-2 reproducers and **31** embedded review forms: **83 rejected cases**.
+round-2 reproducers, **31** embedded review forms and **two** malformed-UTF-8
+Unicode-separator regressions: **85 rejected cases**.
 They include multiword Markdown links and titles, comma-separated and JSON paths,
 shell separators/redirections, underscore markup, reference links, shell
 assignments, device/UNC paths, file URLs, and decoded URL paths/queries/fragments.
@@ -60,9 +64,9 @@ truthful receipts. Child processes verify configured, resolved/symlink, future a
 unset-root home behavior without printing those locations.
 
 The raw SDK detects **10/50** original forms and misses both round-2 cases and all
-31 embedded cases: **10/83** detected. The package refuses **83/83**. Original
-per-encoding findings remain below; the additional identities are in
-`embeddedCorpus`, and targeted output reports each SDK miss by identity.
+31 embedded cases plus both malformed Unicode-separator cases: **10/85** detected.
+The package refuses **85/85**. Original per-encoding findings remain below; the additional identities are in
+`embeddedCorpus` and `malformedCorpus`, and targeted output reports each SDK miss by identity.
 
 | Encoding identity | Raw SDK | Package guard |
 | --- | --- | --- |
@@ -155,6 +159,13 @@ Additional fixed identities:
 | relative-root-substring | **missed** | refused |
 | url-prose-home-substring | **missed** | refused |
 
+Additional malformed-sequence identities (raw SDK misses; package refuses both):
+
+| Identity | SDK detects | Package refuses |
+| --- | --- | --- |
+| malformed-utf8-fullwidth | no | yes |
+| malformed-utf8-fullwidth-suffix | no | yes |
+
 ## Rendering and validate-then-write
 
 The host catches renderer exceptions and permits native fallback. Swarm returns
@@ -165,12 +176,13 @@ shapes, primitive values, arrays, keys and nested content.
 The activation registry is reconciled against mutation metadata: **13 mutating
 commands, 19 variants**, including every resource action and progress stage.
 The fixed Cartesian property covers every rejected encoding and text position,
-plus malformed scalar inputs: **20,162 refusals**, each with full tracker/history
+plus malformed scalar inputs: **20,646 refusals**, each with full tracker/history
 byte, directory and symlink snapshots and zero partial receipts. Separate SDK
-coverage exercises **21 entries / 1,743 refusals**, plus malformed domains.
-All **664** fixed encoding/format/result-shape rendering combinations retain
+coverage exercises **21 entries / 1,785 refusals**, plus malformed domains.
+All **680** fixed encoding/format/result-shape rendering combinations retain
 ownership and emit only a safe refusal. Native CLI handoff repeats the four prior
-reproducers plus all 31 embedded forms with valid ownership and fencing.
+reproducers plus all 31 embedded forms and both malformed Unicode-separator forms with
+valid ownership and fencing.
 
 The state/backend matrix retains **509 input refusals** and **35 prepared-tracker
 state/backend refusals**, collectively all fifteen typed refusal categories plus
@@ -186,6 +198,47 @@ persisted root domain; narrowing privacy must not permit nonportable saved roots
 Resource records, progress authorities and ownership context retain their fresh
 checks. Leases defer principal liveness until successful writes/completion and
 remove only owned records and empty infrastructure created by the invocation.
+
+## Source-independent mutation sinks
+
+`commitMutation` in `src/settings.ts` checks the complete prospective payload
+immediately before invoking its writer. Each writer consumes that admitted
+payload. The source inventory parses every authored client call, SDK settings
+mutation, portable backend transaction and imported linked-test writer; an added
+or unguarded site fails the test until it joins the inventory and admission path.
+The current inventory has **18 sites**: twelve item mutations (claim, update,
+release, file links and comments), audited settings, linked-test acknowledgement,
+linked-test execution, the shared portable resource transaction and two SDK
+coordination lock acquisitions. All four
+resource actions share that transaction, whose freshly decided change is also
+admitted inside the backend callback. Full fresh settings patches, including
+preserved foreign subtrees, pass the helper before audit publication. Existing
+item snapshots are checked with their patches. Recovery skips unsafe foreign
+context with a reason before releasing a claim or deleting a Git lane.
+
+The same helper guards runtime-record publication and rendering/watch boundaries.
+Storage coordinates used to select the tracker, lock, worktree or runtime file
+are not serialized content. Git-derived sync links pass admission before an
+effectful item read and again at the files writer. This closes the source gap
+without maintaining separate Git, file, peer or argument privacy policies.
+
+The inventory cross product supplies actual CLI, Git-diff, settings-file,
+source-file and peer-comment values to every inventoried SDK/backend kind:
+**18 sites × five sources = 90 refusals**, complete tracker/history snapshots,
+zero changes and no partial receipt. End-to-end regressions separately exercise
+Git-derived sync, fresh audited foreign settings, shared/Git recovery and real
+handoffs. These properties retain the existing SDK read-cache limitation below;
+they do not remove SDK-owned records to manufacture byte identity.
+
+Malformed-neighbor containment uses seed **`0x8badf00d`**, **128 randomized homes**,
+all **85 fixed encodings** and raw Unicode/nested percent/JSON/HTML forms:
+**54,400 canonical substring-preservation checks** and **10,880 noisy-corpus
+refusals**, zero lost paths. Each valid
+encoded sequence survives random invalid-byte prefixes and suffixes. Process
+probes cover fullwidth, confusable, NFD, case and percent spellings independently
+through HOME and USERPROFILE: **ten environments / twenty actual handoff
+refusals**, with complete tracker bytes unchanged. An uninspectable configured
+root fails closed instead of silently dropping a protected identity.
 
 ## Seeded and real-path oracles
 
@@ -225,7 +278,7 @@ deleted to hide this gap. Follow-up: [pm-swarm-write-free-reads](../.agents/pm/i
 ## Reproduction
 
 ```sh
-node --test --test-concurrency=1 test/privacy-home.test.ts test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
+node --test --test-concurrency=1 test/privacy-sinks.test.ts test/privacy-home.test.ts test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
 node --test test/privacy-fleet.acceptance.ts test/sdk-read-effects.acceptance.ts
 npm run typecheck
 npm run lint

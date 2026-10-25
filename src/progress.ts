@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
-import { assertPrivatePathSafe, settings } from './settings.ts';
+import { commitMutation, assertPrivatePathSafe, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
 export const PROGRESS_PREFIX = 'swarm-progress/v2 ';
@@ -182,7 +182,7 @@ export class PlanProgress {
       if (step.owner === actor || (witness.stage === 'accepted' && (view.orchestrator !== actor || selected.reviewers.includes(actor)))) throw new ProgressRefusal('progress_role', 'Use an independent reviewer and the tracker-configured orchestrator for acceptance.');
       if (!selected.produced || (witness.stage === 'accepted' && !selected.reviewed)) throw new ProgressRefusal('progress_prerequisite', 'Production evidence and then an independent review are required before acceptance.');
     }
-    if (options.apply === true) await this.client.comments(id, { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true });
+    if (options.apply === true) await commitMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options));
     return { id: item.id, revision: view.revision, dry_run: options.apply !== true, actor, witness };
   }
 }

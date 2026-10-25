@@ -6,10 +6,10 @@ import { scanMutationSecrets } from '@unbrained/pm-cli/sdk';
 const CONFUSABLES: Record<string, string> = { '\u043e': 'o', '\u041e': 'O', '\u0455': 's', '\u0405': 'S', '\u0435': 'e', '\u0415': 'E', '\u04bb': 'h', '\u0430': 'a', '\u0456': 'i', '\u2215': '/', '\u2044': '/', '\u29f8': '/', '\u2216': '\\' };
 /** HTML punctuation that can conceal filesystem roots or token boundaries. */
 const ENTITIES: Record<string, string> = { sol: '/', frasl: '/', bsol: '\\', backslash: '\\', setminus: '\\', setmn: '\\', smallsetminus: '\\', ssetmn: '\\', colon: ':', period: '.', dollar: '$', percnt: '%', lbrace: '{', rbrace: '}', quot: '"', apos: "'", lt: '<', gt: '>', amp: '&', nbsp: ' ' };
-/** Decode valid URI octets even when adjacent bytes contain malformed UTF-8. */
+/** Decode each octet run losslessly: invalid UTF-8 becomes a marker without discarding valid neighbors. */
 function decodeOctets(encoded: string): string {
-  try { return decodeURIComponent(encoded); }
-  catch { return encoded.replace(/%([a-f0-9]{2})/gi, (_octet, hex: string) => { const code = Number.parseInt(hex, 16); return code < 128 ? String.fromCharCode(code) : ' '; }); }
+  const bytes = encoded.match(/[a-f0-9]{2}/gi)!.map(hex => Number.parseInt(hex, 16));
+  return Buffer.from(bytes).toString('utf8');
 }
 /** Decode JSON and HTML escapes without evaluating caller text or accepting invalid code points. */
 function decodePoint(encoded: string, digits: string, radix: number): string {
@@ -32,23 +32,25 @@ function canonicalRound(value: string): string {
     .replace(/\$\{(\w+)\}/g, '$$$1'));
 }
 /** Reach a bounded decoding fixed point; excessive nesting is refused rather than partially inspected. */
-function canonicalize(value: string): string | null {
+export function canonicalize(value: string): string | null {
   for (let round = 0; round < 16; round++) {
     const next = canonicalRound(value);
-    if (next === value) return value;
+    if (next === value) return normalizePathText(value);
     value = next;
   }
-  return canonicalRound(value) === value ? value : null;
+  return canonicalRound(value) === value ? normalizePathText(value) : null;
 }
 /** Normalize the complete text without tokenizing or exempting any URI component. */
 function normalizePathText(value: string): string {
   return value.replaceAll('\\', '/').replace(/(?<=\/)\.(?=\/)/g, '').replace(/\/+/g, '/').toLowerCase();
 }
 /** Retain both configured and resolved process-home spellings without recording either one. */
-function processHomes(): string[] {
-  const configured = homedir(); let resolved = configured;
-  try { resolved = realpathSync(configured); } catch { /* A newly configured home need not exist yet. */ }
-  return [...new Set([configured, resolved].map(normalizePathText))].filter(home => home !== '/' && home !== '');
+function processHomes(): (string | null)[] {
+  const configured = [homedir(), process.env.HOME, process.env.USERPROFILE].filter((home): home is string => home !== undefined && home !== '');
+  const roots = configured.flatMap(home => {
+    try { return [home, realpathSync(home)]; } catch { return [home]; }
+  });
+  return [...new Set(roots.map(canonicalize))].filter(home => home !== '/' && home !== '');
 }
 /** Process-local home identity is stable for this module's lifetime. */
 const PROCESS_HOMES = processHomes();
@@ -61,7 +63,7 @@ export function containsPrivatePath(value: string): boolean {
   if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) return true;
   const decoded = canonicalize(value);
   if (decoded === null) return true;
-  const text = normalizePathText(decoded);
+  const text = decoded;
   return text.trim() === '~' || HOME_ROOTS.test(text) || HOME_SHORTCUTS.test(text)
-    || PROCESS_HOMES.some(home => text.includes(home));
+    || PROCESS_HOMES.some(home => home === null || text.includes(home));
 }

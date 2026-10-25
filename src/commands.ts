@@ -7,7 +7,7 @@ import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
 import { repositoryRoot } from './workspace.ts';
 import { SharedTracker, SHARED_LAND_REFUSAL } from './shared-tracker.ts';
-import { assertPrivatePathSafe, SettingsRefusal, updateSettings } from './settings.ts';
+import { commitMutation, assertPrivatePathSafe, SettingsRefusal, updateSettings } from './settings.ts';
 import { StaleFenceError } from './lease.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
@@ -162,7 +162,7 @@ export const swarmCommandDefinitions = {
 export const swarmCommandNames = Object.keys(swarmCommandDefinitions);
 /** Return a typed refusal instead of throwing into the host's native-renderer fallback. */
 function safeRendererResult(result: unknown): unknown {
-  try { assertPrivatePathSafe(result); return result; }
+  try { return commitMutation(result, admitted => admitted); }
   catch { return { code: 'swarm_private_path', required: 'Replace private user-home paths with project-relative references.' }; }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */

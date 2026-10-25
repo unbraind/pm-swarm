@@ -73,3 +73,28 @@ test('configured and real process homes are private even outside conventional ho
     assert.deepEqual(JSON.parse(child.stdout), [expected, expected, expected, false]);
   }
 });
+
+test('configured HOME and USERPROFILE roots share candidate canonicalization before real handoff', t => {
+  const root = mkdtempSync(join(tmpdir(), 'swarm-home-normalization-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const guard = new URL('../src/privacy.ts', import.meta.url).href;
+  const fixture = new URL('./shared-helpers.ts', import.meta.url).href;
+  const snapshots = new URL('./privacy-snapshot.ts', import.meta.url).href;
+  const code = `import { containsPrivatePath } from ${JSON.stringify(guard)}; import { sharedFixture } from ${JSON.stringify(fixture)}; import { snapshot } from ${JSON.stringify(snapshots)};
+const cleanups = []; const f = await sharedFixture({ after: callback => cleanups.push(callback) });
+try { const id = await f.item(['src/public.ts']); const receipt = await f.shared.start(id); const before = snapshot(f.pmRoot); const results = [];
+for (const note of [process.env.CONFIGURED_PROBE, process.env.CANONICAL_PROBE]) { let refused = false; try { await f.shared.handoff(id, 'receiver', note + '/work', receipt.token); } catch (error) { refused = error.code === 'swarm_private_path'; } results.push(containsPrivatePath(note), refused, snapshot(f.pmRoot) === before); }
+process.stdout.write(JSON.stringify(results)); } finally { for (const cleanup of cleanups.reverse()) await cleanup(); }`;
+  const variants = [['\uff41lice', 'alice'], ['\u0430lice', 'alice'], ['a\u0301lice', '\u00e1lice'], ['ALICE', 'alice'], ['%61lice', 'alice']] as const;
+  let checks = 0;
+  for (const variable of ['HOME', 'USERPROFILE'] as const) for (const [configured, canonical] of variants) {
+    const home = join(root, variable.toLowerCase(), configured); mkdirSync(home, { recursive: true });
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, [variable]: home, CONFIGURED_PROBE: home, CANONICAL_PROBE: join(root, variable.toLowerCase(), canonical) } });
+    assert.equal(child.status, 0, `Home normalization probe ${checks} failed`);
+    assert.deepEqual(JSON.parse(child.stdout), [true, true, true, true, true, true], `Home normalization probe ${checks}`); checks++;
+  }
+  const nested = Array.from({ length: 18 }).reduce<string>(value => encodeURIComponent(value), ['','srv','profiles','private'].join('/'));
+  const excessive = spawnSync(process.execPath, ['--input-type=module', '-e', `import { containsPrivatePath } from ${JSON.stringify(guard)}; process.stdout.write(JSON.stringify(containsPrivatePath('ordinary')));`], { encoding: 'utf8', env: { ...process.env, HOME: nested } });
+  assert.equal(excessive.status, 0); assert.equal(excessive.stdout, 'true', 'An uninspectable configured root fails closed');
+  console.log(JSON.stringify({ normalized_home_environments: checks, configured_and_canonical_refusals: checks * 2, handoff_tracker_changes: 0 }));
+});

@@ -1,4 +1,4 @@
-import { assertPrivatePathSafe } from './settings.ts';
+import { commitMutation, assertPrivatePathSafe } from './settings.ts';
 import { resolveClaimPrincipal } from '@unbrained/pm-cli/sdk';
 
 /** Explicit opt-in prevents ordinary work from becoming a resource accidentally. */
@@ -89,6 +89,11 @@ export class ResourceReservations {
     return { ...record, held: record.owner !== null && Date.parse(record.expires_at!) > Date.now() };
   }
 
+  /** Admit backend arguments and the freshly decided change inside the backend's own transaction. */
+  private transact(id: string, decide: (record: ResourceRecord) => ResourceChange): Promise<ResourceRecord> {
+    return commitMutation({ id, author: this.author }, admitted => this.backend.transact(admitted.id, admitted.author, record => commitMutation(decide(record), change => change)));
+  }
+
   /** Read one resource without taking a writer lease or invoking Git. */
   async status(id: string): Promise<ResourceReceipt> { return this.receipt(this.validate(await this.backend.read(id))); }
 
@@ -96,7 +101,7 @@ export class ResourceReservations {
   async reserve(id: string, seconds = 300): Promise<ResourceReceipt> {
     assertPrivatePathSafe(id); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    return this.receipt(await this.transact(id, record => {
       this.validate(record);
       if (record.owner !== null && Date.parse(record.expires_at!) > Date.now()) throw new ResourceRefusal('resource_busy', 'Inspect resource status; wait for expiry or ask the current owner to release. Use renew with its token to extend your own reservation.');
       return { ...record, owner: this.author, token: (BigInt(record.token) + 1n).toString(), expires_at: new Date(Date.now() + duration).toISOString() };
@@ -108,7 +113,7 @@ export class ResourceReservations {
     assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
     validateResourceToken(token);
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    return this.receipt(await this.transact(id, record => {
       this.fence(record, token); return { ...record, expires_at: new Date(Date.now() + duration).toISOString() };
     }));
   }
@@ -117,7 +122,7 @@ export class ResourceReservations {
   async release(id: string, token: string): Promise<ResourceReceipt> {
     assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
     validateResourceToken(token);
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    return this.receipt(await this.transact(id, record => {
       this.fence(record, token); return { ...record, token: (BigInt(record.token) + 1n).toString(), owner: null, expires_at: null };
     }));
   }
@@ -127,7 +132,7 @@ export class ResourceReservations {
     assertPrivatePathSafe({ id, token, note }); assertPrivatePathSafe(this.author);
     if (!note.trim() || note.length > 4096) throw new ResourceRefusal('resource_invalid', 'Supply a nonempty --note of at most 4096 characters.');
     validateResourceToken(token);
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    return this.receipt(await this.transact(id, record => {
       this.fence(record, token); return { ...record, note };
     }));
   }
