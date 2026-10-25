@@ -79,6 +79,9 @@ notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanne
 runs first; canonical POSIX and Windows root checks also refuse non-home paths.
 Relative paths, framework route folders and HTTP(S) URLs remain supported.
 Path punctuation is preserved inside whole tokens; only edge wrappers are removed.
+Coordination leases keep renewing during validation, while persistent principal
+liveness is announced after a successful write or completion. Use
+`pm swarm heartbeat` separately when a long queue needs background liveness.
 Refusal tests cover every registered mutator. Cold SDK reads can still create
 derived caches; see the documented SDK read-effect limit and the
 [per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).

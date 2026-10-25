@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { getHistoryPath, locateItem } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from '../src/inspection.ts';
 import { PlanProgress } from '../src/progress.ts';
@@ -19,6 +20,11 @@ test('service declarations defer metadata reads to the bound client without usin
   assert.equal(view.id, plan.id);
   f.run('swarm', 'handoff', id, '--token', String(started.token), '--to', 'receiver', '--note', 'Public provider-owned context');
   assert.equal((await f.client.get(id)).item.assignee, 'receiver');
+  const manifest = join(f.pmRoot, 'extensions/refusal-storage/manifest.json');
+  for (const declaration of [{}, { capabilities: [] }]) {
+    writeFileSync(manifest, JSON.stringify({ name: 'refusal-storage', version: '1.0.0', entry: 'entry.js', ...declaration }));
+    assert.equal(await inspectItem(f.pmRoot, f.repo, id), null, 'Unspecified capabilities cannot certify a local-only read');
+  }
 });
 
 test('reclaim skips unsafe foreign context and truthfully retains other completed transfers', async t => {
