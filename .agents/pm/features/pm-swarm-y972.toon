@@ -6,12 +6,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T01:38:29.658Z"
+updated_at: "2026-10-25T01:40:03.571Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[17]{created_at,author,text}:
+comments[18]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -29,6 +29,7 @@ comments[17]{created_at,author,text}:
   "2026-10-25T01:35:04.348Z",codex-agent,"CI run 40150822836 exercised 297 tests: 295 passed, 2 failed; statements/functions/lines 100 percent, branches 99.93 percent, settings module 100 in every dimension. Fixed the prerequisite test selector after splitting packed npm/Bun consumers, retained asynchronous Git generic/native expected exit codes through sanitized transport, and exercised private underlying error redaction. Targeted fixes: 6 tests passed. Three additional behavioral revert proofs each failed one test (exit 1): generic Git status retention, native SDK status retention, and private underlying-error sanitization. All fixes restored; no thresholds changed."
   "2026-10-25T01:35:27.274Z",codex-agent,"Corrected the internal lane-wrapper signature to accept the union of shared and Git record promises. Local typecheck, lint, build, docstrings and zero-duplication checks now pass after the exit-transport fixes. The typed public SDK contracts are unchanged."
   "2026-10-25T01:38:29.658Z",codex-agent,"Refined private-path matching to retain relative home-directory paths and ordinary web URLs while rejecting absolute paths, quoted paths and file URLs. Targeted privacy tests: 2 passed. Reverting only the matching function caused exactly 1 regression failure (exit 1), then the fix was restored. Total behavioral revert probes: 12, each failed its regression. Latest pinned pm linked run: 29 settings/commands plus 5 transport/prerequisite tests passed; inherited links remain 2 provenance refusals and passed directly in the separate 11-test selection. Typecheck, lint, build, docstrings and zero-duplication checks pass."
+  "2026-10-25T01:40:03.570Z",codex-agent,"CI run 40151238474 passed all 299 behavioral tests on Node 22 and 26, but refused full coverage because the Git error class field initializer was not measured through the separately loaded CLI graph. Added a real in-process SDK harness test for native missing-item and generic ownership refusal statuses. It passes and measures the initializer twice. Reverting the transport function fails this new regression (1 failed, exit 1); source restored. Total behavioral revert probes: 13. No coverage exclusions or threshold changes."
 files[25]{path,scope}:
   index.ts,project
   package.json,project

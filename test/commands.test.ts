@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
 import type { CommandHandlerContext, ExtensionApi } from '@unbrained/pm-cli/sdk/authoring';
 import extension from '../index.ts';
@@ -99,4 +100,14 @@ for (const useAgent of [false, true]) test(`CLI reap and sync ${useAgent ? 'acce
   assert.deepEqual(reaped.released, useAgent ? [ids[0]] : []);
   const [own, foreign] = await Promise.all(ids.map(id => f.client.get(id)));
   assert.equal(own.claim_state?.claimed, !useAgent); assert.equal(foreign.claim_state?.assignee, 'foreign-agent');
+});
+
+test('SDK host harness retains Git generic and native refusal statuses', async t => {
+  const f = await fixture(t);
+  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  /** Exercise the SDK handler directly as well as the separately loaded CLI module graph. */
+  const start = (id: string) => host.runCommand({ command: 'swarm start', args: [id], pmRoot: f.pmRoot, global: { author: 'swarm-test' } });
+  await assert.rejects(start('swarm-test-absent'), (error: unknown) => isPmCliExpectedError(error) && error.exitCode === 3);
+  const id = await f.item(['src']); await f.client.claim(id, { author: 'foreign-worker' });
+  await assert.rejects(start(id), (error: unknown) => isPmCliExpectedError(error) && error.exitCode === 1);
 });
