@@ -1,3 +1,4 @@
+import { validateCommandInputs } from './admission.ts';
 import { SchedulingRefusal } from './fair-scheduling.ts';
 import { relative } from 'node:path';
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
@@ -126,6 +127,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
 /** Dispatch and validate the complete host result before any renderer can emit it. */
 export async function runCommand(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
   try {
+    validateCommandInputs(command, ctx);
     const result = await dispatch(command, ctx);
     if (typeof result.worktree === 'string') result.worktree = relative(repositoryRoot(ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root)!, result.worktree);
     assertPrivatePathSafe(result);
@@ -140,15 +142,23 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
 }
 /** Every command path owned by the package renderer. */
 export const swarmCommandNames = ['plan', 'schedule', 'next', 'start', 'status', 'sync', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'land', 'reap', 'settings'] as const;
+/** Return a typed refusal instead of throwing into the host's native-renderer fallback. */
+function safeRendererResult(result: unknown): unknown {
+  try { assertPrivatePathSafe(result); return result; }
+  catch { return { code: 'swarm_private_path', required: 'Replace private home paths with project-relative references.' }; }
+}
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
   for (const format of ['toon', 'json'] as const) api.registerRenderer(format, context => {
-    assertPrivatePathSafe(context.result);
-    if ('swarm_watch_complete' in (context.result as object) && (context.result as { swarm_watch_complete?: boolean }).swarm_watch_complete === true) return '';
-    return format === 'json' ? JSON.stringify(context.result) : encodeToon(context.result);
+    const result = safeRendererResult(context.result);
+    if ('swarm_watch_complete' in (result as object) && (result as { swarm_watch_complete?: boolean }).swarm_watch_complete === true) return '';
+    return format === 'json' ? JSON.stringify(result) : encodeToon(result);
   }, {
     commands: swarmCommandNames.map(name => `swarm ${name}`),
-    resultDiscriminator: result => typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true),
+    resultDiscriminator: result => {
+      try { assertPrivatePathSafe(result); } catch { return true; }
+      return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
+    },
   });
   api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
   const definitions = {

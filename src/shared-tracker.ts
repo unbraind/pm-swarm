@@ -3,7 +3,7 @@ import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-schedu
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { footprintPath, itemFootprint, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
-import { settings } from './settings.ts';
+import { assertPrivatePathSafe, settings } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -69,6 +69,7 @@ export class SharedTracker {
 
   /** Claim a shared lane under the same lease as automatic selection. */
   async start(id: string, _overrides: Partial<SwarmSettings> = {}, strict = false) {
+    assertPrivatePathSafe({ id, overrides: _overrides, author: this.engine.author });
     return withSwarmLease(this.engine.pmRoot, this.engine.author, lease => this.claimLane(id, strict, lease));
   }
 
@@ -90,11 +91,12 @@ export class SharedTracker {
 
   /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
   async schedule(options: ScheduleOptions): Promise<ScheduleReceipt> {
-    return scheduleNext(this.engine, options, policy => this.next(options.parent, options.dryRun === true, policy));
+    return scheduleNext(this.engine, options, this.next.bind(this, options.parent, options.dryRun === true));
   }
 
   /** Pick by shared readiness and rank while holding the tracker coordination lease. */
   async next(parent?: string, dryRun = false, policy?: FairPolicy) {
+    assertPrivatePathSafe({ parent, author: this.engine.author });
     /** Keep the read/claim decision inside a single bounded operation. */
     const choose = async (lease?: Lease) => {
       const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
@@ -131,6 +133,7 @@ export class SharedTracker {
 
   /** Link explicit paths from one fresh item read, under the fenced write pin. */
   async sync(id: string, apply = false, explicitFiles?: string[], token?: string): Promise<{ mode: string; id: string; dry_run: boolean; add: string[] }> {
+    assertPrivatePathSafe({ id, explicitFiles, token, author: this.engine.author });
     if (explicitFiles === undefined || explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === '')) throw new Error('Without git, sync requires --files a,b; add --apply to link them.');
     const files = [...new Set(explicitFiles.map(footprintPath))];
     /** Preserve preview and legacy no-op behavior while fencing every actual mutation. */
@@ -157,6 +160,7 @@ export class SharedTracker {
 
   /** Release this principal's terminal claims; preserve active and foreign ownership. */
   async reap(dryRun = false) {
+    assertPrivatePathSafe(this.engine.author);
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       const released: string[] = []; const refused: { id: string; reason: string }[] = [];
       const corpus = await this.engine.corpus(); const snapshots = new Map(corpus.items.map(item => [item.id, item]));
@@ -194,6 +198,7 @@ export class SharedTracker {
 
   /** Renew the agent heartbeat, optionally verifying one held item generation. */
   async heartbeat(id?: string, token?: string) {
+    assertPrivatePathSafe({ id, token, author: this.engine.author });
     if (id === undefined) return { agent: this.engine.author, heartbeat: touchHeartbeat(this.engine.pmRoot, this.engine.author) };
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       await this.fence(id, token);
@@ -209,6 +214,7 @@ export class SharedTracker {
 
   /** Atomically transfer owner, generation and bounded receiver context in one SDK update. */
   async handoff(id: string, to: string, note: string, token?: string) {
+    assertPrivatePathSafe({ id, to, note, token, author: this.engine.author });
     to = to.trim();
     if (!to || to === this.engine.author || !note.trim() || note.length > 4096) throw new Error('handoff requires a different --to agent and a nonempty --note of at most 4096 characters');
     return this.owned(id, token, async (item, lease) => {
@@ -225,6 +231,7 @@ export class SharedTracker {
     const comments = (item.comments as { text: string; author: string; created_at: string }[]).slice(-3).map(row => ({ ...row, text: row.text.slice(0, 1024) }));
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
+    assertPrivatePathSafe(context);
     if (!dryRun) await lease.write(() => this.engine.client.update(id, {
       author: this.engine.author, force: true, ...(to === undefined ? { status: statuses.open_status } : { assignee: to }),
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
@@ -237,6 +244,7 @@ export class SharedTracker {
 
   /** Preview or recover stale swarm work, preserving unrelated owners and workflow states. */
   async reclaim(staleAfter: number, to?: string, dryRun = false, parent?: string) {
+    assertPrivatePathSafe({ to, parent, author: this.engine.author });
     to = to?.trim();
     if (!Number.isFinite(staleAfter) || staleAfter <= 0 || (to !== undefined && !to)) throw new Error('reclaim requires --stale-after as positive seconds and a nonempty optional --to');
     /** Share eligibility and fresh-snapshot checks between preview and mutation. */
@@ -270,6 +278,7 @@ export class SharedTracker {
 
   /** Finish a fenced claim and release its ownership in one durable mutation. */
   async close(id: string, note: string, token?: string) {
+    assertPrivatePathSafe({ id, note, token, author: this.engine.author });
     if (!note.trim()) throw new Error('close requires a nonempty --note');
     return this.owned(id, token, async (item, lease) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);

@@ -1,3 +1,4 @@
+import { assertPrivatePathSafe } from './settings.ts';
 import { discoverExtensions, readSettings } from '@unbrained/pm-cli/sdk';
 import { selectNext } from './selection.ts';
 import type { ActiveFootprint, RankedCandidate } from './selection.ts';
@@ -165,6 +166,7 @@ export class FairPolicy {
 
 /** Bind fair ranking to either existing next engine, never a separate ownership path. */
 export async function scheduleNext(engine: { author: string; repo: string; pmRoot: string }, options: ScheduleOptions, invoke: (policy: FairPolicy) => Promise<NextReceipt>): Promise<ScheduleReceipt> {
+  assertPrivatePathSafe({ author: engine.author, options });
   const policy = new FairPolicy(engine.author, options);
   const discovered = await discoverExtensions({ pmRoot: engine.pmRoot, cwd: engine.repo, settings: await readSettings(engine.pmRoot) });
   if (!discovered.effective.every(extension => extension.capabilities !== undefined && extension.capabilities.length > 0 && !extension.capabilities.includes('services'))) {

@@ -2,11 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { getSettingsPath, readFileIfExists } from '@unbrained/pm-cli/sdk';
 import type { ExtensionCommandSdk } from '@unbrained/pm-cli/sdk/authoring';
+import { containsPrivatePath } from './privacy.ts';
 import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */
@@ -27,8 +28,7 @@ export const swarmSettingsSection = {
 
 /** Refuse nested output values and keys containing an absolute home location. */
 export function assertPrivatePathSafe(value: unknown): void {
-  const home = /(?:^|[\s"'`([{=,:;])(?:file:\/\/)?(?:\/(?:home|Users)\/|\/(?:root)(?:\/|\b)|\/?[A-Za-z]:[\\/]+Users[\\/]+)/i;
-  if (typeof value === 'string' && home.test(value)) throw new SettingsRefusal('swarm_private_path', 'Replace absolute home paths with project-relative paths before requesting this output.');
+  if (typeof value === 'string' && containsPrivatePath(value)) throw new SettingsRefusal('swarm_private_path', 'Replace absolute home paths with project-relative paths before requesting this output.');
   if (Array.isArray(value)) for (const entry of value) assertPrivatePathSafe(entry);
   else if (typeof value === 'object' && value !== null) for (const [key, entry] of Object.entries(value)) { assertPrivatePathSafe(key); assertPrivatePathSafe(entry); }
 }
@@ -78,6 +78,9 @@ export interface SettingsReceipt {
 }
 /** Patch the freshly locked subtree, leaving every foreign setting intact and releasing last. */
 export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorkspaceSettings'>, pmRoot: string, overrides: Partial<SwarmSettings> = {}, options: SettingsMutationOptions = {}): Promise<SettingsReceipt> {
+  assertPrivatePathSafe({ overrides, operationId: options.operationId });
+  const proposed = await settings(pmRoot, overrides);
+  if (isAbsolute(proposed.root) || /^[A-Za-z]:/.test(proposed.root)) throw new SettingsRefusal('swarm_settings_invalid', 'Tracked swarm root setting must be relative.');
   let config: SwarmSettings | undefined; let foreign = 0;
   await options.checkpoint?.('before_transaction');
   const operationId = options.operationId ?? randomUUID();

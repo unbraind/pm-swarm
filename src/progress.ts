@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
-import { settings } from './settings.ts';
+import { assertPrivatePathSafe, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
 export const PROGRESS_PREFIX = 'swarm-progress/v2 ';
@@ -83,6 +83,11 @@ function decode(text: string): ProgressWitness | undefined {
   }
   return row as unknown as ProgressWitness;
 }
+/** Validate a proposed witness before any settings read or backend access. */
+export function validateProgressWitness(options: ProgressDeclaration): ProgressWitness {
+  assertPrivatePathSafe(options);
+  return decode(PROGRESS_PREFIX + JSON.stringify({ step: options.step, revision: options.revision, stage: options.stage, evidence: options.evidence }))!;
+}
 /** Compose parallel Plan progress through native SDK reads and atomic idempotent comments.
  * Actors use the same author resolution as SDK mutations; flags are assertions.
  * Tracker configuration supplies approval authority. Asserted identities need
@@ -159,7 +164,8 @@ export class PlanProgress {
    * preserve one another's comments; no package-local coordination lock is used.
    */
   async witness(id: string, options: ProgressDeclaration): Promise<{ id: string; revision: string; dry_run: boolean; actor: string; witness: ProgressWitness }> {
-    const witness = decode(PROGRESS_PREFIX + JSON.stringify({ step: options.step, revision: options.revision, stage: options.stage, evidence: options.evidence }))!;
+    assertPrivatePathSafe({ id, options, author: this.sdkAuthor });
+    const witness = validateProgressWitness(options);
     const { actor, orchestrator } = await this.authority(options);
     const item = await this.snapshot(id);
     const step = item.plan_steps!.find(row => row.id === witness.step);

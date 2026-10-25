@@ -74,6 +74,11 @@ paths in nested result values, keys, watch events or errors trigger a typed
 `swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
 worktree locations are relative to the project root.
 
+Private input is checked before any swarm dispatch or writer lease, including
+notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanner
+is the oracle; normalization closes its measured encoding gaps. See the
+[per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
+
 ## Without git
 
 Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.

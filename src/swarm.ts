@@ -14,7 +14,7 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { settings } from './settings.ts';
+import { assertPrivatePathSafe, settings } from './settings.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -63,6 +63,7 @@ export class Swarm {
 
   /** Claim before creating a worktree, and keep its absolute location only in local Git config. */
   async start(id: string, overrides: Partial<SwarmSettings> = {}, strict = false) {
+    assertPrivatePathSafe({ id, overrides, author: this.author });
     return this.exclusive(lease => this.startLane(id, overrides, strict, lease));
   }
 
@@ -73,6 +74,7 @@ export class Swarm {
 
   /** Pick and publish under one lease; previews take no lease and perform no mutations. */
   async next(parent?: string, dryRun = false, policy?: FairPolicy) {
+    assertPrivatePathSafe({ parent, author: this.author });
     if (dryRun) return this.nextLane(parent, true, undefined, policy);
     return this.exclusive(lease => this.nextLane(parent, false, lease, policy));
   }
@@ -166,6 +168,7 @@ export class Swarm {
 
   /** Preview footprint updates by default; apply through the SDK files mutation. */
   async sync(id: string, apply = false, explicitFiles?: string[], token?: string) {
+    assertPrivatePathSafe({ id, explicitFiles, token, author: this.author });
     /** Keep lane discovery, authoritative ownership and each write within the same pin. */
     const evaluate = async (lease?: Lease) => {
       const lane = (await this.lanes()).find(row => row.id === id);
@@ -188,7 +191,7 @@ export class Swarm {
   }
 
   /** Simulate all lanes, report a smallest conflicting subset, and optionally merge tested commits locally. */
-  async land(execute = false) { return this.exclusive(() => this.landLanes(execute)); }
+  async land(execute = false) { assertPrivatePathSafe(this.author); return this.exclusive(() => this.landLanes(execute)); }
 
   /** Keep simulation and execution inside the same shared repository lease. */
   private async landLanes(execute: boolean) {
@@ -263,7 +266,7 @@ export class Swarm {
   }
 
   /** Reap only terminal merged branches, and release only this caller's stale claims. */
-  async reap(dryRun = false) { return this.exclusive(lease => this.reapLanes(dryRun, lease)); }
+  async reap(dryRun = false) { assertPrivatePathSafe(this.author); return this.exclusive(lease => this.reapLanes(dryRun, lease)); }
 
   /** Check ancestry and remove registrations under the shared repository lease. */
   private async reapLanes(dryRun: boolean, lease: Lease) {

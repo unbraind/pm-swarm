@@ -1,3 +1,4 @@
+import { assertPrivatePathSafe } from './settings.ts';
 import { resolveClaimPrincipal } from '@unbrained/pm-cli/sdk';
 
 /** Explicit opt-in prevents ordinary work from becoming a resource accidentally. */
@@ -88,6 +89,7 @@ export class ResourceReservations {
 
   /** Reserve an available resource with a strictly increasing durable generation. */
   async reserve(id: string, seconds = 300): Promise<ResourceReceipt> {
+    assertPrivatePathSafe(id); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.validate(record);
@@ -98,6 +100,7 @@ export class ResourceReservations {
 
   /** Extend a still-live reservation; a stale worker cannot resurrect an expired lease. */
   async renew(id: string, token: string, seconds = 300): Promise<ResourceReceipt> {
+    assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.fence(record, token); return { ...record, expires_at: new Date(Date.now() + duration).toISOString() };
@@ -106,6 +109,7 @@ export class ResourceReservations {
 
   /** Release and invalidate the generation without deleting its durable history. */
   async release(id: string, token: string): Promise<ResourceReceipt> {
+    assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.fence(record, token); return { ...record, token: (BigInt(record.token) + 1n).toString(), owner: null, expires_at: null };
     }));
@@ -113,6 +117,7 @@ export class ResourceReservations {
 
   /** Publish a bounded tracker receipt only while the reservation is still owned. */
   async publish(id: string, token: string, note: string): Promise<ResourceReceipt> {
+    assertPrivatePathSafe({ id, token, note }); assertPrivatePathSafe(this.author);
     if (!note.trim() || note.length > 4096) throw new ResourceRefusal('resource_invalid', 'Supply a nonempty --note of at most 4096 characters.');
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.fence(record, token); return { ...record, note };
