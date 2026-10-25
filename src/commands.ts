@@ -29,22 +29,29 @@ async function laneOperation(operation: Promise<Record<string, unknown>>, repo: 
   try { return await operation; }
   catch (error) { if (repo === undefined) throw error; throw new GitCommandFailure(error); }
 }
-/** Read a scalar flag without accepting repeated or non-text values. */
-function textOption(value: unknown): string | undefined {
-  if (value === undefined) return undefined;
-  if (typeof value !== 'string' || value.trim() === '') throw new Error('Expected one nonempty flag value');
-  return value;
-}
+/** Read a scalar from the immutable input frame already checked by admission. */
+function textOption(value: unknown): string | undefined { return value as string | undefined; }
 /** Preserve flag precedence without injecting undefined over configured defaults. */
 function overrides(options: Record<string, unknown>): Partial<SwarmSettings> {
-  try {
-    const result: Partial<SwarmSettings> = {};
-    for (const key of ['base', 'root'] as const) { const value = textOption(options[key]); if (value !== undefined) result[key] = value; }
-    const orchestrator = textOption(options.progressOrchestrator); if (orchestrator !== undefined) result.progress_orchestrator = orchestrator;
-    const prefix = textOption(options.branchPrefix); if (prefix !== undefined) result.branch_prefix = prefix;
-    const limit = textOption(options.limit); if (limit !== undefined) result.lane_limit = Number(limit);
-    return result;
-  } catch { throw new SettingsRefusal('swarm_settings_invalid', 'Supply one nonempty value for each swarm settings flag.'); }
+  const result: Partial<SwarmSettings> = {};
+  for (const key of ['base', 'root'] as const) { const value = textOption(options[key]); if (value !== undefined) result[key] = value; }
+  const orchestrator = textOption(options.progressOrchestrator); if (orchestrator !== undefined) result.progress_orchestrator = orchestrator;
+  const prefix = textOption(options.branchPrefix); if (prefix !== undefined) result.branch_prefix = prefix;
+  const limit = textOption(options.limit); if (limit !== undefined) result.lane_limit = Number(limit);
+  return result;
+}
+/** Resource actions admitted before backend construction or dispatch. */
+type ResourceAction = 'status' | 'reserve' | 'renew' | 'release' | 'publish';
+/** Dispatch one admitted resource action through the existing reservation SDK. */
+async function dispatchResource(resources: ResourceReservations, action: ResourceAction, id: string, options: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const token = textOption(options.token) ?? '';
+  switch (action) {
+    case 'status': return { ...await resources.status(id) };
+    case 'reserve': return { ...await resources.reserve(id, options.ttl === undefined ? undefined : Number(textOption(options.ttl))) };
+    case 'renew': return { ...await resources.renew(id, token, options.ttl === undefined ? undefined : Number(textOption(options.ttl))) };
+    case 'release': return { ...await resources.release(id, token) };
+    case 'publish': return { ...await resources.publish(id, token, textOption(options.note)!) };
+  }
 }
 /** Dispatch native host context to the shared SDK engine; leave rendering to pm. */
 async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
@@ -56,29 +63,20 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
   const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
   const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
   const id = ctx.args[0];
-  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress'].includes(command) && id === undefined) throw new Error('An item id is required');
   switch (command) {
     case 'progress': {
       const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, true);
       const options = { agent: textOption(ctx.options.agent), orchestrator: textOption(ctx.options.orchestrator), revision: textOption(ctx.options.revision), offset: ctx.options.offset === undefined ? undefined : Number(textOption(ctx.options.offset)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)) };
       const stage = textOption(ctx.options.stage);
       if (stage === undefined) {
-        if (ctx.options.apply === true || ctx.options.step !== undefined || ctx.options.evidence !== undefined) throw new ProgressRefusal('progress_invalid', 'Supply --stage, --step, --revision and --evidence to declare a witness; omit --apply to preview.');
         return { ...await progress.view(id, options) };
       }
-      return { ...await progress.witness(id, { ...options, stage: stage as ProgressStage, step: textOption(ctx.options.step) ?? '', revision: options.revision ?? '', evidence: textOption(ctx.options.evidence) ?? '', apply: ctx.options.apply === true }) };
+      return { ...await progress.witness(id, { ...options, stage: stage as ProgressStage, step: textOption(ctx.options.step)!, revision: options.revision!, evidence: textOption(ctx.options.evidence)!, apply: ctx.options.apply === true }) };
     }
     case 'resource': {
       const resources = new ResourceReservations(trackerResourceBackend((swarm as SharedTracker).engine), author);
-      const action = textOption(ctx.options.action) ?? 'status'; const token = textOption(ctx.options.token) ?? '';
-      switch (action) {
-        case 'status': return { ...await resources.status(id) };
-        case 'reserve': return { ...await resources.reserve(id, ctx.options.ttl === undefined ? undefined : Number(textOption(ctx.options.ttl))) };
-        case 'renew': return { ...await resources.renew(id, token, ctx.options.ttl === undefined ? undefined : Number(textOption(ctx.options.ttl))) };
-        case 'release': return { ...await resources.release(id, token) };
-        case 'publish': return { ...await resources.publish(id, token, textOption(ctx.options.note) ?? '') };
-        default: throw new ResourceRefusal('resource_invalid', 'Use --action status, reserve, renew, release or publish.');
-      }
+      const action = (textOption(ctx.options.action) ?? 'status') as ResourceAction;
+      return dispatchResource(resources, action, id, ctx.options);
     }
     case 'plan': {
       const result = await swarm.plan(textOption(ctx.options.parent), opts.lane_limit);
@@ -109,9 +107,9 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       return await operation;
     }
     case 'heartbeat': return await (swarm as SharedTracker).heartbeat(id, textOption(ctx.options.token));
-    case 'handoff': return await (swarm as SharedTracker).handoff(id, textOption(ctx.options.to) ?? '', textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
+    case 'handoff': return await (swarm as SharedTracker).handoff(id, textOption(ctx.options.to)!, textOption(ctx.options.note)!, textOption(ctx.options.token));
     case 'reclaim': return await (swarm as SharedTracker).reclaim(Number(textOption(ctx.options.staleAfter)), textOption(ctx.options.to), ctx.options.dryRun === true, textOption(ctx.options.parent));
-    case 'close': return await (swarm as SharedTracker).close(id, textOption(ctx.options.note) ?? '', textOption(ctx.options.token));
+    case 'close': return await (swarm as SharedTracker).close(id, textOption(ctx.options.note)!, textOption(ctx.options.token));
     case 'land': {
       if (repo === undefined) throw new Error(SHARED_LAND_REFUSAL);
       return laneOperation(swarm.land(ctx.options.execute === true), repo);
@@ -127,6 +125,8 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
 /** Dispatch and validate the complete host result before any renderer can emit it. */
 export async function runCommand(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
   try {
+    // Accepted leaves are immutable scalars; snapshot caller-owned containers before any await.
+    ctx = { ...ctx, args: [...ctx.args], options: { ...ctx.options }, global: { ...ctx.global } };
     validateCommandInputs(command, ctx);
     const result = await dispatch(command, ctx);
     if (typeof result.worktree === 'string') result.worktree = relative(repositoryRoot(ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root)!, result.worktree);

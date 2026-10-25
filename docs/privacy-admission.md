@@ -1,6 +1,7 @@
 # Input admission and SDK privacy oracle
 
-Every swarm command enters `validateCommandInputs` before dispatch, settings reads,
+Every swarm command snapshots caller-owned argument, option and global containers,
+then enters `validateCommandInputs` before dispatch, settings reads,
 backend discovery or writer leases. It checks all argument/flag string leaves and
 keys, all supplied global flags, scalar/boolean shapes, numeric action domains, settings
 values, explicit footprints and witness declarations. Privacy validation precedes
@@ -11,7 +12,10 @@ Public SDK mutation entry points independently check their inputs before enterin
 leases or writing heartbeat, item, progress or resource records. Settings preflight
 reads and validates its effective section without writing, then re-reads it inside
 the audited settings callback. The preliminary read never supplies the committed
-snapshot. Ownership and fencing decisions retain their existing locked checks.
+snapshot. Race tests inject invalid Unix and drive-letter roots after preflight;
+the locked validator refuses without overwriting peer settings or audit history.
+Resource renew/release/publish also validate canonical decimal tokens before a
+backend lease, reusing one pure validator across CLI and SDK entry points. Ownership and fencing decisions retain their existing locked checks.
 
 ## Oracle and normalization
 
@@ -103,7 +107,7 @@ SDK: **16 mutating variants, 50 encodings, 197 text input positions, 9,914 refus
 (including 64 malformed scalar cases). It snapshots every tracker file byte,
 directory entry and symlink, including runtime files and all history, before and
 after every refusal, and captures stdout to prohibit partial receipts. A separate
-**1,050-case** matrix covers 21 SDK mutation entries; 37 malformed domain inputs
+**1,050-case** matrix covers 21 SDK mutation entries; 39 malformed domain inputs
 receive the same byte-invariance checks. Two native CLI cases reproduce the
 review's handoff failures with a valid owner/fence and check the whole tracker.
 All 400 encoding/format/result-shape combinations retain renderer ownership and emit only the

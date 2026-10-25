@@ -4,7 +4,7 @@ import { assertPrivatePathSafe, resolveSwarmSettings, SettingsRefusal } from './
 import { FairPolicy } from './fair-scheduling.ts';
 import { ProgressRefusal, validateProgressWitness } from './progress.ts';
 import type { ProgressStage } from './progress.ts';
-import { ResourceRefusal } from './resources.ts';
+import { ResourceRefusal, validateResourceToken } from './resources.ts';
 import { footprintPath } from './planner.ts';
 
 /** Refuse invalid input without echoing it or entering a tracker writer lease. */
@@ -51,6 +51,7 @@ export function validateActionInputs(command: string, options: Record<string, un
     if (!['status', 'reserve', 'renew', 'release', 'publish'].includes(String(action))) throw new ResourceRefusal('resource_invalid', 'Use --action status, reserve, renew, release or publish.');
     if (options.ttl !== undefined && (!Number.isInteger(Number(options.ttl)) || Number(options.ttl) < 1 || Number(options.ttl) > 86400)) throw new ResourceRefusal('resource_invalid', 'Set --ttl to integer seconds from 1 through 86400.');
     if (action === 'publish' && (typeof options.note !== 'string' || !options.note.trim() || options.note.length > 4096)) throw new ResourceRefusal('resource_invalid', 'Supply a nonempty --note of at most 4096 characters.');
+    if (['renew', 'release', 'publish'].includes(String(action))) validateResourceToken(options.token);
   }
   if (command === 'reclaim' && (!Number.isFinite(Number(options.staleAfter)) || Number(options.staleAfter) <= 0)) invalid('reclaim requires --stale-after as positive seconds.');
   if (command === 'progress') {

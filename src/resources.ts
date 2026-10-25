@@ -19,6 +19,10 @@ export class ResourceRefusal extends Error {
   }
 }
 
+/** Refuse absent or noncanonical resource tokens before acquiring a backend lease. */
+export function validateResourceToken(token: unknown): asserts token is string {
+  if (typeof token !== 'string' || !/^(0|[1-9][0-9]*)$/.test(token)) throw new ResourceRefusal('resource_stale_fence', 'Supply the decimal --token returned by reserve; discard an invalid token and reserve again.');
+}
 /** Portable snapshot of an explicit resource item on the selected tracker. */
 export interface ResourceRecord {
   id: string;
@@ -102,6 +106,7 @@ export class ResourceReservations {
   async renew(id: string, token: string, seconds = 300): Promise<ResourceReceipt> {
     assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
+    validateResourceToken(token);
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.fence(record, token); return { ...record, expires_at: new Date(Date.now() + duration).toISOString() };
     }));
@@ -110,6 +115,7 @@ export class ResourceReservations {
   /** Release and invalidate the generation without deleting its durable history. */
   async release(id: string, token: string): Promise<ResourceReceipt> {
     assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
+    validateResourceToken(token);
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.fence(record, token); return { ...record, token: (BigInt(record.token) + 1n).toString(), owner: null, expires_at: null };
     }));
@@ -119,6 +125,7 @@ export class ResourceReservations {
   async publish(id: string, token: string, note: string): Promise<ResourceReceipt> {
     assertPrivatePathSafe({ id, token, note }); assertPrivatePathSafe(this.author);
     if (!note.trim() || note.length > 4096) throw new ResourceRefusal('resource_invalid', 'Supply a nonempty --note of at most 4096 characters.');
+    validateResourceToken(token);
     return this.receipt(await this.backend.transact(id, this.author, record => {
       this.fence(record, token); return { ...record, note };
     }));

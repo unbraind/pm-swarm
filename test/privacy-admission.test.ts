@@ -151,7 +151,8 @@ test('malformed command inputs are refused before the first tracker write', asyn
     ['handoff', ['public-item'], { note: 'Public context' }], ['handoff', ['public-item'], { to: 'receiver', note: 'x'.repeat(4097) }],
     ['close', ['public-item'], {}], ['resource', ['public-item'], { action: 'invalid' }],
     ...['0', '86401', 'NaN', '1.5'].map(ttl => ['resource', ['public-item'], { action: 'reserve', ttl }] as [string, string[], Record<string, unknown>]),
-    ['resource', ['public-item'], { action: 'publish', note: 'x'.repeat(4097) }], ['resource', ['public-item'], { action: 'publish' }],
+    ['resource', ['public-item'], { action: 'publish', note: 'x'.repeat(4097), token: '1' }], ['resource', ['public-item'], { action: 'publish', token: '1' }],
+    ['resource', ['public-item'], { action: 'renew' }], ['resource', ['public-item'], { action: 'release', token: 'invalid' }],
     ['schedule', [], { skills: 'invalid skill' }], ['schedule', [], { maxWait: '0' }], ['schedule', [], { limit: '101' }],
     ['reclaim', [], {}], ['reclaim', [], { staleAfter: '0' }],
     ...['-1', 'NaN', '1.5'].map(offset => ['progress', ['public-plan'], { offset }] as [string, string[], Record<string, unknown>]),
@@ -162,7 +163,11 @@ test('malformed command inputs are refused before the first tracker write', asyn
     ['progress', ['public-plan'], { stage: 'claimed', step: 'step', revision: 'a'.repeat(64) }],
     ['progress', ['public-plan'], { apply: true }], ['progress', ['public-plan'], { step: 'step' }], ['progress', ['public-plan'], { evidence: 'Public' }],
   ];
-  for (const [command, args, options] of cases) await unchanged(f.pmRoot, () => runCommand(command, { ...base, args, options }), `${command}/invalid-domain`);
+  for (const [command, args, options] of cases) {
+    const ctx = { ...base, args, options };
+    assert.throws(() => validateCommandInputs(command, ctx), `${command}/pure-admission`);
+    await unchanged(f.pmRoot, () => runCommand(command, ctx), `${command}/invalid-domain`);
+  }
   await unchanged(f.pmRoot, () => runCommand('settings', { ...base, global: { author: '' } }), 'empty-author');
   const before = snapshot(f.pmRoot);
   validateCommandInputs('settings', { ...base, options: { base: 'main', root: 'lanes', branchPrefix: 'work/', progressOrchestrator: 'coordinator', limit: '2', apply: false, unused: undefined } });
@@ -170,4 +175,61 @@ test('malformed command inputs are refused before the first tracker write', asyn
   validateCommandInputs('resource', { ...base, args: ['public-resource'], options: {} });
   assert.equal(snapshot(f.pmRoot), before);
   console.log(JSON.stringify({ malformed_inputs: cases.length + 1, tracker_changes: 0 }));
+});
+
+test('SDK settings reject invalid root inputs before entering their audited transaction', async t => {
+  const f = await sharedFixture(t); const sdk = await hostSdk(f.pmRoot);
+  for (const root of [join(f.repo, 'lanes'), 'D:/lanes']) {
+    const checkpoints: string[] = [];
+    await unchanged(f.pmRoot, () => updateSettings(sdk, f.pmRoot, { root }, { apply: true, checkpoint: boundary => { checkpoints.push(boundary); } }), 'settings/invalid-root');
+    assert.deepEqual(checkpoints, [], 'refuse before even entering the transaction boundary');
+  }
+});
+
+test('settings validate the fresh locked section after a competing transition changes preflight inputs', async t => {
+  const f = await sharedFixture(t); const sdk = await hostSdk(f.pmRoot);
+  for (const [index, root] of [join(f.repo, 'lanes'), 'D:/lanes'].entries()) {
+    await sdk.mutateWorkspaceSettings({ operationId: `reset-${index}`, mutate: current => ({ ...current, swarm: { base: 'main', root: 'lanes' } }) });
+    let peerSettings = ''; let peerHistory = '';
+    await assert.rejects(updateSettings(sdk, f.pmRoot, { base: 'ours' }, { apply: true, operationId: `racing-${index}`,
+      /** Inject the real peer writer between preflight and acquisition of our audited lock. */
+      checkpoint: async boundary => {
+        if (boundary !== 'before_transaction') return;
+        await sdk.mutateWorkspaceSettings({ operationId: `peer-${index}`, mutate: current => ({ ...current, swarm: { root, base: 'peer' } }) });
+        peerSettings = readFileSync(join(f.pmRoot, 'settings.json'), 'utf8');
+        peerHistory = readFileSync(join(f.pmRoot, 'history/_workspace.jsonl'), 'utf8');
+      },
+    }), /relative/);
+    assert.equal(readFileSync(join(f.pmRoot, 'settings.json'), 'utf8'), peerSettings);
+    assert.equal(readFileSync(join(f.pmRoot, 'history/_workspace.jsonl'), 'utf8'), peerHistory);
+  }
+});
+
+test('command admission snapshots accepted inputs before awaiting the host SDK', async t => {
+  const f = await sharedFixture(t); const sdk = await hostSdk(f.pmRoot); const id = await f.item(['src/work.ts']);
+  const claim = await f.shared.start(id);
+  const ctx: CommandHandlerContext = { command: 'swarm handoff', args: [id], options: { to: 'receiver', note: 'Accepted public context', token: claim.token }, global: { author: 'shared-test' }, source_workspace_root: f.repo, pm_root: f.pmRoot, sdk };
+  const operation = runCommand('handoff', ctx);
+  ctx.options.note = privacyCorpus.find(([name]) => name === 'angle-file-url')![1];
+  const result = await operation;
+  assert.equal((result.context as { note: string }).note, 'Accepted public context');
+  const item = (await f.client.get(id)).item;
+  assert.match(String(item.swarm_handoff), /Accepted public context/);
+  assert.equal(String(item.swarm_handoff).includes(String(ctx.options.note)), false);
+});
+
+test('SDK resource tokens are validated before entering a backend lease', async t => {
+  const f = await sharedFixture(t);
+  const id = (await f.client.create({ type: 'Task', title: 'Resource', tags: 'swarm-resource' })).item.id;
+  const backend = trackerResourceBackend(f.shared.engine); let entries = 0;
+  // Observe the real adapter; every admitted call still runs its real lease and mutation.
+  backend.transact = new Proxy(backend.transact, { apply(target, receiver, args: unknown[]) { entries++; return Reflect.apply(target, receiver, args); } });
+  const resources = new ResourceReservations(backend, 'shared-test');
+  await resources.reserve(id); entries = 0;
+  for (const token of ['invalid', '01']) {
+    await unchanged(f.pmRoot, () => resources.renew(id, token), 'resource/renew-invalid-token');
+    await unchanged(f.pmRoot, () => resources.release(id, token), 'resource/release-invalid-token');
+    await unchanged(f.pmRoot, () => resources.publish(id, token, 'Public receipt'), 'resource/publish-invalid-token');
+  }
+  assert.equal(entries, 0, 'invalid tokens must never enter the backend');
 });
