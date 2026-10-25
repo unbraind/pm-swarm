@@ -31,7 +31,7 @@ test('service declarations defer metadata reads to the bound client without usin
 
 test('reclaim skips unsafe foreign context and truthfully retains other completed transfers', async t => {
   const f = await sharedFixture(t); const safe = await f.item(['src/safe.ts'], 0); const foreign = await f.item(['src/foreign.ts']); const malformed = await f.item(['../foreign.ts'], 3);
-  const encoded = encodeURIComponent(['', 'var', 'private', 'foreign'].join('/'));
+  const encoded = encodeURIComponent(['', 'home', 'private', 'foreign'].join('/'));
   for (const id of [safe, foreign, malformed]) await f.client.update(id, { assignee: 'absent-worker', field: ['swarm_token=1', 'swarm_claimed_at=2000-01-01T00:00:00.000Z'], ...(id === foreign ? { title: encoded } : {}) });
   const located = await locateItem(f.pmRoot, foreign); assert.ok(located);
   const history = getHistoryPath(f.pmRoot, foreign);

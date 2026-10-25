@@ -163,7 +163,7 @@ export const swarmCommandNames = Object.keys(swarmCommandDefinitions);
 /** Return a typed refusal instead of throwing into the host's native-renderer fallback. */
 function safeRendererResult(result: unknown): unknown {
   try { assertPrivatePathSafe(result); return result; }
-  catch { return { code: 'swarm_private_path', required: 'Replace absolute local paths with project-relative references.' }; }
+  catch { return { code: 'swarm_private_path', required: 'Replace private user-home paths with project-relative references.' }; }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {

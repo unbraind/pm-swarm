@@ -19,11 +19,11 @@ const transforms = [
   (value: string) => value.replaceAll('/', '&#x2f;').replaceAll('\\', '&bsol;'),
   (value: string) => value.replaceAll('/', '\\u002f'),
 ];
-/** Generate absolute local paths with one through four composable transformations. */
-export function absoluteFuzz(seed: number, count: number): string[] {
+/** Generate private home paths with one through four composable transformations. */
+export function homeFuzz(seed: number, count: number): string[] {
   const next = random(seed);
   return Array.from({ length: count }, (_, index) => {
-    const base = [['', 'var', 'data', `case-${index}`].join('/'), ['D:', 'Work', `case-${index}`].join('\\'), ['', '', 'server', 'share', `case-${index}`].join('/'), `~/case-${index}`, `$HOME/case-${index}`, `%USERPROFILE%/case-${index}`][next() % 6];
+    const base = [['', 'home', 'private', `case-${index}`].join('/'), ['D:', 'Users', 'private', `case-${index}`].join('\\'), ['', '', 'server', 'Users', 'private', `case-${index}`].join('/'), `~/case-${index}`, `$HOME/case-${index}`, `%USERPROFILE%/case-${index}`][next() % 6];
     let value = base;
     const rounds = 1 + next() % 4;
     for (let round = 0; round < rounds; round++) value = transforms[next() % transforms.length](value);

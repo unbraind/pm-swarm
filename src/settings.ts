@@ -25,9 +25,9 @@ export const swarmSettingsSection = {
   flags: { base: '--base', root: '--root', branch_prefix: '--branch-prefix', lane_limit: '--limit', progress_orchestrator: '--progress-orchestrator' },
 } as const;
 
-/** Refuse nested output values and keys containing an absolute local filesystem location. */
+/** Refuse nested output values and keys containing a private user-home location. */
 export function assertPrivatePathSafe(value: unknown): void {
-  if (typeof value === 'string' && containsPrivatePath(value)) throw new SettingsRefusal('swarm_private_path', 'Replace absolute local filesystem paths with project-relative paths before requesting this output.');
+  if (typeof value === 'string' && containsPrivatePath(value)) throw new SettingsRefusal('swarm_private_path', 'Replace private user-home paths with project-relative references before requesting this output.');
   if (Array.isArray(value)) for (const entry of value) assertPrivatePathSafe(entry);
   else if (typeof value === 'object' && value !== null) for (const [key, entry] of Object.entries(value)) { assertPrivatePathSafe(key); assertPrivatePathSafe(entry); }
 }
@@ -59,6 +59,10 @@ export function resolveSwarmSettings(section: Record<string, unknown>, overrides
 export async function settings(pmRoot: string, overrides: Partial<SwarmSettings> = {}): Promise<SwarmSettings> {
   return resolveSwarmSettings(await rawSection(pmRoot), overrides);
 }
+/** Persisted lane configuration remains portable even when a non-home absolute path is public prose. */
+export function validatePersistedRoot(config: SwarmSettings): void {
+  if (/^(?:[/\\]|[a-z]:)/i.test(config.root)) throw new SettingsRefusal('swarm_settings_invalid', 'Use a project-relative swarm root before saving settings.');
+}
 /** Package write boundaries exposed for deterministic failure and interleaving verification. */
 export type SettingsBoundary = 'before_transaction' | 'locked_read' | 'validated' | 'committed';
 /** Replay-safe mutation options; callbacks execute inside the host lock when appropriate. */
@@ -78,7 +82,7 @@ export interface SettingsReceipt {
 /** Patch the freshly locked subtree, leaving every foreign setting intact and releasing last. */
 export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorkspaceSettings'>, pmRoot: string, overrides: Partial<SwarmSettings> = {}, options: SettingsMutationOptions = {}): Promise<SettingsReceipt> {
   assertPrivatePathSafe({ overrides, operationId: options.operationId });
-  await settings(pmRoot, overrides);
+  validatePersistedRoot(await settings(pmRoot, overrides));
   let config: SwarmSettings | undefined; let foreign = 0;
   await options.checkpoint?.('before_transaction');
   const operationId = options.operationId ?? randomUUID();
@@ -90,6 +94,7 @@ export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorks
       await options.checkpoint?.('locked_read');
       config = resolveSwarmSettings(section, overrides);
       assertPrivatePathSafe(config);
+      validatePersistedRoot(config);
       foreign = Object.keys(section).filter(key => !Object.hasOwn(swarmSettingsSection.flags, key)).length;
       await options.checkpoint?.('validated');
       return { ...current, swarm: { ...section, ...config } };

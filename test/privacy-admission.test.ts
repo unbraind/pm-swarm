@@ -14,8 +14,8 @@ import { Swarm } from '../src/swarm.ts';
 import { ResourceReservations } from '../src/resources.ts';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { PlanProgress } from '../src/progress.ts';
-import { privacyCorpus, rejectedCorpus } from './privacy-corpus.ts';
-import { absoluteFuzz, allowedFuzz } from './privacy-fuzz.ts';
+import { privacyCorpus, rejectedCorpus, embeddedCorpus } from './privacy-corpus.ts';
+import { homeFuzz, allowedFuzz } from './privacy-fuzz.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk, swarmHost, assertPrivacyRendering } from './settings-helpers.ts';
 import { mutationInputs, mutationVariants, ownedPlan } from './privacy-mutations.ts';
@@ -30,7 +30,7 @@ test('SDK privacy oracle results are measured for every encoding and normalized 
     assert.throws(() => assertPrivatePathSafe({ [value]: 'public' }), SettingsRefusal, name);
   }
   assert.equal(privacyCorpus.length, 50); assert.equal(detected, 10);
-  for (const safe of ['public', ['password', 'synthetic'].join('='), '%ff public', 'https://example.test/public', join('src', 'home', 'index.ts')]) assertPrivatePathSafe(safe);
+  for (const safe of ['public', ['password', 'synthetic'].join('='), '%ff public', 'https://example.test/public', join('src', 'settings', 'index.ts')]) assertPrivatePathSafe(safe);
 });
 
 test('every mutating command cross rejected encoding and input position is byte-identical with no receipt', async t => {
@@ -102,8 +102,8 @@ test('native CLI handoff admission leaves ownership, fence, history and the enti
   const f = await sharedFixture(t); const id = await f.item(['src/work.ts']); const claim = await f.shared.start(id);
   // Warm native host reads once so the baseline includes its read caches.
   f.run('swarm', 'settings');
-  for (const name of ['unix-home', 'angle-file-url', 'dot-segment-root', 'forward-unc-authority']) {
-    const value = rejectedCorpus.find(([encoding]) => encoding === name)![1];
+  const values = [...rejectedCorpus.filter(([name]) => ['unix-home', 'angle-file-url', 'dot-segment-root', 'forward-unc-authority'].includes(name)), ...embeddedCorpus];
+  for (const [, value] of values) {
     const before = snapshot(f.pmRoot);
     const result = f.cli('swarm', 'handoff', id, '--token', claim.token, '--to', 'receiver', '--note', value, '--json');
     assert.equal(result.status, 2); const body = JSON.parse(result.stdout || result.stderr) as Record<string, unknown>;
@@ -234,10 +234,10 @@ async function fuzzFixture(t: TestContext) {
   const fixture = await sharedFixture(t);
   return { ...fixture, sdk: await hostSdk(fixture.pmRoot), host: await swarmHost() };
 }
-test('seeded compositional absolute paths are refused by every mutator and both renderers', async t => {
+test('seeded compositional home paths are refused by every mutator and both renderers', async t => {
   const f = await fuzzFixture(t); const { sdk, host } = f;
   const before = snapshot(f.pmRoot); const seed = 0x51a7c0de;
-  const cases = absoluteFuzz(seed, 5000);
+  const cases = homeFuzz(seed, 5000);
   for (const [index, value] of cases.entries()) {
     assert.equal(containsPrivatePath(value), true, `absolute seed=${seed} case=${index} ${JSON.stringify(value)}`);
     for (const [command, args, options] of fuzzCommands()) {
@@ -247,7 +247,7 @@ test('seeded compositional absolute paths are refused by every mutator and both 
     await assertPrivacyRendering(host, value, true);
   }
   assert.equal(snapshot(f.pmRoot), before);
-  console.log(JSON.stringify({ absolute_seed: seed, absolute_cases: cases.length, command_refusals: cases.length * fuzzCommands().length, renderer_refusals: cases.length * 2, tracker_changes: 0 }));
+  console.log(JSON.stringify({ home_seed: seed, home_cases: cases.length, command_refusals: cases.length * fuzzCommands().length, renderer_refusals: cases.length * 2, tracker_changes: 0 }));
 });
 
 test('seeded relative paths and web URLs have no false privacy refusals', async t => {
@@ -263,17 +263,17 @@ test('seeded relative paths and web URLs have no false privacy refusals', async 
 
 
 test('canonicalization handles bounded nested escapes and both filesystem grammars', () => {
-  const root = ['', 'var', 'data', 'work'].join('/');
+  const root = ['', 'home', 'private', 'work'].join('/');
   const paths = [
     root, root.replaceAll('/', '&#47;'), root.replaceAll('/', '&sol;'), root.replaceAll('/', '&frasl;'), root.replaceAll('/', '&Backslash;'),
     root.replaceAll('/', String.raw`\u{2f}`), root.replaceAll('/', String.raw`\x2f`),
     root.replaceAll('/', String.raw`\u002f`), root.replaceAll('/', String.raw`\uFF0F`),
     root.replaceAll('/', '\u2216'), root.replaceAll('/', '&bsol;'),
     `file:${root}`, `path:${root}`, `note:file:${root}`, `[outer]([inner](${root}))`, `![image](<${root}>)`, `{${root}}`, `note:${'${HOME}'}/work`, root.replaceAll('/', '//../'),
-    'Z:relative-drive-root', '$env:USERPROFILE/work', '${HOME}/work',
+    '$env:USERPROFILE/work', '${HOME}/work',
   ];
   for (const path of paths) assert.equal(containsPrivatePath(path), true, JSON.stringify(path));
-  for (const safe of ['&#x110000; public', '&#1114112; public', '&unknown; public', 'public &amp; text', 'src/../work', 'http://example.test/a', 'https://example.test/a', 'link:https://example.test/a']) assert.equal(containsPrivatePath(safe), false, safe);
+  for (const safe of ['&#x110000; public', '&#1114112; public', '&unknown; public', 'public &amp; text', 'Z:relative-drive-root', 'src/../work', 'http://example.test/a', 'https://example.test/a', 'link:https://example.test/a']) assert.equal(containsPrivatePath(safe), false, safe);
   let nested = root;
   for (let round = 0; round < 18; round++) nested = encodeURIComponent(nested);
   assert.equal(containsPrivatePath(nested), true, 'bounded decoder refuses unresolved nesting');

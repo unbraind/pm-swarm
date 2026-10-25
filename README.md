@@ -69,16 +69,18 @@ public SDK file APIs under the audited mutation lock. Native host registration
 remains pending SDK support; see [verification and SDK gap](docs/settings-and-quality-gates.md).
 
 All swarm commands register scoped TOON/JSON host rendering. JSON is compact;
-TOON planning omits full read receipts unless `--full` is supplied. Absolute local filesystem
+TOON planning omits full read receipts unless `--full` is supplied. Private user-home
 paths in nested result values, keys, watch events or errors trigger a typed
 `swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
 worktree locations are relative to the project root.
 
 Private input is checked before any swarm dispatch or writer lease, including
 notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanner
-runs first; canonical POSIX and Windows root checks also refuse non-home paths.
+runs first; whole-text canonicalization also detects embedded and encoded private home paths.
+Ordinary prose, remote URLs and non-home absolute paths remain allowed.
 Relative paths, framework route folders and HTTP(S) URLs remain supported.
-Path punctuation is preserved inside whole tokens; only edge wrappers are removed.
+The guard searches substrings without whitespace tokenization or URL exemptions.
+Relative framework routes keep their original punctuation.
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use
 `pm swarm heartbeat` separately when a long queue needs background liveness.
@@ -205,7 +207,7 @@ Each planning wave contains mutually compatible items. The first wave is the sug
 
 `start` registers `swarm_branch`, `swarm_base` (the original commit SHA), and `swarm_base_ref` (the moving target ref). Defaults are base `main`, worktree root `../.pm-swarm`, branch prefix `swarm/`, lane limit 4. Flags override settings. Planning supports limits 1–8; landing searches up to eight active lanes exhaustively and refuses larger batches explicitly.
 
-Absolute worktree paths live only in repository-local Git config (`swarm.lane.<id>`). Never put machine paths into tracker fields, comments, or settings. A persisted root setting must be relative; an absolute `start --root` override remains local. Worktree paths may appear in command output. If the lane root is inside the repository, ignore that directory before landing so the base worktree stays clean. Existing absolute linked paths are rejected so sync cannot persist them. Keep `.agents/pm/extensions/` ignored: the host package installer records local tarball provenance there.
+Absolute worktree paths live only in repository-local Git config (`swarm.lane.<id>`). Keep private user-home locations out of tracker content. A persisted root setting must be relative; a non-home absolute `start --root` override remains local. CLI worktree locations are project-relative. If the lane root is inside the repository, ignore that directory before landing so the base worktree stays clean. Existing absolute linked paths are rejected so sync cannot persist them. Keep `.agents/pm/extensions/` ignored: the host package installer records local tarball provenance there.
 
 All package Git operations strip inherited Git location variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, and `GIT_PREFIX`). The explicit repository directory determines the target, including linked worktrees; hook environment variables cannot redirect operations to a parent or unrelated repository. Other Git configuration and identity variables remain available.
 

@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { getHistoryPath, scanMutationSecrets } from '@unbrained/pm-cli/sdk';
+import { getHistoryPath } from '@unbrained/pm-cli/sdk';
 import { readFileSync } from 'node:fs';
 import { assertPrivatePathSafe, SettingsRefusal } from '../src/settings.ts';
 import { runCommand } from '../src/commands.ts';
 import { relativePathSamples, pathPresentations } from './privacy-path-samples.ts';
 import { fixture } from './helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
-import { hostSdk, swarmHost, assertPrivacyRendering } from './settings-helpers.ts';
-import { unchanged, matchesRefusal } from './privacy-snapshot.ts';
-import { mutationVariants, mutationInputs } from './privacy-mutations.ts';
+import { hostSdk, swarmHost } from './settings-helpers.ts';
+import { unchanged } from './privacy-snapshot.ts';
 
 test('path delimiters inside framework routes survive bare prose and Markdown rendering', async () => {
   const host = await swarmHost();
@@ -21,21 +20,6 @@ test('path delimiters inside framework routes survive bare prose and Markdown re
       assert.doesNotMatch(result.rendered!, /swarm_private_path/);
     }
   }
-});
-
-test('implicit-root file URLs are refused by every mutator and never reach either renderer', async t => {
-  const f = await sharedFixture(t); const sdk = await hostSdk(f.pmRoot);
-  const host = await swarmHost();
-  const values = ['file:var/private/project', 'file:./var/private/project', 'file:../var/private/project', 'file:'];
-  for (const value of values) {
-    assert.equal(new URL(value).pathname.startsWith('/'), true, 'File URL grammar supplies an absolute root');
-    assert.equal(scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path'), false);
-    for (const variant of mutationVariants()) {
-      await unchanged(f.pmRoot, () => runCommand(variant.command, { command: `swarm ${variant.command}`, ...mutationInputs(variant), global: { author: value }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo }), `${variant.command}/implicit-file-root`, error => matchesRefusal(error, 'swarm_private_path', new Set()));
-    }
-    await assertPrivacyRendering(host, value, true);
-  }
-  console.log(JSON.stringify({ implicit_file_url_encodings: values.length, raw_sdk_detections: 0, command_refusals: values.length * mutationVariants().length, renderer_refusals: values.length * 2, tracker_changes: 0, partial_receipts: 0 }));
 });
 
 test('real non-Git plan start and status accept whole framework route paths', async t => {
@@ -53,7 +37,7 @@ test('real non-Git plan start and status accept whole framework route paths', as
 
 test('start rejects a private stored receipt before ownership or runtime changes even on a cold tracker', async t => {
   const f = await sharedFixture(t); const sdk = await hostSdk(f.pmRoot);
-  const path = encodeURIComponent(['', 'var', 'private', 'work.ts'].join('/'));
+  const path = encodeURIComponent(['', 'home', 'private', 'work.ts'].join('/'));
   const id = await f.item([path]);
   await unchanged(f.pmRoot, () => runCommand('start', { command: 'swarm start', args: [id], options: {}, global: { author: 'shared-test' }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo }), 'start/private-stored-receipt');
   assert.equal((await f.client.get(id)).claim_state?.claimed, false);
@@ -63,7 +47,7 @@ test('start rejects a private stored receipt before ownership or runtime changes
 for (const boundary of ['corpus return', 'client read'] as const) {
   test(`start validates a peer-changed receipt at ${boundary} before claiming`, async t => {
     const f = await sharedFixture(t); const id = await f.item(['src/public.ts']);
-    const encoded = encodeURIComponent(['', 'var', 'private', 'changed.ts'].join('/'));
+    const encoded = encodeURIComponent(['', 'home', 'private', 'changed.ts'].join('/'));
     let injected = false; let peerHistory = '';
     /** A real competing SDK transition, never a substituted read result. */
     const peer = async () => {
@@ -85,7 +69,7 @@ for (const boundary of ['corpus return', 'client read'] as const) {
 
 test('Git start admits stored footprints before ownership or derived tracker writes', async t => {
   const f = await fixture(t);
-  const id = await f.item([encodeURIComponent(['', 'var', 'private', 'git.ts'].join('/'))]); f.save();
+  const id = await f.item([encodeURIComponent(['', 'home', 'private', 'git.ts'].join('/'))]); f.save();
   await unchanged(f.pmRoot, () => f.swarm.start(id), 'Git/start-private-stored-footprint', error => error instanceof SettingsRefusal);
   assert.equal((await f.client.get(id)).claim_state?.claimed, false);
 });
@@ -93,7 +77,7 @@ test('Git start admits stored footprints before ownership or derived tracker wri
 for (const mode of ['shared', 'Git'] as const) {
   test(`${mode} next validates skipped-candidate explanations before claiming safe work`, async t => {
     const f = mode === 'shared' ? await sharedFixture(t) : await fixture(t);
-    const encoded = encodeURIComponent(['', 'var', 'private', 'overlap.ts'].join('/'));
+    const encoded = encodeURIComponent(['', 'home', 'private', 'overlap.ts'].join('/'));
     const active = await f.item([encoded]); await f.client.claim(active, { author: 'peer' });
     await f.item([encoded]); const safe = await f.item(['src/safe.ts']);
     const engine = 'shared' in f ? f.shared : f.swarm;

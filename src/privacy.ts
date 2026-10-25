@@ -1,13 +1,11 @@
-import { posix, win32 } from 'node:path';
+import { homedir } from 'node:os';
+import { realpathSync } from 'node:fs';
 import { scanMutationSecrets } from '@unbrained/pm-cli/sdk';
 
 /** Explicit look-alikes complement Unicode compatibility normalization. */
 const CONFUSABLES: Record<string, string> = { '\u043e': 'o', '\u041e': 'O', '\u0455': 's', '\u0405': 'S', '\u0435': 'e', '\u0415': 'E', '\u04bb': 'h', '\u0430': 'a', '\u0456': 'i', '\u2215': '/', '\u2044': '/', '\u29f8': '/', '\u2216': '\\' };
 /** HTML punctuation that can conceal filesystem roots or token boundaries. */
 const ENTITIES: Record<string, string> = { sol: '/', frasl: '/', bsol: '\\', backslash: '\\', setminus: '\\', setmn: '\\', smallsetminus: '\\', ssetmn: '\\', colon: ':', period: '.', dollar: '$', percnt: '%', lbrace: '{', rbrace: '}', quot: '"', apos: "'", lt: '<', gt: '>', amp: '&', nbsp: ' ' };
-/** Closing presentation delimiters, used only when an opener begins the whole token. */
-const WRAPPERS: Record<string, string> = { '(': ')', '[': ']', '{': '}', '<': '>', '"': '"', "'": "'", '`': '`', '*': '*' };
-
 /** Decode valid URI octets even when adjacent bytes contain malformed UTF-8. */
 function decodeOctets(encoded: string): string {
   try { return decodeURIComponent(encoded); }
@@ -18,17 +16,20 @@ function decodePoint(encoded: string, digits: string, radix: number): string {
   const code = Number.parseInt(digits, radix);
   return code <= 0x10ffff ? String.fromCodePoint(code) : encoded;
 }
+/** Fold Unicode before decoding too, so confusable URI hex digits cannot destroy valid octet runs. */
+function foldUnicode(value: string): string {
+  return value.normalize('NFKC')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, '')
+    .replace(/[\u043e\u041e\u0455\u0405\u0435\u0415\u04bb\u0430\u0456\u2215\u2044\u29f8\u2216]/gu, character => CONFUSABLES[character]);
+}
 /** One non-evaluating decoding/folding round, also used to detect the bounded fixed point. */
 function canonicalRound(value: string): string {
-  return value.replace(/(?:%[a-f0-9]{2})+/gi, decodeOctets)
+  return foldUnicode(foldUnicode(value).replace(/(?:%[a-f0-9]{2})+/gi, decodeOctets)
     .replace(/\\u\{([a-f0-9]+)\}|\\u([a-f0-9]{4})|\\x([a-f0-9]{2})/gi, (encoded, brace: string | undefined, unicode: string | undefined, hex: string) => decodePoint(encoded, brace ?? unicode ?? hex, 16))
     .replace(/\\\//g, '/')
     .replace(/&#(?:x([a-f0-9]+)|(\d+));?/gi, (encoded, hex: string | undefined, decimal: string) => decodePoint(encoded, hex ?? decimal, hex === undefined ? 10 : 16))
     .replace(/&([a-z]+);/gi, (encoded, name: string) => ENTITIES[name.toLowerCase()] ?? encoded)
-    .replace(/\$\{(\w+)\}/g, '$$$1')
-    .normalize('NFKC')
-    .replace(/[\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/gu, '')
-    .replace(/[\u043e\u041e\u0455\u0405\u0435\u0415\u04bb\u0430\u0456\u2215\u2044\u29f8\u2216]/gu, character => CONFUSABLES[character]);
+    .replace(/\$\{(\w+)\}/g, '$$$1'));
 }
 /** Reach a bounded decoding fixed point; excessive nesting is refused rather than partially inspected. */
 function canonicalize(value: string): string | null {
@@ -39,38 +40,28 @@ function canonicalize(value: string): string | null {
   }
   return canonicalRound(value) === value ? value : null;
 }
-/** Recognize local roots independent of home-directory spellings, on both supported path grammars. */
-function absoluteToken(token: string): boolean {
-  let path = unwrapToken(token);
-  for (;;) {
-    if (/^https?:\/\//i.test(path)) return false;
-    // File URLs always resolve to a local absolute root, even without explicit slashes.
-    if (/^file:/i.test(path)) return true;
-    const next = unwrapToken(path.replace(/^[\w-]{2,}[:=]/u, ''));
-    if (next === path) break;
-    path = next;
-  }
-  if (/^(?:~|\$(?:[\w]+|\{[\w]+\}|env:[\w]+)|%[\w]+%)/iu.test(path)) return true;
-  const unix = posix.normalize(path.replaceAll('\\', '/'));
-  const windows = win32.normalize(path);
-  return posix.isAbsolute(unix) || win32.isAbsolute(windows) || /^[a-z]:/i.test(windows);
+/** Normalize the complete text without tokenizing or exempting any URI component. */
+function normalizePathText(value: string): string {
+  return value.replaceAll('\\', '/').replace(/(?<=\/)\.(?=\/)/g, '').replace(/\/+/g, '/').toLowerCase();
 }
-/** Strip presentation only at token edges; route folders and other interior punctuation stay intact. */
-function unwrapToken(token: string): string {
-  for (;;) {
-    token = token.replace(/[,.;!?]+$/u, '');
-    const link = /^!?\[(?:\\.|[^\]\\])*\]\((.*)\)$/u.exec(token);
-    if (link !== null) { token = link[1]; continue; }
-    const opener = /^[`"'(<[{*\p{So}]/u.exec(token)?.[0];
-    if (opener === undefined) return token.replace(/[`"')>\]}*]+$/u, '');
-    const closer = WRAPPERS[opener];
-    token = closer !== undefined && token.endsWith(closer) ? token.slice(opener.length, -closer.length) : token.slice(opener.length);
-  }
+/** Retain both configured and resolved process-home spellings without recording either one. */
+function processHomes(): string[] {
+  const configured = homedir(); let resolved = configured;
+  try { resolved = realpathSync(configured); } catch { /* A newly configured home need not exist yet. */ }
+  return [...new Set([configured, resolved].map(normalizePathText))].filter(home => home !== '/' && home !== '');
 }
-/** Keep the SDK as the first layer, then refuse every canonical absolute local path, including non-home roots. */
+/** Process-local home identity is stable for this module's lifetime. */
+const PROCESS_HOMES = processHomes();
+/** User-home spellings are private at every substring position, including URI and relative text. */
+const HOME_ROOTS = /\/(?:home|users)\/[^/\s"'<>()[\]{} ,;:!?]+|\/(?:root)(?![\p{L}\p{N}_.-])/iu;
+/** Named home shortcuts require a separator or an identifier boundary; money and approximations are prose. */
+const HOME_SHORTCUTS = new RegExp(`(?:~[\\p{L}\\p{N}_.-]*/|(?:\\$home|\\$env:userprofile|%userprofile%)(?=$|[/\\s"'\x60<>()[\\]{},;:!?]))`, 'iu');
+/** Keep the SDK first, then inspect the entire canonical text for private user-home roots. */
 export function containsPrivatePath(value: string): boolean {
   if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) return true;
-  const canonical = canonicalize(value);
-  if (canonical === null) return true;
-  return canonical.split(/\s+/u).some(absoluteToken);
+  const decoded = canonicalize(value);
+  if (decoded === null) return true;
+  const text = normalizePathText(decoded);
+  return text.trim() === '~' || HOME_ROOTS.test(text) || HOME_SHORTCUTS.test(text)
+    || PROCESS_HOMES.some(home => text.includes(home));
 }

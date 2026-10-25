@@ -20,7 +20,7 @@ test('registered mutators refuse every input admission class without tracker cha
   const variants = registered.flatMap(command => mutationVariants().filter(variant => variant.command === command));
   assert.equal(variants.length, 19); assert.ok(variants.some(variant => variant.command === 'start'));
   const codes = new Set<string>(); const counts: Record<string, number> = {};
-  const privateValue = encodeURIComponent(['', 'var', 'private', 'project'].join('/'));
+  const privateValue = encodeURIComponent(['', 'home', 'private', 'project'].join('/'));
   for (const variant of variants) {
     const input = mutationInputs(variant);
     const base: CommandHandlerContext = { command: `swarm ${variant.command}`, ...input, global: { author: 'shared-test' }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo };
@@ -80,7 +80,7 @@ test('registered mutators preserve a prepared tracker across state and backend r
   const malformed = await f.item(['src/malformed.ts']); await f.client.update(malformed, { field: ['swarm_token=malformed'] });
   const active = await f.item(['src/overlap.ts']); await f.client.claim(active, { author: 'peer' });
   const overlapping = await f.item(['src/overlap.ts']);
-  const encoded = encodeURIComponent(['', 'var', 'private', 'work.ts'].join('/'));
+  const encoded = encodeURIComponent(['', 'home', 'private', 'work.ts'].join('/'));
   const unsafe = await f.item([encoded]);
   const held = await f.item(['src/held.ts']); const claim = await f.shared.start(held);
   const terminalHeld = await f.item(); await f.client.update(terminalHeld, { status: 'canceled', assignee: 'shared-test', message: 'Fixture terminal owner' });
@@ -109,7 +109,7 @@ test('registered mutators preserve a prepared tracker across state and backend r
   await refuse('resource', ordinary, { action: 'reserve' }, 'resource_invalid');
   await refuse('resource', invalidResource, { action: 'reserve' }, 'resource_invalid');
   for (const action of ['renew', 'release', 'publish']) await refuse('resource', resource, { action, token: '0', note: 'Public' }, 'resource_stale_fence');
-  const expiry = `Thu, 01 Jan 2099 00:00:00 GMT (${['', 'var', 'private', 'expiry'].join('/')})`;
+  const expiry = `Thu, 01 Jan 2099 00:00:00 GMT (${['', 'home', 'private', 'expiry'].join('/')})`;
   assert.ok(Number.isFinite(Date.parse(expiry)));
   await f.client.update(resource, { field: [`swarm_resource_expires_at=${expiry}`] });
   await refuse('resource', resource, { action: 'publish', token: reservation.token, note: 'Public' }, 'swarm_private_path');
