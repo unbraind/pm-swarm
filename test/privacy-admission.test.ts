@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import type { TestContext } from 'node:test';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, lstatSync, readlinkSync } from 'node:fs';
 import { join } from 'node:path';
@@ -16,7 +17,8 @@ import { Swarm } from '../src/swarm.ts';
 import { ResourceReservations } from '../src/resources.ts';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { PlanProgress } from '../src/progress.ts';
-import { privacyCorpus } from './privacy-corpus.ts';
+import { privacyCorpus, rejectedCorpus } from './privacy-corpus.ts';
+import { absoluteFuzz, allowedFuzz } from './privacy-fuzz.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk } from './settings-helpers.ts';
 
@@ -40,8 +42,8 @@ async function unchanged(root: string, action: () => Promise<unknown>, label: st
 
 test('SDK privacy oracle results are measured for every encoding and normalized guards refuse all', () => {
   let detected = 0;
-  for (const [name, value] of privacyCorpus) {
-    if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) detected++;
+  for (const [name, value] of rejectedCorpus) {
+    if (privacyCorpus.some(([id]) => id === name) && scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) detected++;
     assert.equal(containsPrivatePath(value), true, name);
     assert.throws(() => assertPrivatePathSafe({ nested: [value] }), SettingsRefusal, name);
     assert.throws(() => assertPrivatePathSafe({ [value]: 'public' }), SettingsRefusal, name);
@@ -78,7 +80,7 @@ test('every mutating command cross rejected encoding and input position is byte-
   for (const [command, args, options] of scenarios) {
     const base: CommandHandlerContext = { command: `swarm ${command}`, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk, args: [...args], options: { ...options }, global: { author: 'shared-test' } };
     const slots = [...['author', 'path', 'outputInclude', 'outputLimit', 'outputBudget', 'outputFormat', 'outputSession', 'outputCursor', 'defaultOutputFormat'].map(key => `global:${key}`), ...base.args.map((_, index) => `arg:${index}`), ...Object.entries(base.options).filter(([, value]) => typeof value === 'string').map(([key]) => `flag:${key}`)];
-    for (const [encoding, value] of privacyCorpus) for (const slot of slots) {
+    for (const [encoding, value] of rejectedCorpus) for (const slot of slots) {
       const ctx = { ...base, args: [...base.args], options: { ...base.options }, global: { ...base.global } };
       if (slot.startsWith('global:')) Object.assign(ctx.global, { [slot.slice(7)]: value });
       else if (slot.startsWith('arg:')) ctx.args[Number(slot.slice(4))] = value;
@@ -92,7 +94,7 @@ test('every mutating command cross rejected encoding and input position is byte-
     }
   }
   assert.equal(scenarios.length, 16); assert.ok(checked > 2000);
-  console.log(JSON.stringify({ mutating_variants: scenarios.length, encodings: privacyCorpus.length, refused_input_cases: checked, tracker_changes: 0, partial_receipts: 0 }));
+  console.log(JSON.stringify({ mutating_variants: scenarios.length, encodings: rejectedCorpus.length, refused_input_cases: checked, tracker_changes: 0, partial_receipts: 0 }));
 });
 
 test('SDK mutation entries refuse every encoding before leases, settings journals or item writes', async t => {
@@ -111,16 +113,16 @@ test('SDK mutation entries refuse every encoding before leases, settings journal
     () => f.shared.engine.schedule({ skills: [value] }), () => new Swarm(f.repo, f.pmRoot, f.client, value).reap(),
     () => resources.reserve(value), () => resources.renew(id, value), () => resources.release(id, value), () => resources.publish(id, '1', value),
   ];
-  for (const [name, value] of privacyCorpus) for (const [index, operation] of operations(value).entries()) await unchanged(f.pmRoot, operation, `${name}/sdk:${index}`);
-  console.log(JSON.stringify({ sdk_mutation_entries: operations('public').length, sdk_refusals: operations('public').length * privacyCorpus.length, tracker_changes: 0 }));
+  for (const [name, value] of rejectedCorpus) for (const [index, operation] of operations(value).entries()) await unchanged(f.pmRoot, operation, `${name}/sdk:${index}`);
+  console.log(JSON.stringify({ sdk_mutation_entries: operations('public').length, sdk_refusals: operations('public').length * rejectedCorpus.length, tracker_changes: 0 }));
 });
 
 test('native CLI handoff admission leaves ownership, fence, history and the entire tracker unchanged', async t => {
   const f = await sharedFixture(t); const id = await f.item(['src/work.ts']); const claim = await f.shared.start(id);
   // Warm native host reads once so the baseline includes its read caches.
   f.run('swarm', 'settings');
-  for (const name of ['unix-home', 'angle-file-url']) {
-    const value = privacyCorpus.find(([encoding]) => encoding === name)![1];
+  for (const name of ['unix-home', 'angle-file-url', 'dot-segment-root', 'forward-unc-authority']) {
+    const value = rejectedCorpus.find(([encoding]) => encoding === name)![1];
     const before = snapshot(f.pmRoot);
     const result = f.cli('swarm', 'handoff', id, '--token', claim.token, '--to', 'receiver', '--note', value, '--json');
     assert.equal(result.status, 2); const body = JSON.parse(result.stdout || result.stderr) as Record<string, unknown>;
@@ -131,7 +133,7 @@ test('native CLI handoff admission leaves ownership, fence, history and the enti
 
 test('host rendering refuses every encoded private value before JSON or TOON serialization', async () => {
   const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
-  for (const [, value] of privacyCorpus) for (const format of ['toon', 'json'] as const) {
+  for (const [, value] of rejectedCorpus) for (const format of ['toon', 'json'] as const) {
     for (const output of [value, [value], { unexpected: value }, { id: 'public-item', note: value }]) {
       const result = await host.runRendererOverride({ command: 'swarm handoff', format, result: output });
       assert.equal(result.overridden, true); assert.deepEqual(result.warnings, []);
@@ -199,7 +201,7 @@ test('settings validate the fresh locked section after a competing transition ch
         peerSettings = readFileSync(join(f.pmRoot, 'settings.json'), 'utf8');
         peerHistory = readFileSync(join(f.pmRoot, 'history/_workspace.jsonl'), 'utf8');
       },
-    }), /relative/);
+    }), /relative|swarm_private_path/);
     assert.equal(readFileSync(join(f.pmRoot, 'settings.json'), 'utf8'), peerSettings);
     assert.equal(readFileSync(join(f.pmRoot, 'history/_workspace.jsonl'), 'utf8'), peerHistory);
   }
@@ -239,4 +241,80 @@ test('native schedule preserves an admitted max-wait override without claiming w
   const result = f.run('swarm', 'schedule', '--skills', 'typescript', '--max-wait', '17', '--limit', '1', '--dry-run');
   assert.equal(result.max_wait_seconds, 17); assert.equal(result.selected, id);
   assert.equal((await f.client.get(id, { fields: 'claim_state' })).claim_state?.claimed, false);
+});
+
+/** Valid command domains keep privacy as the only reason a fuzz command can be refused. */
+function fuzzCommands(): [string, string[], Record<string, unknown>][] {
+  return [
+    ['schedule', [], {}], ['next', [], {}], ['start', ['public-item'], {}],
+    ['sync', ['public-item'], { apply: true }], ['heartbeat', ['public-item'], {}],
+    ['reclaim', [], { staleAfter: '120' }], ['handoff', ['public-item'], { to: 'receiver', note: 'Public' }],
+    ['close', ['public-item'], { note: 'Public' }], ['land', [], { execute: true }], ['reap', [], {}],
+    ['settings', [], { apply: true }],
+    ['progress', ['public-plan'], { apply: true, stage: 'claimed', step: 'public-step', revision: 'a'.repeat(64), evidence: 'Public' }],
+    ...['reserve', 'renew', 'release', 'publish'].map(action => ['resource', ['public-resource'], { action, token: '1', note: 'Public' }] as [string, string[], Record<string, unknown>]),
+  ];
+}
+
+/** Use a real shared tracker, injected SDK and registered renderer for both generators. */
+async function fuzzFixture(t: TestContext) {
+  const fixture = await sharedFixture(t);
+  return { ...fixture, sdk: await hostSdk(fixture.pmRoot), host: await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] }) };
+}
+/** Assert host ownership and the expected privacy decision in both output formats. */
+async function fuzzRendering(host: Awaited<ReturnType<typeof createExtensionTestHarness>>, value: string, refused: boolean): Promise<void> {
+  for (const format of ['json', 'toon'] as const) {
+    const result = await host.runRendererOverride({ command: 'swarm handoff', format, result: { id: 'public-item', note: value } });
+    assert.equal(result.overridden, true); assert.deepEqual(result.warnings, []);
+    assert.equal(result.rendered!.includes('swarm_private_path'), refused);
+    if (refused) assert.equal(result.rendered!.includes(value), false);
+  }
+}
+
+test('seeded compositional absolute paths are refused by every mutator and both renderers', async t => {
+  const f = await fuzzFixture(t); const { sdk, host } = f;
+  const before = snapshot(f.pmRoot); const seed = 0x51a7c0de;
+  const cases = absoluteFuzz(seed, 5000);
+  for (const [index, value] of cases.entries()) {
+    assert.equal(containsPrivatePath(value), true, `absolute seed=${seed} case=${index} ${JSON.stringify(value)}`);
+    for (const [command, args, options] of fuzzCommands()) {
+      const ctx: CommandHandlerContext = { command: `swarm ${command}`, args, options: { ...options, fuzzInput: value }, global: { author: 'shared-test' }, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk };
+      await assert.rejects(runCommand(command, ctx), (error: unknown) => isPmCliExpectedError(error) && error.code === 'swarm_private_path', `${index}/${command}`);
+    }
+    await fuzzRendering(host, value, true);
+  }
+  assert.equal(snapshot(f.pmRoot), before);
+  console.log(JSON.stringify({ absolute_seed: seed, absolute_cases: cases.length, command_refusals: cases.length * fuzzCommands().length, renderer_refusals: cases.length * 2, tracker_changes: 0 }));
+});
+
+test('seeded relative paths and web URLs have no false privacy refusals', async t => {
+  const f = await fuzzFixture(t); const { sdk, host } = f;
+  const seed = 0x6a09e667; const cases = allowedFuzz(seed, 5000);
+  for (const [index, value] of cases.entries()) {
+    assert.equal(containsPrivatePath(value), false, `allowed seed=${seed} case=${index} ${JSON.stringify(value)}`);
+    for (const [command, args, options] of fuzzCommands()) validateCommandInputs(command, { command: `swarm ${command}`, args, options: { ...options, fuzzInput: value }, global: { author: 'shared-test' }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo });
+    await fuzzRendering(host, value, false);
+  }
+  console.log(JSON.stringify({ allowed_seed: seed, relative_paths: cases.length / 2, web_urls: cases.length / 2, admitted_command_inputs: cases.length * fuzzCommands().length, false_refusals: 0 }));
+});
+
+
+test('canonicalization handles bounded nested escapes and both filesystem grammars', () => {
+  const root = ['', 'var', 'data', 'work'].join('/');
+  const paths = [
+    root, root.replaceAll('/', '&#47;'), root.replaceAll('/', '&sol;'),
+    root.replaceAll('/', String.raw`\u{2f}`), root.replaceAll('/', String.raw`\x2f`),
+    root.replaceAll('/', String.raw`\u002f`), root.replaceAll('/', String.raw`\uFF0F`),
+    root.replaceAll('/', '\u2216'), root.replaceAll('/', '&bsol;'),
+    `file:${root}`, `path:${root}`, root.replaceAll('/', '//../'),
+    'Z:relative-drive-root', '$env:USERPROFILE/work', '${HOME}/work',
+  ];
+  for (const path of paths) assert.equal(containsPrivatePath(path), true, JSON.stringify(path));
+  for (const safe of ['&#x110000; public', '&#1114112; public', '&unknown; public', 'public &amp; text', 'src/../work', 'http://example.test/a', 'https://example.test/a']) assert.equal(containsPrivatePath(safe), false, safe);
+  let nested = root;
+  for (let round = 0; round < 18; round++) nested = encodeURIComponent(nested);
+  assert.equal(containsPrivatePath(nested), true, 'bounded decoder refuses unresolved nesting');
+  let boundary = root;
+  for (let round = 0; round < 16; round++) boundary = encodeURIComponent(boundary);
+  assert.equal(containsPrivatePath(boundary), true, 'fixed point reached at exact bound');
 });

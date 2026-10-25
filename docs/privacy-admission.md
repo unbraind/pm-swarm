@@ -19,15 +19,21 @@ backend lease, reusing one pure validator across CLI and SDK entry points. Owner
 
 ## Oracle and normalization
 
-`scanMutationSecrets` from the pinned SDK 2026.10.23 is queried for the
-`absolute_home_path` finding for every raw string and normalized candidate. The
-package does not maintain an independent Unix home-path detector. Its stricter
-normalization layer exists because the pinned oracle misses the forms measured
-below: URI escape decoding (including nested and malformed octets), NFKC,
-explicit Cyrillic confusables, invisible/bidi controls, slash folding, file URL
-and Windows UNC authorities, case-folded home layouts, shell home references and alternate home directory layouts. Only
-canonical candidates are scanned; normalization never changes a persisted input.
-Credential findings retain the native host's separate secret policy.
+`scanMutationSecrets` from the pinned SDK 2026.10.23 remains the first layer
+for raw `absolute_home_path` findings. An independent complete root rule then
+refuses **any absolute local filesystem path**, independent of directory names.
+Each string reaches a bounded fixed point (at most sixteen rounds) of URI percent
+decoding, JSON Unicode/hex/slash escapes, numeric and named HTML escapes, Unicode
+NFKC and explicit confusable folding, and zero-width/bidi stripping. Malformed
+URI octets cannot conceal adjacent valid ASCII; unresolved excessive nesting is
+refused. Tokens strip file URL schemes and presentation wrappers, then pass through
+both `path.posix.normalize` and `path.win32.normalize`. Either absolute grammar,
+drive roots, UNC authorities, tilde roots and shell variable roots cause refusal.
+Dot segments and duplicate/mixed separators cannot turn an absolute path into an
+allowed relative candidate. HTTP(S) URL tokens and relative paths remain allowed;
+separately supplied absolute values in a URL query remain subject to the guard.
+Normalization never changes a persisted input. Credential findings retain the
+native host's separate secret policy.
 
 The corpus is defined exactly in `test/privacy-corpus.ts`. Synthetic locations
 are constructed from segments, and no local coordinates are recorded here.
@@ -37,7 +43,7 @@ U+202E; the combined fixture URI-encodes the fullwidth slash form. The Windows
 UNC fixture includes a server authority; forward-slash and mixed fixtures use
 lowercase and mixed-case directory names, respectively.
 
-The raw SDK detects **10 of 50** fixtures. The normalized guard refuses **all 50**.
+The raw SDK detects **10 of 50** fixtures. The normalized guard refuses **all 50**, plus both round-2 dot-segment and forward-UNC cases.
 Every row marked missed is an exact SDK-gap encoding identity for upstream reports.
 
 | Encoding identity | Raw SDK | Package guard |
@@ -105,14 +111,14 @@ for every encoding; watch frames are checked before the first stream write.
 ## Evidence
 
 The Cartesian command test uses one real non-Git tracker and the actual injected
-SDK: **16 mutating variants, 50 encodings, 197 text input positions, 9,914 refusals**
+SDK: **16 mutating variants, 52 encodings, 197 text input positions, 10,308 refusals**
 (including 64 malformed scalar cases). It snapshots every tracker file byte,
 directory entry and symlink, including runtime files and all history, before and
 after every refusal, and captures stdout to prohibit partial receipts. A separate
-**1,050-case** matrix covers 21 SDK mutation entries; 39 malformed domain inputs
-receive the same byte-invariance checks. Two native CLI cases reproduce the
+**1,092-case** matrix covers 21 SDK mutation entries; 39 malformed domain inputs
+receive the same byte-invariance checks. Four native CLI cases reproduce the
 review's handoff failures with a valid owner/fence and check the whole tracker.
-All 400 encoding/format/result-shape combinations retain renderer ownership and emit only the
+All 416 encoding/format/result-shape combinations retain renderer ownership and emit only the
 safe refusal. These attest input refusal, rather than promising that I/O failures
 or later concurrent state changes can never need recovery.
 
@@ -128,3 +134,17 @@ bun run release:check
 Behavioral revert proofs are recorded as append-only comments on pm-swarm-y972.
 The original native SDK settings-section registration gap remains unchanged; see
 [settings verification](settings-and-quality-gates.md).
+
+## Compositional regression
+
+`test/privacy-fuzz.ts` generates **5,000 absolute candidates** from seed
+`0x51a7c0de`, applying one through four randomly selected transformations:
+percent encoding, dot segments, duplicate/mixed separators, UNC authorities,
+file URLs, wrappers, confusables, invisible/bidi characters, case, punctuation,
+HTML entities and JSON escapes. Every candidate is refused by all sixteen
+mutating variants (**80,000 command refusals**) and both renderers
+(**10,000 safe refusal documents**), on one unchanged non-Git tracker.
+A separate seed `0x6a09e667` generates **2,500 relative paths and 2,500 HTTP(S)
+URLs**: all pass every command's privacy admission (**80,000 admissions**) and
+both renderers (**10,000 successful renders**), with zero false privacy refusals.
+The original fifty fixtures and both review reproducers remain fixed regressions.

@@ -26,9 +26,9 @@ export const swarmSettingsSection = {
   flags: { base: '--base', root: '--root', branch_prefix: '--branch-prefix', lane_limit: '--limit', progress_orchestrator: '--progress-orchestrator' },
 } as const;
 
-/** Refuse nested output values and keys containing an absolute home location. */
+/** Refuse nested output values and keys containing an absolute local filesystem location. */
 export function assertPrivatePathSafe(value: unknown): void {
-  if (typeof value === 'string' && containsPrivatePath(value)) throw new SettingsRefusal('swarm_private_path', 'Replace absolute home paths with project-relative paths before requesting this output.');
+  if (typeof value === 'string' && containsPrivatePath(value)) throw new SettingsRefusal('swarm_private_path', 'Replace absolute local filesystem paths with project-relative paths before requesting this output.');
   if (Array.isArray(value)) for (const entry of value) assertPrivatePathSafe(entry);
   else if (typeof value === 'object' && value !== null) for (const [key, entry] of Object.entries(value)) { assertPrivatePathSafe(key); assertPrivatePathSafe(entry); }
 }

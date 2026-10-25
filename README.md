@@ -69,14 +69,15 @@ public SDK file APIs under the audited mutation lock. Native host registration
 remains pending SDK support; see [verification and SDK gap](docs/settings-and-quality-gates.md).
 
 All swarm commands register scoped TOON/JSON host rendering. JSON is compact;
-TOON planning omits full read receipts unless `--full` is supplied. Absolute home
+TOON planning omits full read receipts unless `--full` is supplied. Absolute local filesystem
 paths in nested result values, keys, watch events or errors trigger a typed
 `swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
 worktree locations are relative to the project root.
 
 Private input is checked before any swarm dispatch or writer lease, including
 notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanner
-is the oracle; normalization closes its measured encoding gaps. See the
+runs first; canonical POSIX and Windows root checks also refuse non-home paths.
+Relative paths and HTTP(S) URLs remain supported. See the
 [per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
 
 ## Without git

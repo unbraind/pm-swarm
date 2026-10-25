@@ -6,12 +6,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T05:18:49.239Z"
+updated_at: "2026-10-25T07:19:22.298Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[28]{created_at,author,text}:
+comments[32]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -40,7 +40,11 @@ comments[28]{created_at,author,text}:
   "2026-10-25T04:59:57.509Z",codex-agent,"Latest pinned linked test passed 10 tests with 0 failures: the 9914 command refusals, 1050 SDK privacy refusals, 39 malformed domains, six SDK token refusals, settings preflight/locked races and input snapshot. Resource validation also observes the real backend transaction entry counter to avoid timing-dependent heartbeat assertions. Ready for the full CI release gates on the pushed head."
   "2026-10-25T05:11:34.651Z",codex-agent,"CI run 40163921961 passed all 311 tests; the only coverage gap was the valid schedule max-wait translation branch (99.94 percent total branches). Added a real native CLI acceptance case for max-wait=17, dry-run selection and no claim. It passes, and ignoring that field in dispatch fails the regression (1 failed, exit 1), then source restored. Review-remediation revert probes total 14. Updated public non-Git corpus at 61d5b96b8a64c755ecfb6a5018dae0aad2e4aa78: 152 items, 312 read-only baseline files, 4387217 bytes, 0 changed, 2 suggested starts and 11 planned lanes; settings receipts remain 221 JSON/209 TOON bytes."
   "2026-10-25T05:18:48.508Z",codex-agent,"Strengthened the existing Windows corpus identities to use an actual UNC server authority, lowercase forward-slash Users layout and mixed-case/mixed-separator layout. Normalization now removes backslash UNC authority and case-folds home layouts without interpreting ordinary web URL authorities as local paths. Oracle and 400 rendering checks pass; raw SDK remains 10/50, package 50/50. Reverting only this normalization change fails one corpus regression (exit 1); source restored. Review-remediation revert probes total 15. Typecheck/lint/docstrings/zero-duplication checks pass."
-files[33]{path,scope}:
+  "2026-10-25T07:12:31.952Z",codex-agent,"Round-2 review resumes: replace home spelling normalization with canonical absolute-local-path refusal, retain SDK scanning first, add seeded compositional rejection and allowed-input generators, then record behavioral revert proof and exact-head release gates."
+  "2026-10-25T07:17:28.229Z",codex-agent,"Round-2 behavioral revert proof: restored only the prior src/privacy.ts normalization module and rebuilt; node --test --test-name-pattern=\"seeded compositional|native CLI handoff\" test/privacy-admission.test.ts failed 2/2, exit 1. Native handoff incorrectly returned success for the dot-segment reproducer; compositional fuzz missed case 2 (UNC under a non-home share), seed 1369948382. Restored canonicalization and rebuilt immediately. Canonical rule now covers any POSIX, Windows drive or UNC absolute root, with SDK scanning first, bounded repeated percent/JSON/HTML decoding, confusable folding and invisible stripping. Both path grammars normalize every candidate."
+  "2026-10-25T07:17:29.085Z",codex-agent,"Round-2 preliminary results: 52 fixed encodings across 197 text positions and 16 mutating variants yield 10308 byte-identical refusals including malformed scalars; SDK entry matrix covers 1092 refusals. Absolute seed 0x51a7c0de: 5000 composed cases, 80000 command refusals, 10000 renderer refusals, unchanged tracker. Allowed seed 0x6a09e667: 2500 relative paths plus 2500 HTTP(S) URLs, 80000 command admissions and 10000 successful renders, zero false privacy refusals. Original SDK raw oracle remains 10/50; two round-2 encodings are also missed by raw scanning."
+  "2026-10-25T07:19:21.269Z",codex-agent,"Restored round-2 tests pass through pinned pm test: 14 passed, zero failed. Existing settings/output/command targeted suites pass 31/31. Typecheck and lint pass; duplication remains zero at the unchanged zero threshold; docstring gate documents all 127 declarations across 33 source files. Final release gates will run in CI."
+files[34]{path,scope}:
   index.ts,project
   package.json,project
   scripts/identity-gate.ts,project
@@ -66,6 +70,7 @@ files[33]{path,scope}:
   test/prepare-merge-driver.test.ts,project
   test/privacy-admission.test.ts,project
   test/privacy-corpus.ts,project
+  test/privacy-fuzz.ts,project
   test/public-corpus-helpers.ts,project
   test/scheduling-corpus.acceptance.ts,project
   test/settings-and-output.test.ts,project

@@ -54,3 +54,11 @@ export const privacyCorpus = [
   ['colon-prefix', `path:${unix}`],
   ['percent-fullwidth', encodeURIComponent(unix.replaceAll('/', '\uff0f'))],
 ] as const;
+
+/** Round-2 review cases retained independently of the original fifty fixtures. */
+export const reviewCorpus = [
+  ['dot-segment-root', ['', '.', 'home', 'private', 'project'].join('/')],
+  ['forward-unc-authority', ['', '', 'server', 'Users', 'private', 'project'].join('/')],
+] as const;
+/** Fixed rejection set used across every admission and rendering boundary. */
+export const rejectedCorpus = [...privacyCorpus, ...reviewCorpus];
