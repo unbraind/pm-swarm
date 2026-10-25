@@ -163,3 +163,12 @@ test('watch refuses private lane values before emitting either format and restor
   }
   assert.equal(process.listenerCount('SIGINT'), listeners);
 });
+
+test('private path guard preserves relative home directories and ordinary web URLs', () => {
+  for (const value of [join('src', 'home', 'page.ts'), join('docs', 'Users', 'guide.md'), join('..', 'root', 'example.ts'), new URL(['home', 'public'].join('/'), 'https://example.test').href]) assertPrivatePathSafe(value);
+  for (const root of ['home', 'Users', 'root']) {
+    const path = join('/', root, 'private', 'project');
+    assert.throws(() => assertPrivatePathSafe(`See "${path}"`), SettingsRefusal);
+    assert.throws(() => assertPrivatePathSafe(`file://${path}`), SettingsRefusal);
+  }
+});

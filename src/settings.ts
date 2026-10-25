@@ -27,7 +27,7 @@ export const swarmSettingsSection = {
 
 /** Refuse nested output values and keys containing an absolute home location. */
 export function assertPrivatePathSafe(value: unknown): void {
-  const home = /(?:\/(?:home|Users)\/|\/(?:root)(?:\/|\b)|[A-Za-z]:[\\/]Users[\\/])/i;
+  const home = /(?:^|[\s"'`([{=,:;])(?:file:\/\/)?(?:\/(?:home|Users)\/|\/(?:root)(?:\/|\b)|\/?[A-Za-z]:[\\/]+Users[\\/]+)/i;
   if (typeof value === 'string' && home.test(value)) throw new SettingsRefusal('swarm_private_path', 'Replace absolute home paths with project-relative paths before requesting this output.');
   if (Array.isArray(value)) for (const entry of value) assertPrivatePathSafe(entry);
   else if (typeof value === 'object' && value !== null) for (const [key, entry] of Object.entries(value)) { assertPrivatePathSafe(key); assertPrivatePathSafe(entry); }
