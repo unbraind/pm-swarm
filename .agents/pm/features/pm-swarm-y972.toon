@@ -7,14 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T20:17:29.996Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-25T20:30:14.645Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[66]{created_at,author,text}:
+comments[67]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -81,6 +79,7 @@ comments[66]{created_at,author,text}:
   "2026-10-25T20:17:25.727Z",codex-agent,"Round 5 validation: source audit includes 18 SDK/backend writer sites, including two SDK coordination locks. Every writer consumes commitMutation-admitted content. All 90 writer-site/source cases refused before writes across CLI, Git diff, settings files, source files and peer comments; full tracker/history snapshots unchanged and no partial receipt. PM-linked tests passed: sinks 7/7, admission 14/14, state/refusal 20/20, home/prose 6/6, settings/output/commands 31/31. Four recovery snapshot races and two lock recovery tests passed. Typecheck, lint, build, 0 percent duplication and docstrings passed at unchanged policy."
   "2026-10-25T20:17:27.979Z",codex-agent,"Round 5 measured corpora: 85 fixed rejected forms, 20646 rejected command inputs across 242 positions, 1785 SDK refusals across 21 entries, and 680 safe fixed renderer documents. Benign: 34 cases, 646 admissions, 68 renders, 34 actual handoffs, zero false refusals. Home fuzz seed 0x51a7c0de: 5000 cases, 95000 command refusals, 10000 renderer refusals. Allowed fuzz seed 0x6a09e667: 2500 relative plus 2500 web paths, 95000 admissions and 10000 renders, zero false refusals. Decoder seed 0x8badf00d: 128 randomized homes, 54400 substring-preservation checks and 10880 noisy-corpus refusals, zero lost paths. HOME and USERPROFILE fullwidth, confusable, NFD, case and percent forms: ten environments, twenty actual handoff refusals with unchanged tracker bytes."
   "2026-10-25T20:17:29.980Z",codex-agent,"Round 5 real relative-path oracle: 35 read-only fleet checkouts, 18035 tracked paths, 162315 presentations, zero false refusals and zero source writes; inventory digest bf1d797b87286cb9cce7cbf7d20a9215d09fd0a064d63fd3a5fda06aedcf4f74. No path list is committed. SDK 2026.10.23 raw oracle detects 10 of 85 fixed forms and misses 75; new exact misses malformed-utf8-fullwidth and malformed-utf8-fullwidth-suffix, complete ledger in docs/privacy-admission.md. Package refuses all 85. Existing missing native settings registration and per-call write-free SDK reads remain explicit; no SDK bump or upstream change."
+  "2026-10-25T20:30:13.582Z",codex-agent,"Round 5 full code-validation CI passed at f1a6d95e9ef9540e76f713b7383c91226424758a: https://github.com/unbraind/pm-swarm/actions/runs/40230123870 . Node 22 npm release:check, Node 26 npm release:check, and Node 26 bun release:check each passed 348 suite tests plus 4 packed acceptance tests, zero failures, and 100/100/100/100 statements/branches/functions/lines across all 34 authored files. Docstrings: 135 declarations; duplication: zero percent. Health, identity/privacy, typecheck, lint, production audit, pack dry run, changelog and publish-attestation verification passed. CodeQL run 40230123853 passed. Append-only PM evidence and claim release follow, then wait for the final head CI. SDK integration limits remain explicit; no item closure, merge, release or review-thread reply."
 files[53]{path,scope}:
   index.ts,project
   package.json,project
