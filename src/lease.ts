@@ -35,14 +35,14 @@ function publish(path: string, value: unknown): void {
 /** Remove only empty infrastructure directories this invocation created, preserving every peer record. */
 function removeEmptyRuntime(root: string, created: string | undefined): void {
   if (created === undefined) return;
-  for (let directory = root;; directory = dirname(directory)) {
+  const boundary = dirname(created);
+  for (let directory = root; directory !== boundary; directory = dirname(directory)) {
     try { rmdirSync(directory); }
     catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
       if (['ENOTEMPTY', 'EEXIST'].includes(String(code))) return;
       if (code !== 'ENOENT') throw error;
     }
-    if (directory === created) return;
   }
 }
 

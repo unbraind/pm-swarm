@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getHistoryPath, locateItem } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from '../src/inspection.ts';
 import { PlanProgress } from '../src/progress.ts';
-import { assertPrivatePathSafe } from '../src/settings.ts';
+import { assertPrivatePathSafe, SettingsRefusal } from '../src/settings.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { ownedPlan, declareService } from './privacy-mutations.ts';
 
@@ -41,4 +41,25 @@ test('reclaim skips unsafe foreign context and truthfully retains other complete
   assert.match(result.refused[0].reason, /Unsafe foreign context/); assertPrivatePathSafe(result);
   assert.equal(readFileSync(located.itemPath, 'utf8'), itemBefore); assert.equal(readFileSync(history, 'utf8'), historyBefore);
   assert.equal((await f.client.get(safe)).item.assignee, 'receiver');
+});
+
+test('reclaim propagates real storage failures instead of misreporting foreign privacy and a rerun converges', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['src/recover.ts']);
+  await f.client.update(id, { assignee: 'absent-worker', field: ['swarm_token=1', 'swarm_claimed_at=2000-01-01T00:00:00.000Z'] });
+  const located = await locateItem(f.pmRoot, id); assert.ok(located);
+  const history = getHistoryPath(f.pmRoot, id); const before = readFileSync(history, 'utf8');
+  const saved = `${located.itemPath}.retained`; const update = f.client.update.bind(f.client);
+  // Inject an actual storage obstruction at the write boundary, forwarding the real SDK update.
+  f.client.update = async (...args) => {
+    renameSync(located.itemPath, saved); mkdirSync(located.itemPath);
+    try { return await update(...args); }
+    finally { rmdirSync(located.itemPath); renameSync(saved, located.itemPath); }
+  };
+  try { await assert.rejects(f.shared.reclaim(60, 'receiver'), error => error instanceof Error && !(error instanceof SettingsRefusal)); }
+  finally { f.client.update = update; }
+  assert.equal(readFileSync(history, 'utf8'), before);
+  assert.equal((await f.client.get(id)).item.assignee, 'absent-worker');
+  const rerun = await f.shared.reclaim(60, 'receiver'); assert.deepEqual(rerun.recovered.map(row => row.id), [id]);
+  assert.deepEqual((await f.shared.reclaim(60, 'receiver')).recovered, []);
+  assert.equal((await f.client.get(id)).item.swarm_token, '2');
 });
