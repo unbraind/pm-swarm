@@ -1,3 +1,4 @@
+import { assertPrivatePathSafe } from './settings.ts';
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
 import type { Swarm } from './swarm.ts';
 import type { SharedTracker } from './shared-tracker.ts';
@@ -77,6 +78,6 @@ export async function runWatch(swarm: Swarm | SharedTracker, interval: number, j
   const stop = () => controller.abort();
   process.on('SIGINT', stop);
   try {
-    await watchStatus(swarm, interval, controller.signal, event => { process.stdout.write(json ? `${JSON.stringify(event)}\n` : `${encodeToon(event)}\n\n`); });
+    await watchStatus(swarm, interval, controller.signal, event => { assertPrivatePathSafe(event); process.stdout.write(json ? `${JSON.stringify(event)}\n` : `${encodeToon(event)}\n\n`); });
   } finally { process.removeListener('SIGINT', stop); }
 }

@@ -27,8 +27,11 @@ export { predict } from './src/git.ts';
 /** Expose exhaustive sequential merge ordering and minimal conflict analysis. */
 export { cleanOrder, minimalConflict } from './src/order.ts';
 /** Expose SDK-backed package settings resolution. */
-export { settings } from './src/settings.ts';
+export { settings, updateSettings, resolveSwarmSettings, swarmSettingsSection, SettingsRefusal, assertPrivatePathSafe } from './src/settings.ts';
 /** Expose portable lane contracts. */
 export type { Candidate, Lane, Prediction, Separation, SwarmSettings } from './src/types.ts';
 /** Activate the swarm command family and its extension fields. */
 export default defineExtension({ name: 'pm-swarm', version: '2026.10.15', description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
+
+/** Typed settings mutation, refusal and verification contracts. */
+export type { SettingsReceipt, SettingsMutationOptions, SettingsBoundary, SettingsRefusalCode } from './src/settings.ts';

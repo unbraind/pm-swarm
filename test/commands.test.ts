@@ -35,7 +35,7 @@ test('registered host commands exercise SDK settings, flags and every command di
     started = (await run('start', { agent: 'swarm-test' }, [id])).result as { worktree: string };
   } finally { process.chdir(originalCwd); }
   assert.equal(git(foreign, ['worktree', 'list', '--porcelain']).includes('parallel/'), false);
-  assert.equal(started.worktree, join(f.repo, 'lanes', `repo-${id}`));
+  assert.equal(started.worktree, join('lanes', `repo-${id}`));
   assert.equal(git(process.cwd(), ['worktree', 'list', '--porcelain']), packageRepo);
   assert.match(git(f.repo, ['config', '--get', `swarm.lane.${id}`]), /lanes/);
   await run('status'); await run('sync', {}, [id]); await run('sync', { apply: true, dryRun: true }, [id]); await run('sync', { apply: true }, [id]);

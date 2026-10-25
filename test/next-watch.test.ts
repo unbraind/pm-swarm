@@ -122,7 +122,7 @@ for (const legacy of [false, true]) for (const command of ['start', 'next']) tes
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const lane = JSON.parse(result.stdout) as { id: string; selected?: string; branch: string; worktree: string; warnings?: string[]; overlap_warnings: unknown[] };
   assert.equal(lane.id, id); assert.equal(lane.branch, `swarm/${id}`);
-  assert.equal(git(lane.worktree, ['branch', '--show-current']), lane.branch);
+  assert.equal(git(join(f.repo, lane.worktree), ['branch', '--show-current']), lane.branch);
   assert.deepEqual(lane.overlap_warnings, []);
   if (command === 'next') { assert.equal(lane.selected, id); assert.match(lane.warnings!.join(' '), /Unknown footprint/); }
   assert.equal((await f.client.get(id)).claim_state?.assignee, 'swarm-test');

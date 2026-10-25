@@ -32,6 +32,48 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
 
+## Settings and compact output
+
+The `swarm` section in the SDK-owned settings document has these defaults:
+
+| Setting | CLI flag | Default |
+| --- | --- | --- |
+| `base` | `--base` | `main` |
+| `root` | `--root` | `../.pm-swarm` |
+| `branch_prefix` | `--branch-prefix` | `swarm/` |
+| `lane_limit` | `--limit` | `4` (integer 1–8) |
+| `progress_orchestrator` | `--progress-orchestrator` | unset |
+
+Flags override individual configured values. Preview is the default; `--apply`
+writes through the host's audited settings transaction. The freshly locked
+section is patched so competing updates and foreign settings survive. Stored
+roots must be relative. Invalid values return `swarm_settings_invalid` with a
+remedy and exit 2. Example:
+
+```sh
+pm swarm settings --root ../lanes --branch-prefix work/ --limit 2
+pm swarm settings --root ../lanes --branch-prefix work/ --limit 2 --apply --operation-id configure-lanes-v1
+pm swarm settings --json
+pm swarm plan --limit 1
+```
+
+For embedded hosts, `settings`, `resolveSwarmSettings`, `swarmSettingsSection`,
+`updateSettings` and `SettingsRefusal` expose the same typed surface. Pass the
+injected host SDK into `updateSettings`; reuse `operationId` only to retry the
+same intent. `start --base/--root/--branch-prefix` override Git lane settings
+for that invocation. `plan --limit` overrides planning capacity.
+
+The pinned SDK has no extension settings-section registration API and its
+normalized reader omits extension-owned sections. The package therefore uses
+public SDK file APIs under the audited mutation lock. Native host registration
+remains pending SDK support; see [verification and SDK gap](docs/settings-and-quality-gates.md).
+
+All swarm commands register scoped TOON/JSON host rendering. JSON is compact;
+TOON planning omits full read receipts unless `--full` is supplied. Absolute home
+paths in nested result values, keys, watch events or errors trigger a typed
+`swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
+worktree locations are relative to the project root.
+
 ## Without git
 
 Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
