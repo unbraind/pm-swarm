@@ -233,3 +233,10 @@ test('SDK resource tokens are validated before entering a backend lease', async 
   }
   assert.equal(entries, 0, 'invalid tokens must never enter the backend');
 });
+
+test('native schedule preserves an admitted max-wait override without claiming work', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['src/work.ts']);
+  const result = f.run('swarm', 'schedule', '--skills', 'typescript', '--max-wait', '17', '--limit', '1', '--dry-run');
+  assert.equal(result.max_wait_seconds, 17); assert.equal(result.selected, id);
+  assert.equal((await f.client.get(id, { fields: 'claim_state' })).claim_state?.claimed, false);
+});
