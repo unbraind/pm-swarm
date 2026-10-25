@@ -24,7 +24,7 @@ class GitCommandFailure extends Error {
   constructor(error: unknown) { super(String(error)); this.exitCode = isPmCliExpectedError(error) ? error.exitCode : 1; }
 }
 /** Await a lane result without changing the established Git error transport. */
-async function laneOperation<T>(operation: Promise<T>, repo: string | undefined): Promise<T> {
+async function laneOperation(operation: Promise<Record<string, unknown>>, repo: string | undefined): Promise<Record<string, unknown>> {
   try { return await operation; }
   catch (error) { if (repo === undefined) throw error; throw new GitCommandFailure(error); }
 }
