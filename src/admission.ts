@@ -1,4 +1,3 @@
-import { isAbsolute } from 'node:path';
 import type { CommandHandlerContext } from '@unbrained/pm-cli/sdk/authoring';
 import { assertPrivatePathSafe, resolveSwarmSettings, SettingsRefusal } from './settings.ts';
 import { FairPolicy } from './fair-scheduling.ts';
@@ -25,14 +24,13 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   if (['start', 'sync', 'handoff', 'close', 'resource', 'progress'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
   if (options.token !== undefined && !/^\d+$/.test(String(options.token))) invalid('Use the decimal --token returned by the last successful claim.');
   if (['settings', 'start', 'plan'].includes(command)) {
-    const config = resolveSwarmSettings({}, {
+    resolveSwarmSettings({}, {
       ...(options.base === undefined ? {} : { base: String(options.base) }),
       ...(options.root === undefined ? {} : { root: String(options.root) }),
       ...(options.branchPrefix === undefined ? {} : { branch_prefix: String(options.branchPrefix) }),
       ...(options.progressOrchestrator === undefined ? {} : { progress_orchestrator: String(options.progressOrchestrator) }),
       ...(options.limit === undefined ? {} : { lane_limit: Number(options.limit) }),
     });
-    if (command === 'settings' && (isAbsolute(config.root) || /^[A-Za-z]:/.test(config.root))) invalid('Tracked swarm root setting must be relative.');
   }
   if (command === 'sync' && typeof options.files === 'string') {
     for (const file of options.files.split(',')) { if (!file.trim()) invalid('sync --files requires nonempty comma-separated paths.'); footprintPath(file.trim()); }

@@ -6,12 +6,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T07:19:22.298Z"
+updated_at: "2026-10-25T07:24:25.411Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[32]{created_at,author,text}:
+comments[35]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -44,7 +44,10 @@ comments[32]{created_at,author,text}:
   "2026-10-25T07:17:28.229Z",codex-agent,"Round-2 behavioral revert proof: restored only the prior src/privacy.ts normalization module and rebuilt; node --test --test-name-pattern=\"seeded compositional|native CLI handoff\" test/privacy-admission.test.ts failed 2/2, exit 1. Native handoff incorrectly returned success for the dot-segment reproducer; compositional fuzz missed case 2 (UNC under a non-home share), seed 1369948382. Restored canonicalization and rebuilt immediately. Canonical rule now covers any POSIX, Windows drive or UNC absolute root, with SDK scanning first, bounded repeated percent/JSON/HTML decoding, confusable folding and invisible stripping. Both path grammars normalize every candidate."
   "2026-10-25T07:17:29.085Z",codex-agent,"Round-2 preliminary results: 52 fixed encodings across 197 text positions and 16 mutating variants yield 10308 byte-identical refusals including malformed scalars; SDK entry matrix covers 1092 refusals. Absolute seed 0x51a7c0de: 5000 composed cases, 80000 command refusals, 10000 renderer refusals, unchanged tracker. Allowed seed 0x6a09e667: 2500 relative paths plus 2500 HTTP(S) URLs, 80000 command admissions and 10000 successful renders, zero false privacy refusals. Original SDK raw oracle remains 10/50; two round-2 encodings are also missed by raw scanning."
   "2026-10-25T07:19:21.269Z",codex-agent,"Restored round-2 tests pass through pinned pm test: 14 passed, zero failed. Existing settings/output/command targeted suites pass 31/31. Typecheck and lint pass; duplication remains zero at the unchanged zero threshold; docstring gate documents all 127 declarations across 33 source files. Final release gates will run in CI."
-files[34]{path,scope}:
+  "2026-10-25T07:22:58.810Z",codex-agent,"First round-2 CI candidate exercised all 315 tests and measured canonical privacy.ts at 100 percent in all dimensions. Four older Git rollback/publication fixtures supplied absolute lane-root overrides and now correctly fail privacy admission before reaching their intended later boundary. Update only those fixture inputs to project-relative roots resolving to the same directories; retain every rollback, fence and byte/history assertion. No production guard relaxation."
+  "2026-10-25T07:23:51.024Z",codex-agent,"Canonical input and settings resolution now reject all absolute roots, making three narrower post-validation isAbsolute/drive checks unreachable. Removed those redundant branches while retaining settings preflight before transaction entry and fresh locked resolveSwarmSettings validation. Existing invalid-root and peer-race regressions remain active; no coverage threshold or source exclusion changes."
+  "2026-10-25T07:24:24.160Z",codex-agent,"Relative-root fixture corrections pass all four targeted Git rollback/fencing cases. Settings invalid-input and peer-race follow-up passes 4/4; typecheck, lint and zero-duplication checks pass after removing unreachable narrower checks. The canonical rule and its recorded behavioral revert proof are unchanged."
+files[36]{path,scope}:
   index.ts,project
   package.json,project
   scripts/identity-gate.ts,project
@@ -72,6 +75,8 @@ files[34]{path,scope}:
   test/privacy-corpus.ts,project
   test/privacy-fuzz.ts,project
   test/public-corpus-helpers.ts,project
+  test/review-r12.test.ts,project
+  test/review-r9.test.ts,project
   test/scheduling-corpus.acceptance.ts,project
   test/settings-and-output.test.ts,project
   test/settings-corpus.acceptance.ts,project
@@ -79,7 +84,7 @@ files[34]{path,scope}:
   test/settings-worker.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[5]:
+tests[6]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -119,6 +124,13 @@ tests[5]:
     provenance:
       author: codex-agent
       created_at: "2026-10-25T04:33:03.659Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: "node --test --test-concurrency=1 --test-name-pattern=\"start refuses terminal lanes|Git checkout slower.*rollback|Git lane.*never writes\" test/edges.test.ts test/review-r12.test.ts test/review-r9.test.ts"
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-25T07:24:23.075Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[3]{path,scope}:

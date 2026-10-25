@@ -51,7 +51,7 @@ for (const action of ['start', 'next'] as const) {
 for (const phase of ['publication', 'rollback'] as const) {
   test(`Git lane ${phase} never writes through a superseded lease`, async t => {
     const f = await fixture(t); const id = await f.item(); f.save();
-    const root = join(f.root, 'lanes'); const path = join(root, `repo-${id}`);
+    const root = '../lanes'; const path = join(f.repo, root, `repo-${id}`);
     if (phase === 'rollback') { mkdirSync(path, { recursive: true }); writeFileSync(join(path, 'keep'), 'Unrelated data'); }
     supersedeAfterGit(t, f.pmRoot, (args, status) => phase === 'publication'
       ? args[0] === 'config' && args[2] === `swarm.lane.${id}` && status === 0

@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { isAbsolute } from 'node:path';
 import { getSettingsPath, readFileIfExists } from '@unbrained/pm-cli/sdk';
 import type { ExtensionCommandSdk } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
@@ -79,8 +78,7 @@ export interface SettingsReceipt {
 /** Patch the freshly locked subtree, leaving every foreign setting intact and releasing last. */
 export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorkspaceSettings'>, pmRoot: string, overrides: Partial<SwarmSettings> = {}, options: SettingsMutationOptions = {}): Promise<SettingsReceipt> {
   assertPrivatePathSafe({ overrides, operationId: options.operationId });
-  const proposed = await settings(pmRoot, overrides);
-  if (isAbsolute(proposed.root) || /^[A-Za-z]:/.test(proposed.root)) throw new SettingsRefusal('swarm_settings_invalid', 'Tracked swarm root setting must be relative.');
+  await settings(pmRoot, overrides);
   let config: SwarmSettings | undefined; let foreign = 0;
   await options.checkpoint?.('before_transaction');
   const operationId = options.operationId ?? randomUUID();
@@ -91,7 +89,6 @@ export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorks
       const section = await rawSection(pmRoot);
       await options.checkpoint?.('locked_read');
       config = resolveSwarmSettings(section, overrides);
-      if (isAbsolute(config.root) || /^[A-Za-z]:/.test(config.root)) throw new SettingsRefusal('swarm_settings_invalid', 'Tracked swarm root setting must be relative; use a project-relative --root.');
       assertPrivatePathSafe(config);
       foreign = Object.keys(section).filter(key => !Object.hasOwn(swarmSettingsSection.flags, key)).length;
       await options.checkpoint?.('validated');
