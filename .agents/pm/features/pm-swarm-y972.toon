@@ -6,12 +6,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-25T07:24:25.411Z"
+updated_at: "2026-10-25T07:28:19.250Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[35]{created_at,author,text}:
+comments[36]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -47,6 +47,7 @@ comments[35]{created_at,author,text}:
   "2026-10-25T07:22:58.810Z",codex-agent,"First round-2 CI candidate exercised all 315 tests and measured canonical privacy.ts at 100 percent in all dimensions. Four older Git rollback/publication fixtures supplied absolute lane-root overrides and now correctly fail privacy admission before reaching their intended later boundary. Update only those fixture inputs to project-relative roots resolving to the same directories; retain every rollback, fence and byte/history assertion. No production guard relaxation."
   "2026-10-25T07:23:51.024Z",codex-agent,"Canonical input and settings resolution now reject all absolute roots, making three narrower post-validation isAbsolute/drive checks unreachable. Removed those redundant branches while retaining settings preflight before transaction entry and fresh locked resolveSwarmSettings validation. Existing invalid-root and peer-race regressions remain active; no coverage threshold or source exclusion changes."
   "2026-10-25T07:24:24.160Z",codex-agent,"Relative-root fixture corrections pass all four targeted Git rollback/fencing cases. Settings invalid-input and peer-race follow-up passes 4/4; typecheck, lint and zero-duplication checks pass after removing unreachable narrower checks. The canonical rule and its recorded behavioral revert proof are unchanged."
+  "2026-10-25T07:28:18.332Z",codex-agent,"Final fuzz refinement supplies every generated candidate through the real global author input, shared by all mutating commands. Both seeded tests pass again: 5000 absolute candidates produce 80000 command refusals and 10000 safe renderer refusals; 2500 relative paths plus 2500 HTTP(S) URLs produce 80000 admissions and 10000 successful renders with zero false refusals. Tracker unchanged. Typecheck, lint and zero-duplication checks pass."
 files[36]{path,scope}:
   index.ts,project
   package.json,project

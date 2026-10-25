@@ -278,7 +278,7 @@ test('seeded compositional absolute paths are refused by every mutator and both 
   for (const [index, value] of cases.entries()) {
     assert.equal(containsPrivatePath(value), true, `absolute seed=${seed} case=${index} ${JSON.stringify(value)}`);
     for (const [command, args, options] of fuzzCommands()) {
-      const ctx: CommandHandlerContext = { command: `swarm ${command}`, args, options: { ...options, fuzzInput: value }, global: { author: 'shared-test' }, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk };
+      const ctx: CommandHandlerContext = { command: `swarm ${command}`, args, options: { ...options }, global: { author: value }, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk };
       await assert.rejects(runCommand(command, ctx), (error: unknown) => isPmCliExpectedError(error) && error.code === 'swarm_private_path', `${index}/${command}`);
     }
     await fuzzRendering(host, value, true);
@@ -292,7 +292,7 @@ test('seeded relative paths and web URLs have no false privacy refusals', async 
   const seed = 0x6a09e667; const cases = allowedFuzz(seed, 5000);
   for (const [index, value] of cases.entries()) {
     assert.equal(containsPrivatePath(value), false, `allowed seed=${seed} case=${index} ${JSON.stringify(value)}`);
-    for (const [command, args, options] of fuzzCommands()) validateCommandInputs(command, { command: `swarm ${command}`, args, options: { ...options, fuzzInput: value }, global: { author: 'shared-test' }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo });
+    for (const [command, args, options] of fuzzCommands()) validateCommandInputs(command, { command: `swarm ${command}`, args, options: { ...options }, global: { author: value }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo });
     await fuzzRendering(host, value, false);
   }
   console.log(JSON.stringify({ allowed_seed: seed, relative_paths: cases.length / 2, web_urls: cases.length / 2, admitted_command_inputs: cases.length * fuzzCommands().length, false_refusals: 0 }));
