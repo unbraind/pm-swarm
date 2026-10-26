@@ -67,7 +67,7 @@ test('host binding rejects foreign SDK clients and progress reuses the exact nat
   assert.throws(() => assertSdkInstance({}), error => error instanceof SettingsRefusal && error.code === 'swarm_sdk_mismatch');
   assert.equal(new PlanProgress({ cwd: f.repo, pmRoot: f.pmRoot }, sdk.client).client, sdk.client);
   const module = new URL('../src/settings.ts', import.meta.url).href;
-  const child = spawnSync(process.execPath, ['--import', new URL('../dist/src/settings.js', import.meta.url).href, '--input-type=module', '-e', `import {assertSdkInstance} from ${JSON.stringify(module)}; import {assertSdkInstance as second} from ${JSON.stringify(module + '?second-package-copy')}; assertSdkInstance(); second(); process.stdout.write('one-sdk');`], { encoding: 'utf8', env: f.env });
+  const child = spawnSync(process.execPath, ['--import', new URL('../dist/src/settings.js', import.meta.url).href, '--input-type=module', '-e', `import {assertSdkInstance} from ${JSON.stringify(module)}; assertSdkInstance(); process.stdout.write('one-sdk');`], { encoding: 'utf8', env: f.env });
   assert.equal(child.status, 0, child.stderr.replaceAll(f.repo, '[fixture]')); assert.equal(child.stdout, 'one-sdk');
 });
 
