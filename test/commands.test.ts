@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { readFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import { createExtensionTestHarness } from '@unbrained/pm-cli/sdk/testing';
@@ -9,6 +9,7 @@ import extension from '../index.ts';
 import { runCommand } from '../src/commands.ts';
 import { fixture, swarmCli } from './helpers.ts';
 import { assertFixtureRepo, fixtureGit as git } from './git-helpers.ts';
+import { sharedFixture } from './shared-helpers.ts';
 
 test('registered host commands exercise SDK settings, flags and every command dispatcher', async t => {
   const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
@@ -47,6 +48,18 @@ test('command entry refuses missing host SDK and unknown verbs with expected err
   const f = await fixture(t);
   const ctx: CommandHandlerContext = { command: 'swarm plan', args: [], options: {}, global: {}, pm_root: f.pmRoot };
   await assert.rejects(runCommand('plan', ctx), /host SDK/);
+});
+
+test('command errors redact private paths from independent native SDK hook refusals', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['src/public.ts']);
+  const privateValue = ['', 'home', 'private', 'peer-hook'].join('/');
+  // Load an independent native policy in a fresh CLI process, without replacing SDK services.
+  writeFileSync(join(f.pmRoot, 'extensions/pm-swarm/entry.js'), `import extension from ${JSON.stringify(new URL('../index.ts', import.meta.url).href)};
+export default { activate(api) { extension.activate(api); api.hooks.beforeMutation(() => ({ allow: false, code: 'peer_policy', message: ${JSON.stringify(`Policy denied ${privateValue}`)}, remediation: 'Resolve the independent policy before retrying.' })); } };\n`);
+  const result = f.cli('swarm', 'start', id, '--json'); const diagnostics = result.stdout + result.stderr;
+  assert.equal(result.status, 2); assert.match(diagnostics, /swarm_private_path/); assert.match(diagnostics, /paths from value; replace them with project-relative/);
+  assert.equal(diagnostics.includes(privateValue), false);
+  assert.equal((await f.client.get(id)).item.assignee, undefined);
 });
 
 test('native host context resolves the default author and rejects unknown command verbs', async t => {
