@@ -1,23 +1,48 @@
 id: pm-swarm-atomic-close
-title: Adopt an atomic SDK close with fenced metadata changes
-description: "Pinned PmClient.update auto-routes terminal status plus field/unset changes into a metadata update followed by a separate native close. CloseCommandOptions has no atomic custom-field/unset patch. Swarm now admits and compares every native commit and advances its expected snapshot only from the exact SDK onWrite successor; a later refusal reports committed native steps rather than claiming rollback. This preserves privacy and peer state, but does not establish a single-commit or all-or-nothing crash contract for compound close. Adopt a public SDK atomic guarded close when available; do not rebuild lifecycle/history behavior or compensate over foreign edits."
+title: Resume fenced close with an SDK workspace transaction
+description: Use the public commitItemMutations helper on commitWorkspaceTransaction for an ordered fenced metadata patch/unset and native close. deriveMutationTransactionId and the owned swarm_close_transaction receipt permit recovery after ownership clears. The SDK journal supplies idempotency and reverse-order compensation; package document admission preserves peer edits.
 type: Issue
-status: open
+pm_format_version: 2
+status: in_progress
 priority: 2
-tags[2]: concurrency,sdk-gap
+tags[1]: concurrency
 created_at: "2026-10-26T21:32:19.770Z"
-updated_at: "2026-10-26T22:01:31.005Z"
+updated_at: "2026-10-26T23:36:30.510Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
-acceptance_criteria: One guarded native item commit for close plus fencing fields and cleanup; interleaving and crash injection at every native transition; no lost peer changes or duplicate history; retain typed partial-state remedies until the SDK capability is available.
+acceptance_criteria: One SDK workspace transaction containing update then close; deterministic transaction identity; non-Git interruption at every forward boundary and fresh-process resume without duplicate history or lost fields; ordinary failure compensation and retry; no swarm_partial_commit path for close.
 parent: pm-swarm-y972
-comments[1]{created_at,author,text}:
+comments[4]{created_at,author,text}:
   "2026-10-26T22:01:31.001Z",codex-agent,"Native compound-close regression and partial-prefix peer-preservation test pass. Separate behavioral reversions of the committed-successor observer and partial-commit refusal each fail their regression once, exit 1; restored positives pass. This verifies guarded per-stage behavior and truthful receipts, not a single atomic close. The SDK gap remains open."
-files[3]{path,scope}:
+  "2026-10-26T23:21:05.145Z",codex-agent,"Implemented public commitItemMutations on commitWorkspaceTransaction, with deriveMutationTransactionId and an owned recovery receipt. Initial focused recovery suite passed 11/11: seven exact SDK forward boundaries resume in fresh CLI processes with exactly update then close and no duplicate history; ordinary failure compensates the metadata step, then retry completes once. This corrects the prior SDK-gap claim; no lifecycle or journal engine was reimplemented. Expanded peer and writer-inventory tests are running."
+  "2026-10-26T23:25:52.970Z",codex-agent,"Behavioral revert proofs: node --test --test-concurrency=1 --test-name-pattern=\"SDK close journal resumes\" test/close-transaction.test.ts fails when only the prior unjournaled SharedTracker.close function is restored (exit 1, one failure). Disabling only the persisted-receipt resume condition fails eight results; removing only journaled-mode admission fails seven results by returning partial-commit errors instead of SDK interruptions. All three probes restored source byte-for-byte: sixteen expected failing results total. The restored 25-test suite passes, covering seven forward crashes, four compensation crashes, fresh-process resume, seven private-peer transitions and committed replay ownership checks."
+  "2026-10-26T23:36:30.486Z",codex-agent,"Final recovery suite passes 26/26, including short-ID admission resumed by canonical ID. Transaction identity and cached-token lookup use the SDK-resolved canonical id; owned token cleanup remains inside the lease. Replacing only canonical resolution with the raw caller id makes the canonical-item regression fail once (exit 1), then exact source restoration passes. Four probes now produce 17 expected failures. Fencing remains 11/11; journaled close never reports swarm_partial_commit. Full isolated npm and Bun CI is next."
+files[6]{path,scope}:
+  src/close.ts,project
+  src/commands.ts,project
   src/settings.ts,project
   src/shared-tracker.ts,project
+  test/close-transaction.test.ts,project
   test/privacy-sdk-instance.test.ts,project
-tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
-  node --test --test-concurrency=1 --test-name-pattern=compound test/privacy-sdk-instance.test.ts,project,codex-agent,"2026-10-26T21:54:59.405Z",local_mutation,feat/settings-and-quality-gates
+tests[2]:
+  - command: node --test --test-concurrency=1 --test-name-pattern=compound test/privacy-sdk-instance.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-26T21:54:59.405Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=1 test/close-transaction.test.ts
+    scope: project
+    timeout_seconds: 180
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-26T23:24:25.459Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+    updated_by: codex-agent
+    updated_at: "2026-10-26T23:26:54.377Z"
 docs[1]{path,scope}:
   docs/privacy-admission.md,project
 body: ""

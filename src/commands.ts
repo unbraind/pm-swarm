@@ -182,7 +182,7 @@ export function register(api: ExtensionApi): void {
       return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
     },
   });
-  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields(['swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));

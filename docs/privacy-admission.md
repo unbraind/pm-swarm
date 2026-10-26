@@ -276,11 +276,32 @@ retry. Persistent contention returns the typed conflict without a false receipt.
 
 The native `onWrite` hook advances a request snapshot only when both documents
 exactly match its admitted, actually committed successor. Unrelated lock/cache
-notifications and peer documents cannot advance it. This supports the pinned
-SDK compound close without disabling the locked comparison. A later failure
-after a successful native step yields `swarm_partial_commit`, its committed
-count and an inspect-before-retry remedy; it never implies byte identity or
-removes a peer edit.
+notifications and peer documents cannot advance it. For compound close, the scope encloses one SDK workspace transaction. The generic
+`swarm_partial_commit` diagnostic remains for callers composing unjournaled
+native operations; journaled close propagates SDK interruption/compensation
+semantics instead.
+
+`commitItemMutations` builds the ordered metadata patch/unset and native close
+steps on `commitWorkspaceTransaction`. `deriveMutationTransactionId` binds the
+plan to the SDK-resolved canonical item, actor, original token and note. The update persists the next fence
+and `swarm_close_transaction`, while clearing ownership and handoff state. That
+receipt permits recovery with the original token after the update has committed.
+An unrelated or stale request cannot adopt the receipt. The SDK owns journal
+inspection, step idempotency, native mutations and reverse-order compensation.
+The complete document guard remains active for forward and compensation writes;
+a peer edit is preserved rather than overwritten by rollback. A replay checks
+current completion before returning a receipt.
+
+Non-Git tests interrupt all seven forward coordinator boundaries, including
+between each native mutation and its journal record. A fresh CLI process resumes
+every case with exactly one update and one close, generation two, no lost fields,
+and byte-identical history on committed replay. Ordinary failure after the update
+restores the original fields through the SDK and a retry completes once. Four
+additional interruptions in compensation recover without duplicate restoration
+or lost completion. Seven
+private-peer transitions preserve exact peer history. Changed completion markers,
+generations and owners return a typed conflict. Close has no
+`swarm_partial_commit` path.
 
 Settings admission checks the complete fresh raw source document, substituting
 only its owned proposed subtree, as well as the SDK-normalized returned patch.
@@ -384,17 +405,16 @@ and an inventory digest. The path list is never committed.
 
 ## SDK integration limits
 
-Pinned `PmClient.update` with close status and fenced custom-field/unset changes
-performs two native commits (metadata update, then close). `CloseCommandOptions`
-has no atomic custom-field/unset patch. Native `onWrite` tracking preserves CAS
-for each stage and reports partial commits truthfully, but cannot make that
-compound operation atomic or crash-all-or-nothing. Workspace transactions do not
-lock ordinary peer item writers. Follow-up:
-[pm-swarm-atomic-close](../.agents/pm/issues/pm-swarm-atomic-close.toon).
+Atomic update/close is supported by public `commitItemMutations` and
+`commitWorkspaceTransaction`; the earlier missing-capability assessment was
+incorrect. [pm-swarm-atomic-close](../.agents/pm/issues/pm-swarm-atomic-close.toon)
+tracks its implementation and recovery evidence.
 
-Native settings-section registration remains unavailable on pinned `ExtensionApi`;
-normalized `readSettings` drops extension sections. Typed package metadata and the
-audited raw-subtree bridge remain documented integration limits.
+Native settings-section registration and supported extension-section reading are
+tracked separately in [pm-swarm-native-settings](../.agents/pm/issues/pm-swarm-native-settings.toon),
+blocked on [pm-cli#1580](https://github.com/unbraind/pm-cli/issues/1580). The current
+PR delivers typed settings, matching flags and audited persistence through the
+documented compatibility bridge.
 
 `PmClient.get` can record derived usage and `listAllComplete` can materialize SDK
 metadata caches. `PmClientOptions`, `GetOptions` and `PmCompleteListOptions` expose

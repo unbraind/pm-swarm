@@ -68,7 +68,7 @@ function documentFingerprint(item: Record<string, unknown>): string {
   return JSON.stringify({ metadata, body: item.body ?? '' }, (_key, value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
 }
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean } = {}): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   assertSdkInstance();
@@ -80,7 +80,7 @@ export function commitItemMutation<Payload extends { id: string; options: unknow
       await checkpoint?.('scoped');
       await checkpoint?.('before_commit');
       try { return await commit(admitted); } catch (error) {
-        if (scope.committed > 0) throw new SettingsRefusal('swarm_partial_commit', `${scope.committed} native item mutation(s) already committed; inspect the current tracker before retrying. ${scope.refusal?.remedy ?? 'The SDK refused a later step in its compound operation.'}`, scope.refusal?.field);
+        if (scope.committed > 0 && options.transaction !== true) throw new SettingsRefusal('swarm_partial_commit', `${scope.committed} native item mutation(s) already committed; inspect the current tracker before retrying. ${scope.refusal?.remedy ?? 'The SDK refused a later step in its compound operation.'}`, scope.refusal?.field);
         if (scope.refusal !== undefined) throw new SettingsRefusal(scope.refusal.code, scope.refusal.remedy, scope.refusal.field);
         throw error;
       }

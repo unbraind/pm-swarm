@@ -13,8 +13,10 @@ extension sections. `swarmSettingsSection` supplies typed package metadata and
 `resolveSwarmSettings` supplies validation, but these are **not host settings
 registration**. Reading the raw subtree with public SDK file/path APIs inside
 the audited callback is the compatibility bridge. Host registration remains an
-unmet acceptance criterion until the SDK supplies that capability. The SDK pin
-is unchanged.
+separate follow-up, [pm-swarm-native-settings](../.agents/pm/issues/pm-swarm-native-settings.toon),
+blocked on [pm-cli#1580](https://github.com/unbraind/pm-cli/issues/1580). Native
+registration is outside this PR; typed settings and audited persistence remain
+in scope. The SDK pin is unchanged.
 
 ## Transaction boundaries
 

@@ -12,6 +12,8 @@ import { register } from './src/commands.ts';
 export { Swarm } from './src/swarm.ts';
 /** Expose claim coordination for trackers without Git worktree lanes. */
 export { SharedTracker } from './src/shared-tracker.ts';
+/** Trusted crash-observer options for resumable SDK claim completion. */
+export type { CloseOptions } from './src/close.ts';
 /** Expose backend-neutral exclusive resource coordination and typed remedies. */
 export { ResourceReservations, ResourceRefusal, RESOURCE_TAG } from './src/resources.ts';
 /** Expose the adapter reusing the existing shared-tracker operation lease. */

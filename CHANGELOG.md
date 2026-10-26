@@ -20,3 +20,7 @@
 ### Changed
 
 - Adopt pm-github 2026.10.16: default-branch-safe gated sync and daily gated closeout PRs ([pm-swarm-lux2](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-lux2.toon))
+
+### Fixed
+
+- Resume fenced close with an SDK workspace transaction ([pm-swarm-atomic-close](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-atomic-close.toon))

@@ -1,0 +1,19 @@
+id: pm-swarm-native-settings
+title: Adopt native SDK settings sections after upstream support
+description: "Track native extension settings-section integration separately from the delivered settings flags, audited persistence and package quality gates. Upstream: https://github.com/unbraind/pm-cli/issues/1580 . Replace the documented raw-subtree compatibility bridge when the pinned SDK exposes the native contract."
+type: Issue
+status: blocked
+priority: 2
+tags[3]: "gh:unbraind/pm-cli#1580",sdk-gap,"upstream:pm-cli#1580"
+created_at: "2026-10-26T23:15:17.929Z"
+updated_at: "2026-10-26T23:24:24.508Z"
+author: codex-agent
+acceptance_criteria: Adopt the public native settings section registration and provider-aware reader after pm-cli#1580; preserve typed flags and validation; verify local and non-filesystem settings behavior.
+parent: pm-swarm-y972
+blocked_reason: "Blocked by unbraind/pm-cli#1580: ExtensionApi lacks native extension settings-section registration and a supported provider-aware section reader."
+files[1]{path,scope}:
+  src/settings.ts,project
+docs[2]{path,scope}:
+  docs/settings-and-quality-gates.md,project
+  README.md,project
+body: ""

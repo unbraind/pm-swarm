@@ -25,7 +25,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
-| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim through guarded native commits |
+| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Finish and release a fenced claim in one resumable SDK transaction |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
 | resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
@@ -66,7 +66,7 @@ for that invocation. `plan --limit` overrides planning capacity.
 The pinned SDK has no extension settings-section registration API and its
 normalized reader omits extension-owned sections. The package therefore uses
 public SDK file APIs under the audited mutation lock. Native host registration
-remains pending SDK support; see [verification and SDK gap](docs/settings-and-quality-gates.md).
+is tracked separately in [pm-swarm-native-settings](.agents/pm/issues/pm-swarm-native-settings.toon), blocked on pm-cli#1580; see [verification](docs/settings-and-quality-gates.md).
 
 All swarm commands register scoped TOON/JSON host rendering. JSON is compact;
 TOON planning omits full read receipts unless `--full` is supplied. Private user-home
@@ -90,9 +90,11 @@ retry `swarm_document_changed`. Host commands reuse their injected client, and
 package copies share request scope. A second SDK module identity produces
 `swarm_sdk_mismatch`: share the host SDK installation and restart after removing
 the nested dependency. Full internal reads retain large bodies and annotations.
-The pinned SDK closes an item in two native commits; if a later stage fails,
-`swarm_partial_commit` reports how many committed and asks you to inspect the
-tracker before retrying. Atomic close with fenced metadata is an open SDK gap.
+Close uses `commitItemMutations` on the SDK workspace transaction coordinator: a
+fenced metadata patch followed by native close. The deterministic transaction ID
+and `swarm_close_transaction` receipt let the same token and note resume after
+ownership was cleared. Interrupted work resumes; ordinary failures compensate
+through the SDK. This flow does not return `swarm_partial_commit`.
 See [privacy admission](docs/privacy-admission.md).
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use

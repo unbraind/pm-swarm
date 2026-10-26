@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from '@babel/parser';
-import { acquireLock, acknowledgeLinkedTests, runLinkedTests } from '@unbrained/pm-cli/sdk';
+import { acquireLock, acknowledgeLinkedTests, runLinkedTests, commitItemMutations } from '@unbrained/pm-cli/sdk';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { changedFiles } from '../src/git.ts';
 import { commitMutation, SettingsRefusal, updateSettings } from '../src/settings.ts';
@@ -21,7 +21,7 @@ const WRITE_SITES = [
   'progress.ts:comments', 'resource-tracker.ts:update',
   'resources.ts:transact',
   'settings.ts:mutateWorkspaceSettings',
-  'shared-tracker.ts:update', 'shared-tracker.ts:files', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update',
+  'shared-tracker.ts:update', 'shared-tracker.ts:files', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'close.ts:commitItemMutations',
   'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:files', 'swarm.ts:acknowledgeLinkedTests', 'swarm.ts:release',
   'test-runner.ts:runLinkedTests',
 ].sort();
@@ -45,14 +45,14 @@ function writeInventory(): string[] {
         const receiver = expression.type === 'MemberExpression' ? text(expression.object) : '';
         const writer = (/(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete'].includes(method) && !(method === 'run' && text(node.arguments?.[0]) === "'test'" && /list:\s*true/.test(text(node.arguments?.[1]))))
           || (receiver === 'sdk' && method !== 'isItemNotFoundError') || (receiver.endsWith('.backend') && method === 'transact')
-          || ['acquireLock', 'acknowledgeLinkedTests', 'runLinkedTests'].includes(method);
+          || ['acquireLock', 'acknowledgeLinkedTests', 'runLinkedTests', 'commitItemMutations', 'commitWorkspaceTransaction', 'commitItemCompletion'].includes(method);
         if (writer) {
           sites.push(`${file}:${method}`);
           let index = parents.length - 1;
           while (index >= 0 && parents[index].type !== 'ArrowFunctionExpression') index--;
           assert.ok(index >= 0, `${file}:${method}: missing admission callback`);
           const callback = parents[index]; const wrapper = parents[index - 1];
-          const itemWriter = /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run'].includes(method);
+          const itemWriter = ['commitItemMutations', 'commitItemCompletion', 'commitWorkspaceTransaction'].includes(method) || /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run'].includes(method);
           assert.ok(wrapper.type === 'CallExpression' && wrapper.callee?.name === (itemWriter ? 'commitItemMutation' : 'commitMutation'), `${file}:${method}: unguarded SDK writer`);
           if (itemWriter) assert.match(text(wrapper.arguments?.[0]), /\bitem(?:\s*[:,}])/, `${file}:${method}: missing full snapshot`);
           assert.equal(callback.params?.[0]?.name, 'admitted');
@@ -93,6 +93,7 @@ test('each enumerated sink refuses private values from CLI git settings files an
     await unchanged(f.pmRoot, async () => {
       switch (method) {
         case 'acquireLock': return commitMutation({ resource: 'privacy-probe', author: value }, async admitted => { const release = await acquireLock(f.pmRoot, admitted.resource, 30, admitted.author); await release(); });
+        case 'commitItemMutations': return commitMutation({ author: value, transactionId: 'privacy-probe', mutations: [{ op: 'close' as const, id, reason: value }] }, admitted => commitItemMutations({ ...admitted, pmRoot: f.pmRoot }));
         case 'update': return commitMutation({ id, options: { comment: [value] } }, admitted => f.client.update(admitted.id, admitted.options));
         case 'files': return commitMutation({ id, options: { add: [value] } }, admitted => f.client.files(admitted.id, admitted.options));
         case 'claim': return commitMutation({ id, options: { author: value } }, admitted => f.client.claim(admitted.id, admitted.options));

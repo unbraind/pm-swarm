@@ -11,6 +11,8 @@ import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem, recoverySnapshotMatches } from './recovery.ts';
 import { inspectItem, readItem } from './inspection.ts';
+import { completeClaim } from './close.ts';
+import type { CloseOptions } from './close.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -89,7 +91,7 @@ export class SharedTracker {
     const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
     assertPrivatePathSafe(receipt);
     await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
-    this.tokens.set(id, token);
+    this.tokens.set(String(item.id), token);
     return receipt;
   }
 
@@ -324,15 +326,9 @@ export class SharedTracker {
     return dryRun ? evaluate() : withSwarmLease(this.engine.pmRoot, this.engine.author, evaluate);
   }
 
-  /** Finish a fenced claim and release its ownership in one durable mutation. */
-  async close(id: string, note: string, token?: string) {
-    assertPrivatePathSafe({ id, note, token, author: this.engine.author });
-    if (!note.trim()) throw new Error('close requires a nonempty --note');
-    return this.owned(id, token, async (item, lease) => {
-      const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, status: statuses.close_status, message: note, unset: ['assignee', 'swarm_handoff'], field: [`swarm_token=${this.nextToken(item)}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
-      this.tokens.delete(id); return { id, closed: true };
-    });
+  /** Finish and release one claim through the SDK's resumable workspace transaction. */
+  async close(id: string, note: string, token?: string, options: CloseOptions = {}) {
+    return completeClaim(this.engine, id, note, token, this.tokens, options);
   }
 
 }
