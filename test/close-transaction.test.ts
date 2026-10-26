@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { getHistoryPath, WorkspaceTransactionInterruptedError } from '@unbrained/pm-cli/sdk';
 import type { WorkspaceTransactionTransitionContext } from '@unbrained/pm-cli/sdk';
@@ -8,6 +9,7 @@ import { SharedTracker } from '../src/shared-tracker.ts';
 import { SettingsRefusal } from '../src/settings.ts';
 import { StaleFenceError } from '../src/lease.ts';
 import { durableSnapshot } from './privacy-snapshot.ts';
+import { inspectItem } from '../src/inspection.ts';
 
 /** Read actual native history operations without interpreting coordinator journal internals. */
 function operations(pmRoot: string, id: string): string[] {
@@ -22,6 +24,15 @@ test('canonical item identity resumes the same close when the caller changes fro
     if (context.transition === 'step_recorded') throw new WorkspaceTransactionInterruptedError('Interrupted alias request');
   } }), WorkspaceTransactionInterruptedError);
   assert.deepEqual(f.run('swarm', 'close', id, '--token', receipt.token, '--note', 'Public completion'), { id, closed: true });
+});
+
+test('a service-capable host retains bound-client reads and native journaled close', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); const receipt = await f.shared.start(id);
+  const manifestPath = join(f.pmRoot, 'extensions/pm-swarm/manifest.json');
+  const metadata = JSON.parse(readFileSync(manifestPath, 'utf8')) as { capabilities: string[] };
+  metadata.capabilities.push('services'); writeFileSync(manifestPath, JSON.stringify(metadata));
+  assert.equal(await inspectItem(f.pmRoot, f.repo, id), null);
+  assert.deepEqual(await f.shared.close(id, 'Public completion', receipt.token), { id, closed: true });
 });
 
 test('SDK close journal resumes every forward boundary without duplicate item mutations', async t => {
@@ -91,6 +102,10 @@ test('close transaction admission refuses stale foreign and private state before
   assert.equal(durableSnapshot(f.pmRoot), before);
   const resource = (await f.client.create({ type: 'Task', title: 'Foreign resource', tags: 'swarm-resource' })).item.id;
   await assert.rejects(f.shared.close(resource, 'Public completion'), /Resource items/);
+  const resourceState = durableSnapshot(f.pmRoot);
+  await assert.rejects(f.shared.heartbeat(resource), /Resource items/);
+  await assert.rejects(f.shared.handoff(resource, 'receiver', 'Public handoff'), /Resource items/);
+  assert.equal(durableSnapshot(f.pmRoot), resourceState);
 });
 
 test('close preserves an independently reopened peer success on committed replay', async t => {
@@ -125,7 +140,7 @@ test('committed-close receipts refuse changed peer marker generation and ownersh
     const id = await f.item(); const receipt = await f.shared.start(id); let peerHistory = '';
     await assert.rejects(f.shared.close(id, 'Public completion', receipt.token, { onTransition: context => {
       if (context.transition !== 'committed') return;
-      const flag = field === 'assignee' ? ['--assignee', 'peer'] : ['--field', `${field}=peer`];
+      const flag = field === 'assignee' ? ['--assignee', 'peer'] : ['--field', `${field}=${field === 'swarm_token' ? '3' : 'peer'}`];
       const peer = f.cli('update', id, ...flag, '--json'); assert.equal(peer.status, 0, peer.stderr.replaceAll(f.repo, '[fixture]'));
       peerHistory = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
     } }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');

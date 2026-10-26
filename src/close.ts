@@ -1,6 +1,6 @@
 import { commitItemMutations, deriveMutationTransactionId, runWithActiveExtensions } from '@unbrained/pm-cli/sdk';
 import type { CommitItemMutationsOptions } from '@unbrained/pm-cli/sdk';
-import { readItem } from './inspection.ts';
+import { inspectItem, readItem } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
 import { commitItemMutation, assertPrivatePathSafe, SettingsRefusal } from './settings.ts';
 import { RESOURCE_TAG } from './resources.ts';
@@ -9,22 +9,31 @@ import type { Swarm } from './swarm.ts';
 /** Trusted diagnostics observe the SDK's durable boundaries without replacing its mutation steps. */
 export interface CloseOptions { onTransition?: CommitItemMutationsOptions['onTransition'] }
 
+/** Decide identical local-preflight and fresh native snapshots without recording SDK usage or a journal. */
+function closeIntent(engine: Swarm, note: string, token: string | undefined, tokens: ReadonlyMap<string, string>, item: Record<string, unknown>) {
+  assertPrivatePathSafe(item, 'document');
+  const canonicalId = String(item.id);
+  if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; close cannot change reservations.');
+  if (item.swarm_token !== undefined && !/^\d+$/.test(String(item.swarm_token))) throw new Error(`Item ${canonicalId} has a malformed swarm_token; repair it before changing ownership`);
+  const selectedToken = token ?? tokens.get(canonicalId);
+  if (selectedToken !== undefined && !/^\d+$/.test(selectedToken)) throw new StaleFenceError(canonicalId);
+  const from = selectedToken ?? '0';
+  const next = (BigInt(from) + 1n).toString();
+  const transactionId = deriveMutationTransactionId(JSON.stringify({ protocol: 'swarm-close/v1', id: canonicalId, author: engine.author, token: from, note }));
+  const resumed = item.swarm_close_transaction === transactionId && item.swarm_token === next && item.assignee === undefined && item.swarm_handoff === undefined;
+  if (!resumed && (item.assignee !== engine.author || (item.swarm_token !== undefined && selectedToken !== item.swarm_token))) throw new StaleFenceError(canonicalId);
+  return { canonicalId, next, transactionId };
+}
+
 /** Finish a fenced claim through the SDK journal, including recovery after ownership was cleared. */
 export async function completeClaim(engine: Swarm, id: string, note: string, token: string | undefined, tokens: Map<string, string>, options: CloseOptions): Promise<{ id: string; closed: true }> {
   assertPrivatePathSafe({ id, note, token, author: engine.author });
   if (!note.trim()) throw new Error('close requires a nonempty --note');
-  if (token !== undefined && !/^\d+$/.test(token)) throw new StaleFenceError(id);
   return withSwarmLease(engine.pmRoot, engine.author, async lease => {
+    const local = await inspectItem(engine.pmRoot, engine.repo, id);
+    if (local !== null) closeIntent(engine, note, token, tokens, { ...local.item, body: local.body });
     const item = (await readItem(engine.client, id)).item;
-    assertPrivatePathSafe(item, 'document');
-    const canonicalId = String(item.id);
-    const selectedToken = token ?? tokens.get(canonicalId);
-    const from = selectedToken ?? '0';
-    const next = (BigInt(from) + 1n).toString();
-    const transactionId = deriveMutationTransactionId(JSON.stringify({ protocol: 'swarm-close/v1', id: canonicalId, author: engine.author, token: from, note }));
-    if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; close cannot change reservations.');
-    const resumed = item.swarm_close_transaction === transactionId && item.swarm_token === next && item.assignee === undefined && item.swarm_handoff === undefined;
-    if (!resumed && (item.assignee !== engine.author || (item.swarm_token !== undefined && selectedToken !== item.swarm_token))) throw new StaleFenceError(id);
+    const { canonicalId, next, transactionId } = closeIntent(engine, note, token, tokens, item);
     const mutations: CommitItemMutationsOptions['mutations'] = [
       { op: 'update', id: canonicalId, match: { key: 'assignee', value: engine.author }, options: { field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } },
       { op: 'close', id: canonicalId, reason: note },

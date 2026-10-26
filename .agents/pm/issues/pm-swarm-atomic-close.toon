@@ -7,17 +7,18 @@ status: in_progress
 priority: 2
 tags[1]: concurrency
 created_at: "2026-10-26T21:32:19.770Z"
-updated_at: "2026-10-26T23:36:30.510Z"
+updated_at: "2026-10-26T23:51:56.646Z"
 assignee: codex-agent
 claim_principal: codex-agent
 author: codex-agent
 acceptance_criteria: One SDK workspace transaction containing update then close; deterministic transaction identity; non-Git interruption at every forward boundary and fresh-process resume without duplicate history or lost fields; ordinary failure compensation and retry; no swarm_partial_commit path for close.
 parent: pm-swarm-y972
-comments[4]{created_at,author,text}:
+comments[5]{created_at,author,text}:
   "2026-10-26T22:01:31.001Z",codex-agent,"Native compound-close regression and partial-prefix peer-preservation test pass. Separate behavioral reversions of the committed-successor observer and partial-commit refusal each fail their regression once, exit 1; restored positives pass. This verifies guarded per-stage behavior and truthful receipts, not a single atomic close. The SDK gap remains open."
   "2026-10-26T23:21:05.145Z",codex-agent,"Implemented public commitItemMutations on commitWorkspaceTransaction, with deriveMutationTransactionId and an owned recovery receipt. Initial focused recovery suite passed 11/11: seven exact SDK forward boundaries resume in fresh CLI processes with exactly update then close and no duplicate history; ordinary failure compensates the metadata step, then retry completes once. This corrects the prior SDK-gap claim; no lifecycle or journal engine was reimplemented. Expanded peer and writer-inventory tests are running."
   "2026-10-26T23:25:52.970Z",codex-agent,"Behavioral revert proofs: node --test --test-concurrency=1 --test-name-pattern=\"SDK close journal resumes\" test/close-transaction.test.ts fails when only the prior unjournaled SharedTracker.close function is restored (exit 1, one failure). Disabling only the persisted-receipt resume condition fails eight results; removing only journaled-mode admission fails seven results by returning partial-commit errors instead of SDK interruptions. All three probes restored source byte-for-byte: sixteen expected failing results total. The restored 25-test suite passes, covering seven forward crashes, four compensation crashes, fresh-process resume, seven private-peer transitions and committed replay ownership checks."
   "2026-10-26T23:36:30.486Z",codex-agent,"Final recovery suite passes 26/26, including short-ID admission resumed by canonical ID. Transaction identity and cached-token lookup use the SDK-resolved canonical id; owned token cleanup remains inside the lease. Replacing only canonical resolution with the raw caller id makes the canonical-item regression fail once (exit 1), then exact source restoration passes. Four probes now produce 17 expected failures. Fencing remains 11/11; journaled close never reports swarm_partial_commit. Full isolated npm and Bun CI is next."
+  "2026-10-26T23:51:56.539Z",codex-agent,"Current-head CI exposed two retained refusal regressions: the new path read SDK usage before rejecting stale state, and malformed stored fences lost their repair diagnostic. Restored pure inspectItem admission before the effectful host read, then re-evaluate the fresh snapshot before the transaction. Stored malformed fences retain the established repair message. Added service-capable bound-client fallback coverage and explicit resource isolation checks. Restored targeted close/refusal/review suite passes 33/33, including 27 close tests. Removing only pure preflight fails the prepared-state regression once; removing only malformed-generation validation fails the repair-diagnostic regression once. Both probes exit 1 and restore exact source. Six close-related probes total 19 expected failures."
 files[6]{path,scope}:
   src/close.ts,project
   src/commands.ts,project

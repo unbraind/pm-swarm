@@ -286,8 +286,11 @@ steps on `commitWorkspaceTransaction`. `deriveMutationTransactionId` binds the
 plan to the SDK-resolved canonical item, actor, original token and note. The update persists the next fence
 and `swarm_close_transaction`, while clearing ownership and handoff state. That
 receipt permits recovery with the original token after the update has committed.
-An unrelated or stale request cannot adopt the receipt. The SDK owns journal
-inspection, step idempotency, native mutations and reverse-order compensation.
+An unrelated or stale request cannot adopt the receipt. Pure local SDK inspection refuses invalid state before usage-producing host
+reads; a fresh host snapshot is re-evaluated before committing. Malformed stored
+generations retain their repair diagnostic. Service-backed reads stay with the
+bound client. The SDK owns journal inspection, step idempotency, native mutations
+and reverse-order compensation.
 The complete document guard remains active for forward and compensation writes;
 a peer edit is preserved rather than overwritten by rollback. A replay checks
 current completion before returning a receipt.
