@@ -81,6 +81,14 @@ Ordinary prose, remote URLs and non-home absolute paths remain allowed.
 Relative paths, framework route folders and HTTP(S) URLs remain supported.
 The guard searches substrings without whitespace tokenization or URL exemptions.
 Relative framework routes keep their original punctuation.
+Path runs retain punctuation until POSIX and Windows normalization resolves dot
+segments; only whitespace, NUL and surrounding presentation delimiters end them.
+Every item writer admits its complete resulting document under the native SDK
+lock and compares the current document with its checked snapshot. Refresh and
+retry `swarm_document_changed`. Host commands reuse their injected client, and
+package copies share request scope. A second SDK module identity produces
+`swarm_sdk_mismatch`: share the host SDK installation and restart after removing
+the nested dependency. See [privacy admission](docs/privacy-admission.md).
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use
 `pm swarm heartbeat` separately when a long queue needs background liveness.

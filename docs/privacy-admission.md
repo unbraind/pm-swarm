@@ -19,8 +19,12 @@ is retained from the original fixed corpus; numeric approximations remain allowe
 
 `scanMutationSecrets` from SDK 2026.10.23 remains the first layer for
 `absolute_home_path`. The second layer canonicalizes the **entire string** and
-searches private-home substrings. There is no whitespace tokenization, wrapper
-parser, drive-letter prose classifier or blanket URL acceptance.
+searches private-home substrings. It starts a path candidate at every separator
+and retains the maximal run until whitespace, NUL or a paired presentation
+delimiter already surrounding that run. Punctuation such as semicolons, commas,
+colons, equals signs, query markers and fragments remains segment data until
+normalization. Paired brackets inside a route remain inside its path. There is
+no drive-letter prose classifier or blanket URL acceptance.
 
 At most sixteen fixed-point rounds fold Unicode compatibility/confusables and
 strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes.
@@ -61,6 +65,9 @@ configured home: a home named `demo` does not classify sibling names `demo2`,
 `demo-old` or `demo.txt` as private. Entire strings are decoded before path
 classification; Markdown/JSON/shell embeddings, queries and fragments retain
 substring detection. Public absolute paths outside protected roots remain allowed.
+HOME shortcuts also include the percent-delimited HOME spelling. Classification
+tests normalized candidates at home-directory segment boundaries; it never
+shortens a canceled punctuation-bearing segment before resolving parent traversal.
 
 ## Rejected and benign corpora
 
@@ -241,6 +248,28 @@ a peer changed a field after preflight. Its refusal is rethrown as the same type
 No offending value is echoed. The request-local scope prevents this package from
 intercepting unrelated core operations used for explicit repairs.
 
+The scope lives in a process-wide `Symbol.for` registry with request-local
+`AsyncLocalStorage`, shared by source, distribution and installed package copies.
+SDK constructor identity is registered there too. Commands and embedded engines
+check their supplied client against that public SDK identity. A physically
+different SDK copy, even with the same version, produces `swarm_sdk_mismatch`
+before a package write or inside the native pre-persistence hook. The generic
+sink enforces that identity for runtime publication and coordination too. Its remedy is
+to share the host SDK installation, remove the nested dependency and restart.
+Refusal details cross package boundaries as data and are reconstructed as the
+caller's typed error; cross-module `instanceof` is not the transport.
+
+Inside that same SDK commit, the hook compares the complete current document to
+the checked snapshot before allowing persistence. SDK read projections and empty
+derived collections are excluded from canonical comparison; populated persisted
+fields and the body remain included. A changed document gives `swarm_document_changed`; refresh
+ownership and evidence before retrying. Git start refreshes after its own claim.
+CLI progress reuses the exact injected client. Legacy boolean constructor hints
+use normal native activation instead of assuming an active host. Progress may
+retry a benign append conflict up to eight attempts, re-reading every role,
+revision and prerequisite; privacy, authority and stale-evidence errors never
+retry. Persistent contention returns the typed conflict without a false receipt.
+
 Settings admission checks the complete fresh raw source document, substituting
 only its owned proposed subtree, as well as the SDK-normalized returned patch.
 This protects preserved unknown top-level and nested fields that normalized SDK
@@ -299,6 +328,25 @@ trailing separator, and dot/dot-dot) produce **18 actual handoff refusals** with
 unchanged trackers, plus **three successful public-sibling handoffs**. The existing
 fixed corpora and all earlier seeded properties remain.
 
+Seed **`0xc0ffee71`** adds **twenty randomized configured homes**, **5,000 private
+punctuation aliases + 5,000 benign siblings**. Independent POSIX normalization
+supplies the oracle before percent/JSON/HTML/Unicode/mixed-separator encoding and
+quote/bracket presentation. All nineteen registry variants produce **95,000
+refusals + 95,000 admissions**; both renderers produce **20,000 checked documents**.
+There are zero escapes or false refusals. Native CLI handoff repeats eighteen
+punctuation/encoding/wrapper cases with byte-identical trackers and no receipt;
+one public sibling handoff succeeds.
+
+The installed-layout matrix uses **one non-Git tracker**, real package files, a
+shared SDK layout and a physically copied same-version SDK layout. A separate
+core process edits a private or benign title after corpus return, snapshot return,
+admission, scope entry, immediately before commit, and native writer entry.
+**Twelve private + ten stale benign interleavings** preserve peer history and
+produce no package persistence or partial receipt. A clean shared-copy write
+succeeds; a distinct SDK is refused at native command startup. Three admission
+interruptions converge once on rerun. Additional real peer-appends prove both a
+successful re-evaluated witness and bounded contention without losing peer data.
+
 ## Seeded and real-path oracles
 
 The round-2 generator keeps seed **`0x51a7c0de`**, **5,000** cases and one through
@@ -338,6 +386,8 @@ deleted to hide this gap. Follow-up: [pm-swarm-write-free-reads](../.agents/pm/i
 
 ```sh
 node --test --test-concurrency=1 test/privacy-documents.test.ts test/privacy-normalization.test.ts test/privacy-sinks.test.ts test/privacy-home.test.ts test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
+node --test --test-concurrency=1 test/privacy-punctuation.test.ts
+npm run build && node --test --test-concurrency=1 test/privacy-sdk-instance.test.ts
 node --test test/privacy-fleet.acceptance.ts test/sdk-read-effects.acceptance.ts
 npm run typecheck
 npm run lint

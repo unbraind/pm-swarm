@@ -1,13 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { getSettingsPath, readFileIfExists } from '@unbrained/pm-cli/sdk';
+import { getSettingsPath, readFileIfExists, PmClient } from '@unbrained/pm-cli/sdk';
 import type { BeforeMutationHook, ExtensionCommandSdk } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
 import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */
@@ -37,24 +37,64 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
     assertPrivatePathSafe(key, `${field}.${label}`); assertPrivatePathSafe(entry, `${field}.${label}`);
   }
 }
-/** A request-local flag limits whole-document hooks to this package's own mutations, allowing explicit core repairs. */
-const ITEM_ADMISSION = new AsyncLocalStorage<{ refusal?: SettingsRefusal }>();
+/** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
+interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
+/** One immutable expected document travels through the native host commit. */
+interface ItemAdmissionScope { expected: string; refusal?: AdmissionRefusal }
+/** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
+export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
+/** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
+type ItemMutationObserver = (boundary: typeof ITEM_MUTATION_BOUNDARIES[number]) => void | Promise<void>;
+/** A process-wide registry shares request scope between source, distribution and installed package copies. */
+interface AdmissionRuntime { scopes: AsyncLocalStorage<ItemAdmissionScope>; observers: AsyncLocalStorage<ItemMutationObserver>; identities: Set<unknown> }
+/** Public module identity, rather than a version string, distinguishes physically separate SDK runtimes. */
+const ADMISSION_KEY = Symbol.for('pm-swarm.item-admission/v1');
+const ADMISSION = (Reflect.get(globalThis, ADMISSION_KEY) as AdmissionRuntime | undefined) ?? { scopes: new AsyncLocalStorage<ItemAdmissionScope>(), observers: new AsyncLocalStorage<ItemMutationObserver>(), identities: new Set<unknown>() };
+Object.defineProperty(globalThis, ADMISSION_KEY, { value: ADMISSION });
+ADMISSION.identities.add(PmClient);
+/** Instrument one operation without a process-global callback or substitution of SDK reads/writes. */
+export function withItemMutationObserver<Result>(observer: ItemMutationObserver, operation: () => Result): Result {
+  return ADMISSION.observers.run(observer, operation);
+}
+/** Refuse split SDK runtimes before reads can select a writer or acquire a package lease. */
+export function assertSdkInstance(client?: unknown): void {
+  if (ADMISSION.identities.size !== 1 || (client !== undefined && !(client instanceof PmClient))) throw new SettingsRefusal('swarm_sdk_mismatch', 'Use the host SDK client and one shared pm SDK installation; remove the nested SDK dependency, reinstall the extension and restart the process.');
+}
+/** Remove only SDK read projections, then compare every persisted field and the complete body canonically. */
+function documentFingerprint(item: Record<string, unknown>): string {
+  const collections = ['comments', 'notes', 'learnings', 'files', 'tests', 'docs', 'reminders', 'events'];
+  const metadata = Object.fromEntries(Object.entries(item).filter(([key, value]) => !['body', 'notes_count', 'tests_count', 'collection_counts'].includes(key)
+    && !(collections.includes(key) && Array.isArray(value) && value.length === 0)));
+  return JSON.stringify({ metadata, body: item.body ?? '' }, (_key, value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
+}
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
 export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
-  const scope: { refusal?: SettingsRefusal } = {};
-  return commitMutation(payload, admitted => ITEM_ADMISSION.run(scope, async () => {
-    try { return await commit(admitted); } catch (error) { throw scope.refusal ?? error; }
-  }));
+  assertSdkInstance();
+  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item) };
+  const checkpoint = ADMISSION.observers.getStore();
+  return commitMutation(payload, async admitted => {
+    await checkpoint?.('admitted');
+    return ADMISSION.scopes.run(scope, async () => {
+      await checkpoint?.('scoped');
+      await checkpoint?.('before_commit');
+      try { return await commit(admitted); } catch (error) { if (scope.refusal !== undefined) throw new SettingsRefusal(scope.refusal.code, scope.refusal.remedy, scope.refusal.field); throw error; }
+    });
+  });
 }
 /** Admit the SDK's complete proposed document under its native writer lock before item/history persistence. */
 export const guardItemDocument: BeforeMutationHook = context => {
-  const scope = ITEM_ADMISSION.getStore();
-  if (scope === undefined || context.after === null) return { allow: true };
-  try { assertPrivatePathSafe(context.after, 'document'); return { allow: true }; }
+  const scope = ADMISSION.scopes.getStore();
+  if (scope === undefined) return { allow: true };
+  try {
+    assertSdkInstance();
+    assertPrivatePathSafe(context.after, 'document');
+    if (context.before === null || documentFingerprint({ ...context.before.metadata, body: context.before.body }) !== scope.expected) throw new SettingsRefusal('swarm_document_changed', 'The item changed after admission; refresh its complete document, re-evaluate ownership and retry with the current receipt.', 'document');
+    return { allow: true };
+  }
   catch (error) {
-    const refusal = error as SettingsRefusal; scope.refusal = refusal;
+    const refusal = error as SettingsRefusal; scope.refusal = { code: refusal.code, remedy: refusal.remedy, field: refusal.field };
     return { allow: false, code: refusal.code, message: refusal.message, remediation: refusal.remedy };
   }
 };
@@ -64,6 +104,7 @@ export const guardItemDocument: BeforeMutationHook = context => {
  */
 export function commitMutation<Value, Result>(payload: Value, commit: (admitted: Value) => Result): Result {
   assertPrivatePathSafe(payload);
+  assertSdkInstance();
   return commit(payload);
 }
 /** Read the extension subtree through public SDK file APIs, never a second settings writer. */
@@ -121,8 +162,9 @@ export interface SettingsReceipt {
   skipped: { count: number; reason: string };
 }
 /** Patch the freshly locked subtree, leaving every foreign setting intact and releasing last. */
-export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'mutateWorkspaceSettings'>, pmRoot: string, overrides: Partial<SwarmSettings> = {}, options: SettingsMutationOptions = {}): Promise<SettingsReceipt> {
+export async function updateSettings(sdk: Pick<ExtensionCommandSdk, 'client' | 'mutateWorkspaceSettings'>, pmRoot: string, overrides: Partial<SwarmSettings> = {}, options: SettingsMutationOptions = {}): Promise<SettingsReceipt> {
   assertPrivatePathSafe({ overrides, operationId: options.operationId });
+  assertSdkInstance(sdk.client);
   validatePersistedRoot(await settings(pmRoot, overrides));
   let config: SwarmSettings | undefined; let foreign = 0;
   await options.checkpoint?.('before_transaction');

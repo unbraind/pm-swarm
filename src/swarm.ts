@@ -14,7 +14,7 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, settings } from './settings.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings } from './settings.ts';
 import { inspectItem } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
@@ -34,6 +34,7 @@ export class Swarm {
   readonly author: string;
   /** Retain the bound invocation without process-global directory changes. */
   constructor(repo: string, pmRoot: string, client: PmClient, author: string) {
+    assertSdkInstance(client);
     this.repo = repo; this.pmRoot = pmRoot; this.client = client; this.author = resolveClaimPrincipal(author);
   }
 
@@ -129,15 +130,16 @@ export class Swarm {
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
     await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.claim(admitted.id, admitted.options)));
+    const claimed = (await this.client.get(id, { depth: 'full' })).item;
     let created = false;
     try {
       git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]);
-      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item }, admitted => this.client.update(admitted.id, admitted.options)));
+      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed }, admitted => this.client.update(admitted.id, admitted.options)));
     } catch (error) {
       if (created) { git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]); git(this.repo, ['worktree', 'remove', path]); }
       if (branchExists(this.repo, branch)) git(this.repo, ['branch', '-D', branch]);
-      if (view.claim_state?.claimed === false) await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.release(admitted.id, admitted.options)));
+      if (view.claim_state?.claimed === false) await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item: claimed }, admitted => this.client.release(admitted.id, admitted.options)));
       throw error;
     }
     return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };

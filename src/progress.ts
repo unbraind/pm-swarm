@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
-import { commitItemMutation, assertPrivatePathSafe, settings } from './settings.ts';
+import { commitItemMutation, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
 export const PROGRESS_PREFIX = 'swarm-progress/v2 ';
@@ -101,12 +101,13 @@ export class PlanProgress {
   readonly pmRoot: string;
   /** Explicit SDK author option, never an agent or orchestrator flag. */
   private readonly sdkAuthor: string | undefined;
-  /** Bind SDK author options once; active hosts reuse native schema/provider context. */
-  constructor(options: PmClientOptions = {}, activeHost = false) {
+  /** Reuse the exact host client; legacy boolean hints use normal native activation, never an assumed host scope. */
+  constructor(options: PmClientOptions = {}, activeHost: boolean | PmClient = false) {
     this.pmRoot = resolvePmRoot(options.cwd ?? process.cwd(), options.pmRoot);
     this.sdkAuthor = options.author;
     const bound = { ...options, pmRoot: this.pmRoot };
-    this.client = activeHost ? PmClient.forActiveExtensionHost(bound) : new PmClient(bound);
+    this.client = typeof activeHost !== 'boolean' ? activeHost : new PmClient(bound);
+    assertSdkInstance(this.client);
   }
 
   /** Resolve the actor exactly as the SDK records mutation history and load tracker authority. */
@@ -167,6 +168,14 @@ export class PlanProgress {
    * preserve one another's comments; no package-local coordination lock is used.
    */
   async witness(id: string, options: ProgressDeclaration): Promise<{ id: string; revision: string; dry_run: boolean; actor: string; witness: ProgressWitness }> {
+    for (let attempt = 0; ; attempt++) {
+      try { return await this.witnessAttempt(id, options); }
+      catch (error) { if (!(error instanceof SettingsRefusal) || error.code !== 'swarm_document_changed' || attempt >= 7) throw error; }
+    }
+  }
+
+  /** Refresh every role/revision prerequisite after a benign append race; stale evidence and privacy never retry. */
+  private async witnessAttempt(id: string, options: ProgressDeclaration): Promise<{ id: string; revision: string; dry_run: boolean; actor: string; witness: ProgressWitness }> {
     assertPrivatePathSafe({ id, options, author: this.sdkAuthor });
     const witness = validateProgressWitness(options);
     const { actor, orchestrator } = await this.authority(options);

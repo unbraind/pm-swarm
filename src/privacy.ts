@@ -77,14 +77,42 @@ function containsHome(path: string, home: string): boolean {
   }
   return false;
 }
-/** Absolute-looking substrings preserve route parentheses/brackets inside a path and include every URI component. */
-const ABSOLUTE_CANDIDATES = /(?:(?<![a-z0-9])[a-z]:)?\/+(?:[?.]\/)?[^\s"'<>`,;|=?&#]*/gi;
+/** Paired presentation delimiters; punctuation within a POSIX segment is always path data. */
+const DELIMITERS: Record<string, string> = { '(': ')', '[': ']', '{': '}', '<': '>' };
+/** End a maximal run only at whitespace/NUL or a delimiter already surrounding its beginning. */
+function candidateEnd(text: string, start: number, quote: string | undefined, surrounding: readonly string[]): number {
+  const inner: string[] = [];
+  for (let index = start; index < text.length; index++) {
+    const character = text[index];
+    if (/[\s\0]/u.test(character) || character === quote || (quote === undefined && inner.length === 0 && surrounding.includes(character))) return index;
+    if (DELIMITERS[character] !== undefined) inner.push(DELIMITERS[character]);
+    else if (character === inner.at(-1)) inner.pop();
+  }
+  return text.length;
+}
+/** Begin at every separator, retaining punctuation until both native grammars have normalized the whole run. */
+function pathCandidates(text: string): string[] {
+  const candidates: string[] = []; const surrounding: string[] = []; let quote: string | undefined;
+  for (let index = 0; index < text.length; index++) {
+    const character = text[index];
+    if (character === '/') {
+      const start = index >= 2 && /[a-z]:/i.test(text.slice(index - 2, index)) ? index - 2 : index;
+      candidates.push(text.slice(start, candidateEnd(text, index, quote, surrounding)));
+    }
+    if (['"', "'", '`'].includes(character)) quote = quote === character ? undefined : quote ?? character;
+    else if (quote === undefined) {
+      if (DELIMITERS[character] !== undefined) surrounding.push(DELIMITERS[character]);
+      else if (character === surrounding.at(-1)) surrounding.pop();
+    }
+  }
+  return candidates;
+}
 /** Process-local home identity is stable for this module's lifetime. */
 const PROCESS_HOMES = processHomes();
 /** User-home spellings are private at every substring position, including URI and relative text. */
-const HOME_ROOTS = /\/(?:home|users)\/[^/\s"'<>()[\]{} ,;:!?]+|\/(?:root)(?![\p{L}\p{N}_.-])/iu;
+const HOME_ROOTS = /\/(?:home|users)\/[^/\s\0]+|\/(?:root)(?![\p{L}\p{N}_.-])/iu;
 /** Named home shortcuts require a separator or an identifier boundary; money and approximations are prose. */
-const HOME_SHORTCUTS = new RegExp(`(?:~[\\p{L}\\p{N}_.-]*/|(?:\\$home|\\$env:userprofile|%userprofile%)(?=$|[/\\s"'\x60<>()[\\]{},;:!?]))`, 'iu');
+const HOME_SHORTCUTS = new RegExp(`(?:~[\\p{L}\\p{N}_.-]*/|(?:\\$home|\\$env:userprofile|%(?:home|userprofile)%)(?=$|[/\\s"'\x60<>()[\\]{},;:!?]))`, 'iu');
 /** Keep the SDK first, then inspect the entire canonical text for private user-home roots. */
 export function containsPrivatePath(value: string): boolean {
   if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) return true;
@@ -93,7 +121,7 @@ export function containsPrivatePath(value: string): boolean {
   if (decoded.trim() === '~' || HOME_SHORTCUTS.test(decoded) || PROCESS_HOMES.includes(null)) return true;
   // The uninspectable-root check above narrows every retained root to a string.
   const homes = PROCESS_HOMES as readonly string[];
-  const candidates = [...decoded.matchAll(ABSOLUTE_CANDIDATES)].map(match => match[0]);
+  const candidates = pathCandidates(decoded);
   // A configured root may contain spaces; also inspect intact quoted/path-sized text in that case.
   if (homes.some(home => home.includes(' '))) candidates.push(decoded);
   return candidates.some(candidate => pathForms(candidate).some(path => HOME_ROOTS.test(path)

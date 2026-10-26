@@ -12,6 +12,10 @@ export function snapshot(root: string): string {
   });
   return JSON.stringify(entries);
 }
+/** Exclude only SDK-owned ignored cache/usage files while retaining every package runtime/lease record. */
+export function durableSnapshot(root: string): string {
+  return JSON.stringify((JSON.parse(snapshot(root)) as [string, unknown][]).filter(([name]) => !name.startsWith('runtime/') || name.startsWith('runtime/swarm')));
+}
 /** Refusal must have no returned receipt, stream bytes or partial tracker write. */
 export async function unchanged(root: string, action: () => Promise<unknown>, label: string, accepts: (error: unknown) => boolean = () => true): Promise<void> {
   const before = snapshot(root); let writes = 0; const original = process.stdout.write;

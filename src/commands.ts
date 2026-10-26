@@ -7,7 +7,7 @@ import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
 import { repositoryRoot } from './workspace.ts';
 import { SharedTracker, SHARED_LAND_REFUSAL } from './shared-tracker.ts';
-import { guardItemDocument, commitMutation, assertPrivatePathSafe, SettingsRefusal, updateSettings } from './settings.ts';
+import { guardItemDocument, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, updateSettings } from './settings.ts';
 import { StaleFenceError } from './lease.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
@@ -56,6 +56,7 @@ async function dispatchResource(resources: ResourceReservations, action: Resourc
 /** Dispatch native host context to the shared SDK engine; leave rendering to pm. */
 async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
   if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
+  assertSdkInstance(ctx.sdk.client);
   const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
   const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress'].includes(command) ? undefined : repositoryRoot(workspace);
   const client = ctx.sdk.client;
@@ -65,7 +66,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
   const id = ctx.args[0];
   switch (command) {
     case 'progress': {
-      const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, true);
+      const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, ctx.sdk.client);
       const options = { agent: textOption(ctx.options.agent), orchestrator: textOption(ctx.options.orchestrator), revision: textOption(ctx.options.revision), offset: ctx.options.offset === undefined ? undefined : Number(textOption(ctx.options.offset)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)) };
       const stage = textOption(ctx.options.stage);
       if (stage === undefined) {
@@ -163,7 +164,7 @@ export const swarmCommandDefinitions = {
 export const swarmCommandNames = Object.keys(swarmCommandDefinitions);
 /** Return a typed refusal instead of throwing into the host's native-renderer fallback. */
 function safeRendererResult(result: unknown): unknown {
-  try { return commitMutation(result, admitted => admitted); }
+  try { assertPrivatePathSafe(result); return result; }
   catch { return { code: 'swarm_private_path', required: 'Replace private user-home paths with project-relative references.' }; }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */

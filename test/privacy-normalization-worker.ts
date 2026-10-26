@@ -1,9 +1,8 @@
 import assert from 'node:assert/strict';
 import { containsPrivatePath } from '../src/privacy.ts';
+import { seededRandom } from './privacy-fuzz.ts';
 
-const home = process.env.HOME!; const count = Number(process.argv[2]); let state = Number(process.argv[3]);
-/** Reproducible xorshift decisions do not depend on process timing or host paths. */
-function random(): number { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return state >>> 0; }
+const home = process.env.HOME!; const count = Number(process.argv[2]); const random = seededRandom(Number(process.argv[3]));
 /** Insert valid path identities between components, preserving each directory name. */
 function identities(path: string): string {
   return path.split('/').map(segment => `${segment}${['/pad/..', '/.', '//', ''][random() % 4]}`).join('/');

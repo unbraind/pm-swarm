@@ -9,12 +9,7 @@ import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk, swarmHost } from './settings-helpers.ts';
 import { ownedPlan } from './privacy-mutations.ts';
-import { snapshot } from './privacy-snapshot.ts';
-
-/** Remove only SDK-owned ignored runtime cache/usage receipts from durable comparisons, retaining package runtime. */
-function durableSnapshot(root: string): string {
-  return JSON.stringify((JSON.parse(snapshot(root)) as [string, unknown][]).filter(([name]) => !name.startsWith('runtime/') || name.startsWith('runtime/swarm')));
-}
+import { durableSnapshot } from './privacy-snapshot.ts';
 
 /** All core field/link families are written through real SDK operations when preparing foreign test data. */
 const FIELDS = ['title', 'description', 'body', 'acceptance_criteria', 'comments', 'notes', 'files', 'docs', 'tests', 'swarm_preferred_agent'] as const;

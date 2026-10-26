@@ -1,5 +1,5 @@
 /** Deterministic xorshift32 generator: seeds are part of the public regression evidence. */
-function random(seed: number): () => number {
+export function seededRandom(seed: number): () => number {
   let state = seed;
   return () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return state >>> 0; };
 }
@@ -21,7 +21,7 @@ const transforms = [
 ];
 /** Generate private home paths with one through four composable transformations. */
 export function homeFuzz(seed: number, count: number): string[] {
-  const next = random(seed);
+  const next = seededRandom(seed);
   return Array.from({ length: count }, (_, index) => {
     const base = [['', 'home', 'private', `case-${index}`].join('/'), ['D:', 'Users', 'private', `case-${index}`].join('\\'), ['', '', 'server', 'Users', 'private', `case-${index}`].join('/'), `~/case-${index}`, `$HOME/case-${index}`, `%USERPROFILE%/case-${index}`][next() % 6];
     let value = base;
@@ -32,7 +32,7 @@ export function homeFuzz(seed: number, count: number): string[] {
 }
 /** Generate relative paths and web URLs independently, including escape and dot-segment variants. */
 export function allowedFuzz(seed: number, count: number): string[] {
-  const next = random(seed);
+  const next = seededRandom(seed);
   return Array.from({ length: count }, (_, index) => {
     const segment = `case-${next().toString(36)}-${index}`;
     const paths = [`src/${segment}/../work.ts`, `./${segment}//work.ts`, `../${segment}/work.ts`, `src\\${segment}\\work.ts`, encodeURIComponent(`docs/${segment}/work.md`)];

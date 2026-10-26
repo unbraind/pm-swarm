@@ -7,12 +7,14 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-26T06:04:10.991Z"
+updated_at: "2026-10-26T21:09:48.882Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[80]{created_at,author,text}:
+comments[87]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -93,7 +95,14 @@ comments[80]{created_at,author,text}:
   "2026-10-26T05:46:58.182Z",codex-agent,"Round-6 code gate at 0c589f7 passed 372 tests but CI correctly refused 99.94 percent branch coverage: the defensive backend-error redaction catch was not exercised. Added a real native SDK peer-policy refusal regression that includes a synthetic private value, checks safe typed diagnostics and verifies ownership remains untouched. Thresholds and source inventory remain unchanged; the full matrix will rerun."
   "2026-10-26T05:49:49.962Z",codex-agent,"Coverage follow-up passed through pinned pm: node --test --test-concurrency=1 test/settings-and-output.test.ts test/commands.test.ts = 32/32. Typecheck, lint and duplication (0 percent, zero clones) passed. The new regression loads an independent native SDK policy in a fresh non-Git CLI and verifies a private backend diagnostic becomes a safe typed refusal with ownership untouched. Behavioral revert proof: remove only error-message admission in runCommand, run node --test --test-name-pattern=\"command errors redact\" test/commands.test.ts, exit 1 with one failed result; restored source byte-for-byte. This adds a sixth round-6 proof and brings expected reverted failures to 24 including the peer-grid parent."
   "2026-10-26T06:04:10.178Z",codex-agent,"Round-6 full code gate PASS at c72172455bb57418dc2aafd5715f1fc3ac7d9d54: https://github.com/unbraind/pm-swarm/actions/runs/40276394715 . Node 22 npm run release:check: 373/373 tests, 4/4 packed acceptance, zero skipped/cancelled, 100/100/100/100 across 34 reported source files. Node 26 npm run release:check and bun run release:check each reported the same 373/373, 4/4 and full coverage. Identity, typecheck, lint, zero duplication, docstrings, production audit, tarball, changelog and publication-attestation checks passed; CodeQL passed separately. No thresholds or exclusions changed. Targeted local checks and six behavioral revert proofs are recorded above. Exact-head final CI will also validate the evidence-only commit. SDK settings-registration and write-free cold/provider-read gaps remain documented; no merge, release or item closure."
-files[57]{path,scope}:
+  "2026-10-26T20:29:03.586Z",codex-agent,"Round-7 resumed from clean head 85fd88c. Investigating two shared boundaries: punctuation-preserving whole-run candidate normalization, and host-bound SDK identity plus transactional whole-document admission across installed copies. Retaining the existing fixed, benign, fuzz, decoder and fleet-path oracles. Will add installed-layout peer interleavings, one revert proof per class, targeted checks and full npm/Bun CI evidence without changing SDK pins or thresholds."
+  "2026-10-26T20:48:09.724Z",codex-agent,"Round-7 path boundary reproduced before the fix and now refuses the semicolon-parent alias while allowing the sibling. New whole-run property passed with seed 0xc0ffee71: 20 configured homes, 5000 private plus 5000 benign cases, 95000 registry-variant refusals, 95000 admissions and 20000 renderer checks; zero escapes or false refusals. Native non-Git CLI handoff passed 18 punctuation/wrapper/encoding refusals with byte-identical trackers, no receipt, and one successful benign handoff. Retained six home/prose tests and two normalization tests also passed. The installed-layout SDK matrix is being refined to exercise real native loading, shared package scope, module identity and locked document comparison."
+  "2026-10-26T20:59:51.754Z",codex-agent,"Round-7 revert proof, whole-run class: restore only pathCandidates to the prior punctuation-splitting matcher; node --test --test-concurrency=1 --test-name-pattern=\"native handoff refuses punctuation\" test/privacy-punctuation.test.ts exits 1 with one failed result because handoff succeeds on the alias. Restored the function byte-for-byte; the fixed form refuses before writes. No source or tracker history was rewritten."
+  "2026-10-26T20:59:53.983Z",codex-agent,"Round-7 revert proof, SDK-copy class: replace the shared Symbol.for admission key with a module-local Symbol, rebuild, then node --test --test-concurrency=1 --test-name-pattern=\"installed package copies\" test/privacy-sdk-instance.test.ts exits 1 with one failed result: the installed-copy peer transition is persisted by our stale write instead of refused. Restored source byte-for-byte and rebuilt. This reproduces the source/distribution scope split using real SDK and installed files."
+  "2026-10-26T20:59:56.506Z",codex-agent,"Round-7 additional revert proofs: remove only the locked document-match condition; node --test --test-concurrency=1 --test-name-pattern=\"locked comparison|progress re-evaluates\" test/privacy-sdk-instance.test.ts exits 1 with two failures. Restore only the prior progress constructor client assignment; node --test --test-concurrency=1 --test-name-pattern=\"host binding\" test/privacy-sdk-instance.test.ts exits 1 with one failure. Both source files restored byte-for-byte. Four independent probes total five expected failing results."
+  "2026-10-26T21:09:24.869Z",codex-agent,"Round-7 separate boundary review traced CLI dispatch, embedded engines, settings, all 18 inventoried SDK/backend writer sites, runtime publication and installed-module activation. The hook performs complete proposed-document admission and current-snapshot comparison under the native SDK item lock. Same-SDK package copies share request-local scope; a distinct SDK constructor identity refuses command startup and native writes, including subsequent runtime publication. Progress uses the injected host client and rechecks all prerequisites on bounded benign conflicts. Existing core operations remain available for explicit repairs. Typecheck, lint, 146 documented declarations across 34 authored files and zero duplication passed at unchanged thresholds. No native mutation engine or dependency bump was added."
+  "2026-10-26T21:09:48.849Z",codex-agent,"Round-7 body-snapshot revert proof: removing only the native locked match condition makes node --test --test-concurrency=1 --test-name-pattern=metadata-only test/privacy-sdk-instance.test.ts exit 1 with one failure, because an unobserved nonempty body no longer conflicts. Restored the source byte-for-byte; the focused test passes. Including the four earlier probes, five probes produced six expected failing results. Final pinned-pm checks passed: installed SDK matrix/body/retry suite 7/7, punctuation 2/2, settings/commands 32/32, sink inventory 7/7 and complete document grid 22/22. Retained progress suite 11/11, home/prose 6/6 and normalization 2/2 passed. Fresh read-only fleet oracle: 35 checkouts, 18056 paths, 162504 presentations, zero false refusals or source writes; digest cf1aec59290b1a3faf965de6ae95c429ff1a908c3f236ec777b3730202e64842."
+files[62]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -136,10 +145,15 @@ files[57]{path,scope}:
   test/privacy-normalization-worker.ts,project
   test/privacy-normalization.test.ts,project
   test/privacy-path-samples.ts,project
+  test/privacy-punctuation-worker.ts,project
+  test/privacy-punctuation.test.ts,project
   test/privacy-refusals.test.ts,project
   test/privacy-routes.test.ts,project
+  test/privacy-sdk-instance.test.ts,project
+  test/privacy-sdk-worker.ts,project
   test/privacy-sinks.test.ts,project
   test/privacy-snapshot.ts,project
+  test/progress.test.ts,project
   test/public-corpus-helpers.ts,project
   test/review-r12.test.ts,project
   test/review-r9.test.ts,project
@@ -151,7 +165,7 @@ files[57]{path,scope}:
   test/settings-worker.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[12]:
+tests[14]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -249,6 +263,22 @@ tests[12]:
     provenance:
       author: codex-agent
       created_at: "2026-10-26T04:46:11.200Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=1 test/privacy-punctuation.test.ts
+    scope: project
+    timeout_seconds: 600
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-26T20:56:24.492Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: npm run build && node --test --test-concurrency=1 test/privacy-sdk-instance.test.ts
+    scope: project
+    timeout_seconds: 300
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-26T20:56:27.698Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[3]{path,scope}:
