@@ -7,14 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-26T05:49:50.002Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-26T06:04:10.991Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: SDK settings section and flags; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[79]{created_at,author,text}:
+comments[80]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -94,6 +92,7 @@ comments[79]{created_at,author,text}:
   "2026-10-26T05:35:55.404Z",codex-agent,"Round 6 corpus evidence retained: fixed 85 rejected forms, 20646 command refusals, 1785 SDK refusals, 680 safe renderer documents; 34 benign forms with 646 admissions, 68 renders and 34 actual handoffs. Existing home fuzz seed 0x51a7c0de and allowed fuzz seed 0x6a09e667 remain green at 5000 cases each. Lossless decoder seed 0x8badf00d retains 54400 preservation checks and 10880 noisy-corpus refusals. Fresh read-only fleet oracle: 35 checkouts, 18039 tracked relative paths, 162351 presentations, zero false refusals/source writes; digest 2400bdbd1604c71f0bf66b9e3f3fcf8226e220e30874c64f468e21318c142de7. Raw SDK oracle remains 10/85; no new SDK bump or upstream edits. Known native settings-registration and per-call write-free SDK-read limits remain explicit."
   "2026-10-26T05:46:58.182Z",codex-agent,"Round-6 code gate at 0c589f7 passed 372 tests but CI correctly refused 99.94 percent branch coverage: the defensive backend-error redaction catch was not exercised. Added a real native SDK peer-policy refusal regression that includes a synthetic private value, checks safe typed diagnostics and verifies ownership remains untouched. Thresholds and source inventory remain unchanged; the full matrix will rerun."
   "2026-10-26T05:49:49.962Z",codex-agent,"Coverage follow-up passed through pinned pm: node --test --test-concurrency=1 test/settings-and-output.test.ts test/commands.test.ts = 32/32. Typecheck, lint and duplication (0 percent, zero clones) passed. The new regression loads an independent native SDK policy in a fresh non-Git CLI and verifies a private backend diagnostic becomes a safe typed refusal with ownership untouched. Behavioral revert proof: remove only error-message admission in runCommand, run node --test --test-name-pattern=\"command errors redact\" test/commands.test.ts, exit 1 with one failed result; restored source byte-for-byte. This adds a sixth round-6 proof and brings expected reverted failures to 24 including the peer-grid parent."
+  "2026-10-26T06:04:10.178Z",codex-agent,"Round-6 full code gate PASS at c72172455bb57418dc2aafd5715f1fc3ac7d9d54: https://github.com/unbraind/pm-swarm/actions/runs/40276394715 . Node 22 npm run release:check: 373/373 tests, 4/4 packed acceptance, zero skipped/cancelled, 100/100/100/100 across 34 reported source files. Node 26 npm run release:check and bun run release:check each reported the same 373/373, 4/4 and full coverage. Identity, typecheck, lint, zero duplication, docstrings, production audit, tarball, changelog and publication-attestation checks passed; CodeQL passed separately. No thresholds or exclusions changed. Targeted local checks and six behavioral revert proofs are recorded above. Exact-head final CI will also validate the evidence-only commit. SDK settings-registration and write-free cold/provider-read gaps remain documented; no merge, release or item closure."
 files[57]{path,scope}:
   index.ts,project
   manifest.json,project
