@@ -1,13 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { getSettingsPath, readFileIfExists, PmClient } from '@unbrained/pm-cli/sdk';
-import type { BeforeMutationHook, ExtensionCommandSdk } from '@unbrained/pm-cli/sdk/authoring';
+import type { BeforeMutationHook, ExtensionCommandSdk, OnWriteHook } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
 import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */
@@ -39,8 +39,8 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 }
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
-/** One immutable expected document travels through the native host commit. */
-interface ItemAdmissionScope { expected: string; refusal?: AdmissionRefusal }
+/** One admitted document and its verified native successors travel through the host commit. */
+interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -72,14 +72,18 @@ export function commitItemMutation<Payload extends { id: string; options: unknow
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   assertSdkInstance();
-  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item) };
+  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0 };
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
     await checkpoint?.('admitted');
     return ADMISSION.scopes.run(scope, async () => {
       await checkpoint?.('scoped');
       await checkpoint?.('before_commit');
-      try { return await commit(admitted); } catch (error) { if (scope.refusal !== undefined) throw new SettingsRefusal(scope.refusal.code, scope.refusal.remedy, scope.refusal.field); throw error; }
+      try { return await commit(admitted); } catch (error) {
+        if (scope.committed > 0) throw new SettingsRefusal('swarm_partial_commit', `${scope.committed} native item mutation(s) already committed; inspect the current tracker before retrying. ${scope.refusal?.remedy ?? 'The SDK refused a later step in its compound operation.'}`, scope.refusal?.field);
+        if (scope.refusal !== undefined) throw new SettingsRefusal(scope.refusal.code, scope.refusal.remedy, scope.refusal.field);
+        throw error;
+      }
     });
   });
 }
@@ -91,12 +95,22 @@ export const guardItemDocument: BeforeMutationHook = context => {
     assertSdkInstance();
     assertPrivatePathSafe(context.after, 'document');
     if (context.before === null || documentFingerprint({ ...context.before.metadata, body: context.before.body }) !== scope.expected) throw new SettingsRefusal('swarm_document_changed', 'The item changed after admission; refresh its complete document, re-evaluate ownership and retry with the current receipt.', 'document');
+    scope.pending = context.after === null ? undefined : documentFingerprint({ ...context.after.metadata, body: context.after.body });
     return { allow: true };
   }
   catch (error) {
     const refusal = error as SettingsRefusal; scope.refusal = { code: refusal.code, remedy: refusal.remedy, field: refusal.field };
     return { allow: false, code: refusal.code, message: refusal.message, remediation: refusal.remedy };
   }
+};
+/** Advance only a natively committed, previously admitted successor, never a peer edit or a cache/history notification. */
+export const recordItemCommit: OnWriteHook = context => {
+  const scope = ADMISSION.scopes.getStore();
+  if (scope?.pending === undefined || context.before === undefined || context.after === undefined) return;
+  const before = documentFingerprint({ ...context.before.metadata, body: context.before.body });
+  const after = documentFingerprint({ ...context.after.metadata, body: context.after.body });
+  if (before !== scope.expected || after !== scope.pending) return;
+  scope.expected = after; scope.pending = undefined; scope.committed++;
 };
 /** Admit the complete prospective mutation at its sink before invoking its sole writer.
  * Callbacks consume the admitted payload rather than recapturing uninspected data.

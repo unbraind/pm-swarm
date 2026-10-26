@@ -10,7 +10,8 @@ import { seededRandom } from './privacy-fuzz.ts';
 const home = process.env.HOME!; const count = Number(process.argv[2]); const random = seededRandom(Number(process.argv[3]));
 /** Punctuation belongs to real POSIX segments, including balanced literal route delimiters. */
 function noise(): string {
-  return `pad${[';', ',', ':', '=', '#', '?', '&', '|', '!', '%', '+', '@', '_', '-', '[x]', '(x)', '{x}', '<x>'][random() % 18]}name-${random().toString(36)}`;
+  const punctuation = [';', ',', ':', '=', '#', '?', '&', '|', '!', '%', '+', '@', '_', '-', '[x]', '(x)', '{x}', '<x>', ']', ')', '}', '>', '"', "'", '`'];
+  return `pad${punctuation[random() % punctuation.length]}name-${random().toString(36)}`;
 }
 /** Insert semantic identities without deciding where punctuation might end a path. */
 function route(path: string): string {
@@ -20,18 +21,19 @@ function route(path: string): string {
 function present(path: string): string {
   let value = path;
   for (let round = 0, rounds = 1 + random() % 4; round < rounds; round++) {
-    switch (random() % 6) {
+    switch (random() % 7) {
       case 0: value = encodeURIComponent(value); break;
       case 1: value = value.replaceAll('/', '\\u002f'); break;
       case 2: value = value.replaceAll('/', '&#47;'); break;
       case 3: value = value.replaceAll('/', '\uff0f'); break;
       case 4: value = value.toUpperCase(); break;
       case 5: value = value.replace(/\//g, (slash, index: number) => index % 2 ? '\\' : slash); break;
+      case 6: value = JSON.stringify(value); break;
     }
   }
   const pairs = [['', ''], ['"', '"'], ["'", "'"], ['`', '`'], ['(', ')'], ['[', ']'], ['<', '>'], ['[source](<', '>)']];
   const [left, right] = pairs[random() % pairs.length];
-  return `${left}${value}${right}`;
+  return `${random() % 2 ? "Here's " : ''}${left}${value}${right}`;
 }
 
 const host = await swarmHost(); const variants = mutationVariants(); let privateCases = 0; let allowedCases = 0;
@@ -55,4 +57,5 @@ for (const punctuation of [';', ',', ':', '=', '#', '|', '?', '&', '"', "'"]) {
   assert.equal(containsPrivatePath(value), true);
 }
 assert.equal(containsPrivatePath('%HOME%/project'), true);
+assert.equal(containsPrivatePath(`flag"${home}"`), true);
 process.stdout.write(JSON.stringify({ private_cases: privateCases, allowed_cases: allowedCases, variants: variants.length, renderer_cases: 2 * (privateCases + allowedCases), false_refusals: 0, escapes: 0 }));

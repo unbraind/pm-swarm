@@ -1,0 +1,23 @@
+id: pm-swarm-atomic-close
+title: Adopt an atomic SDK close with fenced metadata changes
+description: "Pinned PmClient.update auto-routes terminal status plus field/unset changes into a metadata update followed by a separate native close. CloseCommandOptions has no atomic custom-field/unset patch. Swarm now admits and compares every native commit and advances its expected snapshot only from the exact SDK onWrite successor; a later refusal reports committed native steps rather than claiming rollback. This preserves privacy and peer state, but does not establish a single-commit or all-or-nothing crash contract for compound close. Adopt a public SDK atomic guarded close when available; do not rebuild lifecycle/history behavior or compensate over foreign edits."
+type: Issue
+status: open
+priority: 2
+tags[2]: concurrency,sdk-gap
+created_at: "2026-10-26T21:32:19.770Z"
+updated_at: "2026-10-26T22:01:31.005Z"
+author: codex-agent
+acceptance_criteria: One guarded native item commit for close plus fencing fields and cleanup; interleaving and crash injection at every native transition; no lost peer changes or duplicate history; retain typed partial-state remedies until the SDK capability is available.
+parent: pm-swarm-y972
+comments[1]{created_at,author,text}:
+  "2026-10-26T22:01:31.001Z",codex-agent,"Native compound-close regression and partial-prefix peer-preservation test pass. Separate behavioral reversions of the committed-successor observer and partial-commit refusal each fail their regression once, exit 1; restored positives pass. This verifies guarded per-stage behavior and truthful receipts, not a single atomic close. The SDK gap remains open."
+files[3]{path,scope}:
+  src/settings.ts,project
+  src/shared-tracker.ts,project
+  test/privacy-sdk-instance.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-concurrency=1 --test-name-pattern=compound test/privacy-sdk-instance.test.ts,project,codex-agent,"2026-10-26T21:54:59.405Z",local_mutation,feat/settings-and-quality-gates
+docs[1]{path,scope}:
+  docs/privacy-admission.md,project
+body: ""

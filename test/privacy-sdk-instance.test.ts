@@ -10,6 +10,8 @@ import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk } from './settings-helpers.ts';
 import { snapshot, durableSnapshot } from './privacy-snapshot.ts';
 import { ownedPlan } from './privacy-mutations.ts';
+import { getHistoryPath } from '@unbrained/pm-cli/sdk';
+import { requireItemRead } from '../src/inspection.ts';
 
 /** Install real package/SDK files without network access; a physical SDK copy has its own module identity. */
 function installed(root: string, separate: boolean): string {
@@ -65,7 +67,7 @@ test('host binding rejects foreign SDK clients and progress reuses the exact nat
   assert.throws(() => assertSdkInstance({}), error => error instanceof SettingsRefusal && error.code === 'swarm_sdk_mismatch');
   assert.equal(new PlanProgress({ cwd: f.repo, pmRoot: f.pmRoot }, sdk.client).client, sdk.client);
   const module = new URL('../src/settings.ts', import.meta.url).href;
-  const child = spawnSync(process.execPath, ['--input-type=module', '-e', `import {assertSdkInstance} from ${JSON.stringify(module)}; import {assertSdkInstance as second} from ${JSON.stringify(module + '?second-package-copy')}; assertSdkInstance(); second(); process.stdout.write('one-sdk');`], { encoding: 'utf8', env: f.env });
+  const child = spawnSync(process.execPath, ['--import', new URL('../dist/src/settings.js', import.meta.url).href, '--input-type=module', '-e', `import {assertSdkInstance} from ${JSON.stringify(module)}; import {assertSdkInstance as second} from ${JSON.stringify(module + '?second-package-copy')}; assertSdkInstance(); second(); process.stdout.write('one-sdk');`], { encoding: 'utf8', env: f.env });
   assert.equal(child.status, 0, child.stderr.replaceAll(f.repo, '[fixture]')); assert.equal(child.stdout, 'one-sdk');
 });
 
@@ -97,6 +99,20 @@ test('metadata-only admission cannot overwrite an unobserved nonempty item body'
   assert.equal(durableSnapshot(f.pmRoot), before);
 });
 
+test('mutation comparisons retain large public bodies and annotations beyond agent output budgets', async t => {
+  const f = await sharedFixture(t); const id = await f.item(['src/public.ts']);
+  const body = 'Public complete document '.repeat(2000); const comment = 'Public full annotation '.repeat(500);
+  await f.client.update(id, { body }); await f.client.comments(id, { add: comment });
+  const output = { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' } as const;
+  const before = requireItemRead(await f.client.get(id, output)).item;
+  assert.ok(before.body!.length > 40000); assert.ok(before.comments![0].text.length > 10000);
+  const start = await f.shared.start(id); await f.shared.close(id, 'Public completion', start.token);
+  const item = requireItemRead(await f.client.get(id, output)).item;
+  assert.equal(item.body, before.body); assert.equal(item.comments![0].text, before.comments![0].text); assert.equal(item.status, 'closed');
+  const refused = await f.client.get(id, { depth: 'full', outputBudget: 1, outputLimit: 'unbounded' });
+  assert.throws(() => requireItemRead(refused), error => error instanceof SettingsRefusal && error.code === 'swarm_input_invalid');
+});
+
 for (const transitions of [1, 8]) test(`progress re-evaluates native conflicts after ${transitions} independent peer appends`, async t => {
   const f = await sharedFixture(t); const plan = await ownedPlan(f); const id = String(plan.plan.id); let peers = 0;
   const operation = () => withItemMutationObserver(boundary => {
@@ -109,4 +125,42 @@ for (const transitions of [1, 8]) test(`progress re-evaluates native conflicts a
   const comments = (await f.client.get(id, { depth: 'full' })).item.comments!;
   assert.equal(comments.filter(comment => comment.text.startsWith('Public peer ')).length, transitions);
   assert.equal(comments.filter(comment => comment.text.startsWith('swarm-progress/v2 ')).length, transitions === 1 ? 1 : 0);
+});
+
+test('native compound close advances only exact committed successors and ignores unrelated write notifications', async t => {
+  const f = await sharedFixture(t); const events: string[] = []; const key = Symbol.for('pm-swarm.test.native-steps');
+  Reflect.set(globalThis, key, events); t.after(() => { Reflect.deleteProperty(globalThis, key); });
+  const entry = `import extension from ${JSON.stringify(new URL('../index.ts', import.meta.url).href)};
+import {recordItemCommit} from ${JSON.stringify(new URL('../src/settings.ts', import.meta.url).href)};
+export default {activate(api){api.hooks.onWrite(context=>{
+if(context.before && context.after){
+recordItemCommit({...context,before:undefined}); recordItemCommit({...context,after:undefined});
+recordItemCommit({...context,before:{...context.before,metadata:{...context.before.metadata,title:'Unrelated public before'}}});
+recordItemCommit({...context,after:{...context.after,metadata:{...context.after.metadata,title:'Unrelated public after'}}});
+}
+if(['update','close'].includes(context.op)) globalThis[Symbol.for('pm-swarm.test.native-steps')]?.push(context.op);
+});extension.activate(api);}};`;
+  writeFileSync(join(f.pmRoot, 'extensions/pm-swarm/entry.js'), entry);
+  const id = await f.item(['src/public.ts']); const receipt = await f.shared.start(id); events.length = 0;
+  await f.shared.close(id, 'Public completion', receipt.token);
+  assert.deepEqual(events, ['update', 'close'], 'The pinned SDK currently composes two native item commits');
+  const item = (await f.client.get(id, { depth: 'full' })).item;
+  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, '2');
+});
+
+test('compound native writes preserve later peer state and truthfully report an already committed prefix', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
+  const privateTitle = encodeURIComponent(['', 'home', 'private', 'later-peer'].join('/')); let peerHistory = '';
+  await assert.rejects(commitItemMutation({ id, item, options: { add: 'Public first step' } }, async admitted => {
+    await f.client.comments(admitted.id, admitted.options);
+    const peer = f.cli('update', id, '--title', privateTitle, '--json'); assert.equal(peer.status, 0);
+    peerHistory = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
+    await f.client.update(admitted.id, { description: 'Refused successor' });
+  }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /1 native item mutation/.test(error.remedy) && !error.remedy.includes(privateTitle));
+  assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), peerHistory);
+  const other = await f.item(); const current = (await f.client.get(other, { depth: 'full' })).item;
+  await assert.rejects(commitItemMutation({ id: other, item: current, options: { add: 'Public committed step' } }, async admitted => {
+    await f.client.comments(admitted.id, admitted.options); throw new Error('Interrupted after commit');
+  }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
+  assert.equal((await f.client.get(other, { depth: 'full' })).item.comments!.length, 1);
 });

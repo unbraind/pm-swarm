@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
-import { inspectItem } from './inspection.ts';
+import { inspectItem, readItem } from './inspection.ts';
 import { commitItemMutation, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
@@ -124,9 +124,8 @@ export class PlanProgress {
 
   /** Read complete normalized core Plan metadata without agent output ceilings. */
   private async snapshot(id: string): Promise<PlanSnapshot> {
-    // Unbounded SDK reads cannot produce the budget-omission union member.
     const local = await inspectItem(this.pmRoot, this.pmRoot, id);
-    const item = local === null ? (await this.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult).item : { ...local.item, body: local.body };
+    const item = local === null ? (await readItem(this.client, id)).item : { ...local.item, body: local.body };
     if (item.type !== 'Plan' || !Array.isArray(item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
     return item;
   }
@@ -168,9 +167,15 @@ export class PlanProgress {
    * preserve one another's comments; no package-local coordination lock is used.
    */
   async witness(id: string, options: ProgressDeclaration): Promise<{ id: string; revision: string; dry_run: boolean; actor: string; witness: ProgressWitness }> {
-    for (let attempt = 0; ; attempt++) {
-      try { return await this.witnessAttempt(id, options); }
-      catch (error) { if (!(error instanceof SettingsRefusal) || error.code !== 'swarm_document_changed' || attempt >= 7) throw error; }
+    return this.witnessRetried(id, options);
+  }
+
+  /** Bound native conflict retries while preserving the final typed refusal and all peer evidence. */
+  private async witnessRetried(id: string, options: ProgressDeclaration, attempt = 0): ReturnType<PlanProgress['witness']> {
+    try { return await this.witnessAttempt(id, options); }
+    catch (error) {
+      if (error instanceof SettingsRefusal && error.code === 'swarm_document_changed' && attempt < 7) return this.witnessRetried(id, options, attempt + 1);
+      throw error;
     }
   }
 

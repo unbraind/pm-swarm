@@ -25,7 +25,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
-| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim in one mutation |
+| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim through guarded native commits |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
 | resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
@@ -82,13 +82,18 @@ Relative paths, framework route folders and HTTP(S) URLs remain supported.
 The guard searches substrings without whitespace tokenization or URL exemptions.
 Relative framework routes keep their original punctuation.
 Path runs retain punctuation until POSIX and Windows normalization resolves dot
-segments; only whitespace, NUL and surrounding presentation delimiters end them.
+segments. The full literal run ends only at whitespace or NUL; additional
+presentation-aware views never discard that run.
 Every item writer admits its complete resulting document under the native SDK
 lock and compares the current document with its checked snapshot. Refresh and
 retry `swarm_document_changed`. Host commands reuse their injected client, and
 package copies share request scope. A second SDK module identity produces
 `swarm_sdk_mismatch`: share the host SDK installation and restart after removing
-the nested dependency. See [privacy admission](docs/privacy-admission.md).
+the nested dependency. Full internal reads retain large bodies and annotations.
+The pinned SDK closes an item in two native commits; if a later stage fails,
+`swarm_partial_commit` reports how many committed and asks you to inspect the
+tracker before retrying. Atomic close with fenced metadata is an open SDK gap.
+See [privacy admission](docs/privacy-admission.md).
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use
 `pm swarm heartbeat` separately when a long queue needs background liveness.

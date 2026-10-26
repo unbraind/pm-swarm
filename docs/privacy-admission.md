@@ -20,14 +20,15 @@ is retained from the original fixed corpus; numeric approximations remain allowe
 `scanMutationSecrets` from SDK 2026.10.23 remains the first layer for
 `absolute_home_path`. The second layer canonicalizes the **entire string** and
 searches private-home substrings. It starts a path candidate at every separator
-and retains the maximal run until whitespace, NUL or a paired presentation
-delimiter already surrounding that run. Punctuation such as semicolons, commas,
+and always retains the maximal literal run until whitespace or NUL. Additional
+views strip only available surrounding delimiters at the run edges, or use the
+recognized enclosing quote/bracket; neither view replaces the literal run. Punctuation such as semicolons, commas,
 colons, equals signs, query markers and fragments remains segment data until
 normalization. Paired brackets inside a route remain inside its path. There is
 no drive-letter prose classifier or blanket URL acceptance.
 
 At most sixteen fixed-point rounds fold Unicode compatibility/confusables and
-strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes.
+strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes, including escaped JSON quotes.
 UTF-8 decoding replaces each
 invalid sequence with a replacement marker while preserving adjacent valid
 multibyte sequences; malformed prefixes cannot erase encoded Unicode separators.
@@ -209,7 +210,7 @@ reproducers plus all 31 embedded forms and both malformed Unicode-separator form
 valid ownership and fencing.
 
 The state/backend matrix retains **509 input refusals** and **35 prepared-tracker
-state/backend refusals**, collectively all fifteen typed refusal categories plus
+state/backend refusals**, collectively the fifteen retained typed refusal categories plus
 ordinary missing, terminal, foreign-owner, strict and no-Git refusals. Fresh
 receipt checks remain before shared/Git ownership changes. Real peer transitions
 between corpus enumeration and native reads prove revalidation. Recovery skips
@@ -262,13 +263,24 @@ caller's typed error; cross-module `instanceof` is not the transport.
 Inside that same SDK commit, the hook compares the complete current document to
 the checked snapshot before allowing persistence. SDK read projections and empty
 derived collections are excluded from canonical comparison; populated persisted
-fields and the body remain included. A changed document gives `swarm_document_changed`; refresh
+fields and the body remain included. Internal SDK reads request unbounded output
+and full depth; a native budget-refusal envelope becomes a typed input refusal,
+never a partial comparison. Large public bodies and annotations remain intact.
+A changed document gives `swarm_document_changed`; refresh
 ownership and evidence before retrying. Git start refreshes after its own claim.
 CLI progress reuses the exact injected client. Legacy boolean constructor hints
 use normal native activation instead of assuming an active host. Progress may
 retry a benign append conflict up to eight attempts, re-reading every role,
 revision and prerequisite; privacy, authority and stale-evidence errors never
 retry. Persistent contention returns the typed conflict without a false receipt.
+
+The native `onWrite` hook advances a request snapshot only when both documents
+exactly match its admitted, actually committed successor. Unrelated lock/cache
+notifications and peer documents cannot advance it. This supports the pinned
+SDK compound close without disabling the locked comparison. A later failure
+after a successful native step yields `swarm_partial_commit`, its committed
+count and an inspect-before-retry remedy; it never implies byte identity or
+removes a peer edit.
 
 Settings admission checks the complete fresh raw source document, substituting
 only its owned proposed subtree, as well as the SDK-normalized returned patch.
@@ -333,7 +345,13 @@ punctuation aliases + 5,000 benign siblings**. Independent POSIX normalization
 supplies the oracle before percent/JSON/HTML/Unicode/mixed-separator encoding and
 quote/bracket presentation. All nineteen registry variants produce **95,000
 refusals + 95,000 admissions**; both renderers produce **20,000 checked documents**.
-There are zero escapes or false refusals. Native CLI handoff repeats eighteen
+There are zero escapes or false refusals. The generator includes unmatched
+brackets, apostrophes, escaped JSON quotes, prose contractions and randomized
+punctuation in HOME itself. Another 72 fixed classification checks cover six
+segment delimiters in six presentations and their benign siblings. The raw SDK
+misses all four added identities: `semicolon-parent`, `prose-apostrophe`,
+`unmatched-bracket`, and `json-quoted-parent`; the package refuses all four.
+Native CLI handoff repeats fifty
 punctuation/encoding/wrapper cases with byte-identical trackers and no receipt;
 one public sibling handoff succeeds.
 
@@ -365,6 +383,14 @@ relative paths using `git ls-files`, disables optional locks and reports counts
 and an inventory digest. The path list is never committed.
 
 ## SDK integration limits
+
+Pinned `PmClient.update` with close status and fenced custom-field/unset changes
+performs two native commits (metadata update, then close). `CloseCommandOptions`
+has no atomic custom-field/unset patch. Native `onWrite` tracking preserves CAS
+for each stage and reports partial commits truthfully, but cannot make that
+compound operation atomic or crash-all-or-nothing. Workspace transactions do not
+lock ordinary peer item writers. Follow-up:
+[pm-swarm-atomic-close](../.agents/pm/issues/pm-swarm-atomic-close.toon).
 
 Native settings-section registration remains unavailable on pinned `ExtensionApi`;
 normalized `readSettings` drops extension sections. Typed package metadata and the

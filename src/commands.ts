@@ -7,7 +7,7 @@ import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
 import { repositoryRoot } from './workspace.ts';
 import { SharedTracker, SHARED_LAND_REFUSAL } from './shared-tracker.ts';
-import { guardItemDocument, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, updateSettings } from './settings.ts';
+import { guardItemDocument, recordItemCommit, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, updateSettings } from './settings.ts';
 import { StaleFenceError } from './lease.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
@@ -170,6 +170,7 @@ function safeRendererResult(result: unknown): unknown {
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
   api.hooks.beforeMutation(guardItemDocument);
+  api.hooks.onWrite(recordItemCommit);
   for (const format of ['toon', 'json'] as const) api.registerRenderer(format, context => {
     const result = safeRendererResult(context.result);
     if ('swarm_watch_complete' in (result as object) && (result as { swarm_watch_complete?: boolean }).swarm_watch_complete === true) return '';

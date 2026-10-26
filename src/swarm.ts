@@ -15,7 +15,7 @@ import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings } from './settings.ts';
-import { inspectItem } from './inspection.ts';
+import { inspectItem, readItem } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -117,20 +117,20 @@ export class Swarm {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
-    const item = (await this.client.get(id, { depth: 'full' })).item;
+    const item = (await readItem(this.client, id)).item;
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
     const prefs = await readSettings(this.pmRoot);
     if (statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(prefs.schema))) throw new Error('Cannot start a terminal item');
-    const view = await this.client.get(id, { fields: 'id,assignee,claim_state' });
+    const view = await readItem(this.client, id, 'id,assignee,claim_state');
     if (view.claim_state?.claimed && view.claim_state.assignee !== this.author) throw new Error(`Item claimed by ${view.claim_state.assignee}`);
     const overlap_warnings = footprintOverlaps(itemFootprint(item), (await this.activeFootprints()).filter(lane => lane.id !== id));
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
     await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.claim(admitted.id, admitted.options)));
-    const claimed = (await this.client.get(id, { depth: 'full' })).item;
+    const claimed = (await readItem(this.client, id)).item;
     let created = false;
     try {
       git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
@@ -183,7 +183,7 @@ export class Swarm {
       if (lane === undefined) throw new Error('No active lane for item');
       if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
       const files = commitMutation([...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))], admitted => admitted);
-      const item = apply ? (await this.client.get(id, { depth: 'full' })).item : undefined;
+      const item = apply ? (await readItem(this.client, id)).item : undefined;
       const linked = item === undefined ? lane.files : itemFootprint(item);
       const add = files.filter(path => !linked.includes(path));
       if (apply && (add.length > 0 || token !== undefined)) {

@@ -10,7 +10,7 @@ import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem, recoverySnapshotMatches } from './recovery.ts';
-import { inspectItem } from './inspection.ts';
+import { inspectItem, readItem } from './inspection.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -53,7 +53,7 @@ export class SharedTracker {
     for (const item of corpus.items) {
       if (item.tags.includes(RESOURCE_TAG) || !item.assignee?.trim()) continue;
       const terminal = statusIsTerminal(item.status, statuses);
-      const claim = withClaims && !terminal ? (await this.engine.client.get(item.id, { fields: 'claim_state' })).claim_state : undefined;
+      const claim = withClaims && !terminal ? (await readItem(this.engine.client, item.id, 'claim_state')).claim_state : undefined;
       lanes.push({ id: item.id, agent: item.assignee, files: itemFootprint(item), terminal, claimed_at: typeof item.swarm_claimed_at === 'string' ? item.swarm_claimed_at : claim?.last_claim?.ts ?? null });
     }
     return lanes.sort((left, right) => left.id.localeCompare(right.id));
@@ -78,12 +78,12 @@ export class SharedTracker {
   private async claimLane(id: string, strict: boolean, lease: Lease, corpus?: Awaited<ReturnType<Swarm['corpus']>>) {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
-    const preliminary = local ?? await this.engine.client.get(id, { depth: 'full' });
+    const preliminary = local ?? await readItem(this.engine.client, id);
     await this.claimState(preliminary.item);
     corpus ??= await this.engine.corpus();
     const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== id);
     this.claimWarnings(itemFootprint(preliminary.item), active, strict);
-    const view = local === null ? preliminary : await this.engine.client.get(id, { depth: 'full' }); const item = view.item;
+    const view = local === null ? preliminary : await readItem(this.engine.client, id); const item = view.item;
     const token = await this.claimState(item); const heartbeat = new Date().toISOString();
     const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
     const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
@@ -163,7 +163,7 @@ export class SharedTracker {
     const evaluate = async (lease?: Lease) => {
       const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
       if (local !== null) await this.syncDecision(local.item, apply, files, token);
-      const item = (await this.engine.client.get(id, { depth: 'full' })).item;
+      const item = (await readItem(this.engine.client, id)).item;
       const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
         await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options)));
@@ -226,7 +226,7 @@ export class SharedTracker {
   private async fence(id: string, token?: string) {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
     if (local !== null) this.assertFence(local.item, token);
-    const item = (await this.engine.client.get(id, { depth: 'full' })).item;
+    const item = (await readItem(this.engine.client, id)).item;
     this.assertFence(item, token); return item;
   }
 
@@ -305,7 +305,7 @@ export class SharedTracker {
         const times = [recorded, observed].map(value => value === undefined ? NaN : Date.parse(value)).filter(Number.isFinite);
         if (times.length === 0) { refused.push({ id: row.id, reason: 'No valid claim or heartbeat timestamp; repair liveness evidence before reclaiming' }); continue; }
         if (Date.now() - Math.max(...times) < staleAfter * 1000) continue;
-        const item = (await this.engine.client.get(row.id, { depth: 'full' })).item;
+        const item = (await readItem(this.engine.client, row.id)).item;
         if (!recoverySnapshotMatches(row, item)) continue;
         if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
         const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);

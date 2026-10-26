@@ -27,6 +27,7 @@ function foldUnicode(value: string): string {
 function canonicalRound(value: string): string {
   return foldUnicode(foldUnicode(value).replace(/(?:%[a-f0-9]{2})+/gi, decodeOctets)
     .replace(/\\u\{([a-f0-9]+)\}|\\u([a-f0-9]{4})|\\x([a-f0-9]{2})/gi, (encoded, brace: string | undefined, unicode: string | undefined, hex: string) => decodePoint(encoded, brace ?? unicode ?? hex, 16))
+    .replace(/\\"/g, '"')
     .replace(/\\\//g, '/')
     .replace(/&#(?:x([a-f0-9]+)|(\d+));?/gi, (encoded, hex: string | undefined, decimal: string) => decodePoint(encoded, hex ?? decimal, hex === undefined ? 10 : 16))
     .replace(/&([a-z]+);/gi, (encoded, name: string) => ENTITIES[name.toLowerCase()] ?? encoded)
@@ -91,21 +92,33 @@ function candidateEnd(text: string, start: number, quote: string | undefined, su
   return text.length;
 }
 /** Begin at every separator, retaining punctuation until both native grammars have normalized the whole run. */
-function pathCandidates(text: string): string[] {
-  const candidates: string[] = []; const surrounding: string[] = []; let quote: string | undefined;
+function* pathCandidates(text: string): Generator<string> {
+  const surrounding: string[] = []; let quote: string | undefined;
   for (let index = 0; index < text.length; index++) {
     const character = text[index];
     if (character === '/') {
       const start = index >= 2 && /[a-z]:/i.test(text.slice(index - 2, index)) ? index - 2 : index;
-      candidates.push(text.slice(start, candidateEnd(text, index, quote, surrounding)));
+      const whitespace = text.slice(index).search(/[\s\0]/u);
+      const complete = whitespace === -1 ? text.length : index + whitespace;
+      const closers = [...surrounding, ...(quote === undefined ? [] : [quote])];
+      let edge = complete;
+      while (closers.length > 0) {
+        const closing = closers.indexOf(text[edge - 1]);
+        if (closing === -1) break;
+        closers.splice(closing, 1); edge--;
+      }
+      // Retain the literal run even when a presentation parser could mistake a segment character for a closer.
+      for (const end of new Set([complete, edge, candidateEnd(text, index, quote, surrounding)])) yield text.slice(start, end);
     }
-    if (['"', "'", '`'].includes(character)) quote = quote === character ? undefined : quote ?? character;
+    if (['"', "'", '`'].includes(character)) {
+      if (quote === character) quote = undefined;
+      else if (quote === undefined && (index === 0 || text[index + 1] === '/' || /^[a-z]:\//i.test(text.slice(index + 1)) || !/[\p{L}\p{N}_]/u.test(text[index - 1]))) quote = character;
+    }
     else if (quote === undefined) {
       if (DELIMITERS[character] !== undefined) surrounding.push(DELIMITERS[character]);
       else if (character === surrounding.at(-1)) surrounding.pop();
     }
   }
-  return candidates;
 }
 /** Process-local home identity is stable for this module's lifetime. */
 const PROCESS_HOMES = processHomes();
@@ -121,9 +134,9 @@ export function containsPrivatePath(value: string): boolean {
   if (decoded.trim() === '~' || HOME_SHORTCUTS.test(decoded) || PROCESS_HOMES.includes(null)) return true;
   // The uninspectable-root check above narrows every retained root to a string.
   const homes = PROCESS_HOMES as readonly string[];
-  const candidates = pathCandidates(decoded);
+  /** Decide only on normalized views; laziness avoids materializing unused suffixes after a refusal. */
+  const privateCandidate = (candidate: string) => pathForms(candidate).some(path => HOME_ROOTS.test(path) || homes.some(home => containsHome(path, home)));
+  for (const candidate of pathCandidates(decoded)) if (privateCandidate(candidate)) return true;
   // A configured root may contain spaces; also inspect intact quoted/path-sized text in that case.
-  if (homes.some(home => home.includes(' '))) candidates.push(decoded);
-  return candidates.some(candidate => pathForms(candidate).some(path => HOME_ROOTS.test(path)
-    || homes.some(home => containsHome(path, home))));
+  return homes.some(home => home.includes(' ')) && privateCandidate(decoded);
 }
