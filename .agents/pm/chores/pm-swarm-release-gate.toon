@@ -6,14 +6,14 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-25T23:23:59.983Z"
-updated_at: "2026-10-26T01:03:40.335Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-26T02:25:18.144Z"
 author: codex-agent
-comments[2]{created_at,author,text}:
+comments[3]{created_at,author,text}:
   "2026-10-25T23:24:04.782Z",codex-agent,"Normalize daily scheduling and PM_RELEASE_APPROVED job gates while preserving release decisions, generated changelogs and release notes. Verify OIDC publishing without a stored npm token, manifest metadata, packed allowlists and private-data scans. No open homepage/author PR was found during orientation. No publishing, trust setup, approval variable changes or merges are authorized."
   "2026-10-26T01:03:40.334Z",codex-agent,"Opening the release-readiness PR after package allowlist/privacy verification and focused regression proofs so complete npm and Bun CI can run in parallel with local full-gate verification. Pending checks are explicitly not treated as passing evidence. No timeout, threshold, dependency pin or test case is being relaxed."
-files[3]{path,scope}:
+  "2026-10-26T02:25:12.444Z",codex-agent,"Required complete npm run release:check and bun run release:check both PASS in isolated GitHub CI at 983eaf20602065527192709f464796023e243c4f. Main suite counts: npm 279/279, Bun 279/279; every required matrix job succeeded. Evidence: https://github.com/unbraind/pm-swarm/actions/runs/40252359966. The complete gates were verified in isolated CI; they were not duplicated on the already contended local host after that success. No timeout, case, threshold or dependency pin was changed. Packed artifact allowlist/privacy checks and linked regressions passed. Final tracker evidence is being committed and CI will recheck that final head. Keep the item in progress for orchestrator verification."
+files[4]{path,scope}:
+  .github/workflows/ci.yml,project
   .github/workflows/release.yml,project
   package.json,project
   test/release-approval.test.ts,project
