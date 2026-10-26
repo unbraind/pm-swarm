@@ -32,6 +32,32 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
 
+## Install and release approval
+
+The first npm release is pending the maintainer's interactive bootstrap. After
+that first publish, the maintainer configures npm trusted publishing for
+`release.yml` and sets the repository variable `PM_RELEASE_APPROVED` to `true`.
+The daily workflow and manual dispatch both require this variable and `main`.
+Publishing uses OIDC with provenance; no stored npm token is needed.
+
+Once published, install the package and compatible pm host, then activate the
+extension in an initialized pm project:
+
+```sh
+npm install pm-swarm @unbrained/pm-cli
+npx --no-install pm package install ./node_modules/pm-swarm
+
+bun add pm-swarm @unbrained/pm-cli
+bunx --bun --no-install pm package install ./node_modules/pm-swarm
+
+pm package install npm:pm-swarm
+pm swarm --help
+```
+
+The package exports its SDK through `main` and `types` and registers commands
+with pm. It has no standalone `bin`: use `npx pm` or `bunx --bun pm` through
+the installed host. npm/Bun dependency installation alone does not activate it.
+
 ## Without git
 
 Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
