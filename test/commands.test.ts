@@ -11,7 +11,7 @@ import { fixture, swarmCli } from './helpers.ts';
 import { assertFixtureRepo, fixtureGit as git } from './git-helpers.ts';
 
 test('registered host commands exercise SDK settings, flags and every command dispatcher', async t => {
-  const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   /** Run the real host dispatcher with its native bound SDK context. */
   const run = (command: string, options: Record<string, unknown> = {}, args: string[] = []) => ext.runCommand({ command: `swarm ${command}`, pmRoot: f.pmRoot, global: { author: 'swarm-test' }, options, args });
   assert.ok(await run('settings'));
@@ -64,7 +64,7 @@ test('native host context resolves the default author and rejects unknown comman
 
 test('plan hides certified read receipts by default and retains them for full and JSON output', async t => {
   const f = await fixture(t); for (let index = 0; index < 13; index++) await f.item([`src/file-${index}.ts`]);
-  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   const compact = (await ext.runCommand({ command: 'swarm plan', pmRoot: f.pmRoot, global: { json: false } })).result as Record<string, unknown>;
   assert.equal('complete_list' in compact, false); assert.equal('read_output' in compact, false);
   for (const args of [{ options: { full: true }, global: { json: false } }, { global: { json: true } }]) {
@@ -104,7 +104,7 @@ for (const useAgent of [false, true]) test(`CLI reap and sync ${useAgent ? 'acce
 
 test('SDK host harness retains Git generic and native refusal statuses', async t => {
   const f = await fixture(t);
-  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   /** Exercise the SDK handler directly as well as the separately loaded CLI module graph. */
   const start = (id: string) => host.runCommand({ command: 'swarm start', args: [id], pmRoot: f.pmRoot, global: { author: 'swarm-test' } });
   await assert.rejects(start('swarm-test-absent'), (error: unknown) => isPmCliExpectedError(error) && error.exitCode === 3);

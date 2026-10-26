@@ -278,7 +278,7 @@ test('shared planning retains unknown solitary waves and ignores stale Git field
 /** Measure host-bound shared dispatch as well as real CLI subprocess behavior. */
 test('shared SDK dispatch covers active, terminal, unknown and explicit-file operations', async t => {
   const f = await sharedFixture(t);
-  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   /** Call the registered handler with the real host SDK and complete tracker context. */
   const run = async (verb: string, options: Record<string, unknown> = {}, args: string[] = []) => (await harness.runCommand({ command: `swarm ${verb}`, pmRoot: f.pmRoot, options, args, global: { author: 'shared-test' } })).result;
   await run('settings', { limit: '3', apply: true });

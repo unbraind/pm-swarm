@@ -16,7 +16,7 @@ export async function hostSdk(pmRoot: string): Promise<ExtensionCommandSdk> {
 
 /** Activate the package's actual registrations for shared privacy boundary checks. */
 export function swarmHost() {
-  return createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  return createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
 }
 /** Assert host ownership and the expected privacy decision in both output formats. */
 export async function assertPrivacyRendering(host: Awaited<ReturnType<typeof swarmHost>>, value: string, refused: boolean): Promise<void> {

@@ -23,16 +23,25 @@ searches private-home substrings. There is no whitespace tokenization, wrapper
 parser, drive-letter prose classifier or blanket URL acceptance.
 
 At most sixteen fixed-point rounds fold Unicode compatibility/confusables and
-strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes. UTF-8 decoding replaces each
+strip zero-width/bidi controls, then decode percent octets and JSON/HTML escapes.
+UTF-8 decoding replaces each
 invalid sequence with a replacement marker while preserving adjacent valid
 multibyte sequences; malformed prefixes cannot erase encoded Unicode separators.
 Folding also precedes percent decoding: fullwidth hex digits must not split valid
 UTF-8 runs into malformed fragments. Excessive unresolved nesting refuses safely.
-Classification then converts backslashes, removes dot-only path segments,
-collapses duplicate separators and case-folds spelling. Every home-root pattern
-is searched at every substring position, including URI authorities, paths,
-queries, fragments, Markdown, JSON, shell and relative text. There is no URI or
-UNC parser and no context exemption. Relative text containing a literal home-root
+Classification converts separators and case-folds spelling, then applies both
+`path.posix.normalize` and `path.win32.normalize` to absolute-looking candidate
+substrings. Both grammars resolve dot and dot-dot segments, duplicate separators
+and trailing separators, with POSIX/drive/UNC anchors bounding upward traversal.
+Drive paths inside file URLs also receive their drive-rooted interpretation.
+Windows device prefixes receive their underlying drive or UNC-share view while
+retaining the original POSIX interpretation for ambiguous separator spellings.
+Every home-root pattern
+is searched in the normalized candidate views, including URI authorities, paths,
+queries, fragments, Markdown, JSON, shell and relative text. No URL component
+receives a privacy exemption. Route parentheses and brackets
+inside a path remain intact; the classifier does not turn relative path suffixes
+into generic absolute-path refusals. Relative text containing a literal home-root
 spelling is deliberately classified as private by this lexical rule; the real
 fleet inventory reports no such relative paths.
 Normalization classifies input and never rewrites persisted notes or file paths.
@@ -42,8 +51,16 @@ web URLs without private-home content and non-home absolute paths remain allowed
 Field-specific domain rules still apply: persisted lane roots and linked
 footprints must remain portable. Local Git root overrides retain their separate
 path constraints. HOME, USERPROFILE, the detected process home and each available
-realpath spelling pass through the identical canonicalizer used for candidates before they are
-captured for the module's process lifetime; a filesystem root alone is not a private user folder.
+realpath spelling pass through the identical canonicalizer used for candidates
+before they are captured for the module's process lifetime. A filesystem root
+alone is not a private user folder.
+
+Configured roots receive both native normalizations too, including their dot
+segments and trailing separators. Matching requires a directory boundary after a
+configured home: a home named `demo` does not classify sibling names `demo2`,
+`demo-old` or `demo.txt` as private. Entire strings are decoded before path
+classification; Markdown/JSON/shell embeddings, queries and fragments retain
+substring detection. Public absolute paths outside protected roots remain allowed.
 
 ## Rejected and benign corpora
 
@@ -201,22 +218,37 @@ remove only owned records and empty infrastructure created by the invocation.
 
 ## Source-independent mutation sinks
 
-`commitMutation` in `src/settings.ts` checks the complete prospective payload
-immediately before invoking its writer. Each writer consumes that admitted
-payload. The source inventory parses every authored client call, SDK settings
+`commitMutation` checks non-item payloads. Every item writer instead requires
+`commitItemMutation` with a complete current snapshot, including body, and the
+mutation options/history message. It admits that snapshot before invoking the
+SDK and marks only this package request for transactional document admission.
+The source inventory parses every authored client call, SDK settings
 mutation, portable backend transaction and imported linked-test writer; an added
 or unguarded site fails the test until it joins the inventory and admission path.
+The inventory requires the item-specific helper and snapshot at all twelve item
+writers; the remaining six writers use the generic helper.
 The current inventory has **18 sites**: twelve item mutations (claim, update,
 release, file links and comments), audited settings, linked-test acknowledgement,
 linked-test execution, the shared portable resource transaction and two SDK
-coordination lock acquisitions. All four
-resource actions share that transaction, whose freshly decided change is also
-admitted inside the backend callback. Full fresh settings patches, including
-preserved foreign subtrees, pass the helper before audit publication. Existing
-item snapshots are checked with their patches. Recovery skips unsafe foreign
+coordination lock acquisitions. All four resource actions share that transaction, whose freshly decided change is also
+admitted inside the backend callback.
+
+The registered SDK `beforeMutation` hook sees the **complete proposed
+`ItemDocument` under the native item lock**, before either item or history
+persistence. It validates every metadata field, annotation/link and body, even if
+a peer changed a field after preflight. Its refusal is rethrown as the same typed
+`SettingsRefusal`, with a safe structural field name and a corrective remedy.
+No offending value is echoed. The request-local scope prevents this package from
+intercepting unrelated core operations used for explicit repairs.
+
+Settings admission checks the complete fresh raw source document, substituting
+only its owned proposed subtree, as well as the SDK-normalized returned patch.
+This protects preserved unknown top-level and nested fields that normalized SDK
+settings omit. The audited SDK writer still owns persistence and history.
+Recovery skips unsafe foreign
 context with a reason before releasing a claim or deleting a Git lane.
 
-The same helper guards runtime-record publication and rendering/watch boundaries.
+The generic helper guards runtime-record publication and rendering/watch boundaries.
 Storage coordinates used to select the tracker, lock, worktree or runtime file
 are not serialized content. Git-derived sync links pass admission before an
 effectful item read and again at the files writer. This closes the source gap
@@ -239,6 +271,33 @@ probes cover fullwidth, confusable, NFD, case and percent spellings independentl
 through HOME and USERPROFILE: **ten environments / twenty actual handoff
 refusals**, with complete tracker bytes unchanged. An uninspectable configured
 root fails closed instead of silently dropping a protected identity.
+
+## Whole-document and normalization properties
+
+`test/privacy-documents.test.ts` seeds private values using real core SDK writers,
+then exercises **ten field/link families × nine actions = 90 refused rewrites**.
+The actions include reserve, renew, publish, release, start, handoff, sync, close
+and Plan witness publication. Fields include title, description, body, acceptance
+criteria, comments, notes, files, docs, tests and extension metadata. Every refusal
+names its structural field, returns no receipt and leaves all durable tracker and
+history bytes unchanged. Comparisons exclude SDK-owned ignored runtime caches and
+usage receipts while retaining package runtime and lease infrastructure. Repairing
+the offending title through the core API permits exactly one successor reservation
+at generation one. Fifteen independent-process peer transitions on one non-Git tracker alter title, body
+and comments across update, files, comments, claim and release writers between
+preflight and the native commit; the locked hook refuses our
+rewrite and preserves the peer's exact history. Settings tests cover owned,
+foreign top-level and unknown nested output subtrees. Plan snapshots include body
+for full admission and bind progress revisions to that content.
+
+Seed **`0x6d2b79f5`** covers **5,000 private normalizations + 5,000 benign siblings**
+across ten configured homes (POSIX, drive and UNC, including a space-bearing root).
+Identity insertions include `pad/..`, dot segments, duplicate/mixed separators,
+percent/JSON/HTML encodings, Unicode separators, case, device namespaces and file URLs. Both grammars
+clamp upward traversal at their anchor. Three configured-root spellings (ordinary,
+trailing separator, and dot/dot-dot) produce **18 actual handoff refusals** with
+unchanged trackers, plus **three successful public-sibling handoffs**. The existing
+fixed corpora and all earlier seeded properties remain.
 
 ## Seeded and real-path oracles
 
@@ -278,7 +337,7 @@ deleted to hide this gap. Follow-up: [pm-swarm-write-free-reads](../.agents/pm/i
 ## Reproduction
 
 ```sh
-node --test --test-concurrency=1 test/privacy-sinks.test.ts test/privacy-home.test.ts test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
+node --test --test-concurrency=1 test/privacy-documents.test.ts test/privacy-normalization.test.ts test/privacy-sinks.test.ts test/privacy-home.test.ts test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
 node --test test/privacy-fleet.acceptance.ts test/sdk-read-effects.acceptance.ts
 npm run typecheck
 npm run lint

@@ -1,4 +1,5 @@
 import { homedir } from 'node:os';
+import { posix, win32 } from 'node:path';
 import { realpathSync } from 'node:fs';
 import { scanMutationSecrets } from '@unbrained/pm-cli/sdk';
 
@@ -42,16 +43,42 @@ export function canonicalize(value: string): string | null {
 }
 /** Normalize the complete text without tokenizing or exempting any URI component. */
 function normalizePathText(value: string): string {
-  return value.replaceAll('\\', '/').replace(/(?<=\/)\.(?=\/)/g, '').replace(/\/+/g, '/').toLowerCase();
+  return value.replaceAll('\\', '/').toLowerCase();
 }
-/** Retain both configured and resolved process-home spellings without recording either one. */
+/** Normalize an absolute candidate with both platform grammars; directory roots never climb above their anchor. */
+function pathForms(path: string): string[] {
+  const devicePath = path.replace(/^\/{2,}[?.]\/unc\//i, '//').replace(/^\/{2,}[?.]\//, '');
+  const spellings = devicePath === path ? [path] : [path, devicePath];
+  const candidates = spellings.flatMap(spelling => [spelling, ...[...spelling.matchAll(/[a-z]:\//gi)].filter(match => match.index > 0).map(match => spelling.slice(match.index))]);
+  return [...new Set(candidates.flatMap(candidate => {
+    const drive = /^[a-z]:\//i.test(candidate) ? candidate.slice(0, 2) : '';
+    return [drive + posix.normalize(candidate.slice(drive.length)), win32.normalize(candidate)].map(value => {
+      const portable = value.replaceAll('\\', '/').toLowerCase();
+      return portable === '/' || /^[a-z]:\/$/.test(portable) ? portable : portable.replace(/\/$/, '');
+    });
+  }))];
+}
+/** Canonicalize full configured roots before applying the same two path grammars as candidates. */
 function processHomes(): (string | null)[] {
   const configured = [homedir(), process.env.HOME, process.env.USERPROFILE].filter((home): home is string => home !== undefined && home !== '');
   const roots = configured.flatMap(home => {
     try { return [home, realpathSync(home)]; } catch { return [home]; }
   });
-  return [...new Set(roots.map(canonicalize))].filter(home => home !== '/' && home !== '');
+  return [...new Set(roots.flatMap(home => {
+    const decoded = canonicalize(home);
+    return decoded === null ? [null] : pathForms(decoded);
+  }))].filter(home => home !== '/' && home !== '' && !/^[a-z]:\/$/.test(home ?? ''));
 }
+/** Require a directory boundary, so a home named demo does not conceal its public sibling demo2. */
+function containsHome(path: string, home: string): boolean {
+  for (let index = path.indexOf(home); index !== -1; index = path.indexOf(home, index + 1)) {
+    const tail = path.slice(index + home.length);
+    if (tail === '' || tail.startsWith('/') || /^[)\]}>.,;:!?_*]+$/.test(tail)) return true;
+  }
+  return false;
+}
+/** Absolute-looking substrings preserve route parentheses/brackets inside a path and include every URI component. */
+const ABSOLUTE_CANDIDATES = /(?:(?<![a-z0-9])[a-z]:)?\/+(?:[?.]\/)?[^\s"'<>`,;|=?&#]*/gi;
 /** Process-local home identity is stable for this module's lifetime. */
 const PROCESS_HOMES = processHomes();
 /** User-home spellings are private at every substring position, including URI and relative text. */
@@ -63,7 +90,12 @@ export function containsPrivatePath(value: string): boolean {
   if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) return true;
   const decoded = canonicalize(value);
   if (decoded === null) return true;
-  const text = decoded;
-  return text.trim() === '~' || HOME_ROOTS.test(text) || HOME_SHORTCUTS.test(text)
-    || PROCESS_HOMES.some(home => home === null || text.includes(home));
+  if (decoded.trim() === '~' || HOME_SHORTCUTS.test(decoded) || PROCESS_HOMES.includes(null)) return true;
+  // The uninspectable-root check above narrows every retained root to a string.
+  const homes = PROCESS_HOMES as readonly string[];
+  const candidates = [...decoded.matchAll(ABSOLUTE_CANDIDATES)].map(match => match[0]);
+  // A configured root may contain spaces; also inspect intact quoted/path-sized text in that case.
+  if (homes.some(home => home.includes(' '))) candidates.push(decoded);
+  return candidates.some(candidate => pathForms(candidate).some(path => HOME_ROOTS.test(path)
+    || homes.some(home => containsHome(path, home))));
 }

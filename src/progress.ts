@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
-import { commitMutation, assertPrivatePathSafe, settings } from './settings.ts';
+import { commitItemMutation, assertPrivatePathSafe, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
 export const PROGRESS_PREFIX = 'swarm-progress/v2 ';
@@ -125,7 +125,7 @@ export class PlanProgress {
   private async snapshot(id: string): Promise<PlanSnapshot> {
     // Unbounded SDK reads cannot produce the budget-omission union member.
     const local = await inspectItem(this.pmRoot, this.pmRoot, id);
-    const item = local?.item ?? (await this.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult).item;
+    const item = local === null ? (await this.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult).item : { ...local.item, body: local.body };
     if (item.type !== 'Plan' || !Array.isArray(item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
     return item;
   }
@@ -182,7 +182,7 @@ export class PlanProgress {
       if (step.owner === actor || (witness.stage === 'accepted' && (view.orchestrator !== actor || selected.reviewers.includes(actor)))) throw new ProgressRefusal('progress_role', 'Use an independent reviewer and the tracker-configured orchestrator for acceptance.');
       if (!selected.produced || (witness.stage === 'accepted' && !selected.reviewed)) throw new ProgressRefusal('progress_prerequisite', 'Production evidence and then an independent review are required before acceptance.');
     }
-    if (options.apply === true) await commitMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options));
+    if (options.apply === true) await commitItemMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options));
     return { id: item.id, revision: view.revision, dry_run: options.apply !== true, actor, witness };
   }
 }

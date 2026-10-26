@@ -204,7 +204,7 @@ for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines
 
 test('watch restores SIGINT listener after a real status failure', async t => {
   const f = await fixture(t); const id = await f.item(); await f.client.update(id, { field: ['swarm_branch=main'] });
-  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   const before = process.listenerCount('SIGINT');
   await assert.rejects(ext.runCommand({ command: 'swarm status', pmRoot: f.pmRoot, options: { watch: true }, global: { outputFormat: 'json' } }), /no base SHA/);
   assert.equal(process.listenerCount('SIGINT'), before);
@@ -212,7 +212,7 @@ test('watch restores SIGINT listener after a real status failure', async t => {
 
 
 test('watch completion renderer owns only completed watch results, preserving native status and other commands', async () => {
-  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   for (const format of ['toon', 'json'] as const) {
     const completed = await ext.runRendererOverride({ format, command: 'swarm status', result: { swarm_watch_complete: true } });
     assert.equal(completed.overridden, true); assert.equal(completed.rendered, '');

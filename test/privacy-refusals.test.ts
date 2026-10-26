@@ -14,7 +14,7 @@ import { hostSdk } from './settings-helpers.ts';
 
 test('registered mutators refuse every input admission class without tracker changes or partial receipts', async t => {
   const f = await sharedFixture(t); const sdk = await hostSdk(f.pmRoot);
-  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   const registered = host.activation.registrations.commands.map(definition => definition.command.replace(/^swarm /, ''));
   assert.deepEqual([...registered].sort(), Object.keys(swarmCommandDefinitions).sort());
   const variants = registered.flatMap(command => mutationVariants().filter(variant => variant.command === command));

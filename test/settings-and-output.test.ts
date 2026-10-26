@@ -99,7 +99,7 @@ for (const boundary of boundaries) test(`settings rerun converges after interrup
 });
 
 test('host renderer owns all package outputs while unrelated results use native rendering', async () => {
-  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const host = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   for (const format of ['toon', 'json'] as const) {
     for (const command of swarmCommandNames) {
       const result = { mode: 'shared-tracker', selected: 'public-task' };

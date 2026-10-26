@@ -3,7 +3,7 @@ import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-schedu
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { footprintPath, itemFootprint, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
-import { commitMutation, assertPrivatePathSafe, settings, SettingsRefusal } from './settings.ts';
+import { commitItemMutation, assertPrivatePathSafe, settings, SettingsRefusal } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -77,7 +77,7 @@ export class SharedTracker {
   /** Validate terminal status, ownership and declared overlap before claiming. */
   private async claimLane(id: string, strict: boolean, lease: Lease, corpus?: Awaited<ReturnType<Swarm['corpus']>>) {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
-    if (local !== null) assertPrivatePathSafe(itemFootprint(local.item));
+    if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
     const preliminary = local ?? await this.engine.client.get(id, { depth: 'full' });
     await this.claimState(preliminary.item);
     corpus ??= await this.engine.corpus();
@@ -88,7 +88,7 @@ export class SharedTracker {
     const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
     const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
     assertPrivatePathSafe(receipt);
-    await lease.write(() => commitMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
+    await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
     this.tokens.set(id, token);
     return receipt;
   }
@@ -166,7 +166,7 @@ export class SharedTracker {
       const item = (await this.engine.client.get(id, { depth: 'full' })).item;
       const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
-        await lease!.write(() => commitMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options)));
+        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options)));
       }
       return { mode: 'shared-tracker', id, dry_run: !apply, add };
     };
@@ -200,7 +200,7 @@ export class SharedTracker {
         if (lane.agent !== this.engine.author) { refused.push({ id: lane.id, reason: 'Terminal claim belongs to another agent; use reap --agent with its principal' }); continue; }
         const current = await recoveryItem(this.engine.client, snapshots.get(lane.id)!, refused);
         if (current === undefined) continue;
-        if (!dryRun) await lease.write(() => commitMutation({ id: lane.id, options: { author: this.engine.author }, item: current }, admitted => this.engine.client.release(admitted.id, admitted.options)));
+        if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.engine.author }, item: current }, admitted => this.engine.client.release(admitted.id, admitted.options)));
         released.push(lane.id);
       }
       return { mode: 'shared-tracker', dry_run: dryRun, released, removed: [], cleanup: [], refused };
@@ -276,7 +276,7 @@ export class SharedTracker {
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     assertPrivatePathSafe(context);
-    if (!dryRun) await lease.write(() => commitMutation({ id, options: {
+    if (!dryRun) await lease.write(() => commitItemMutation({ id, options: {
       author: this.engine.author, force: true, ...(to === undefined ? { status: statuses.open_status } : { assignee: to }),
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
@@ -330,7 +330,7 @@ export class SharedTracker {
     if (!note.trim()) throw new Error('close requires a nonempty --note');
     return this.owned(id, token, async (item, lease) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      await lease.write(() => commitMutation({ id, options: { author: this.engine.author, status: statuses.close_status, message: note, unset: ['assignee', 'swarm_handoff'], field: [`swarm_token=${this.nextToken(item)}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
+      await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, status: statuses.close_status, message: note, unset: ['assignee', 'swarm_handoff'], field: [`swarm_token=${this.nextToken(item)}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
       this.tokens.delete(id); return { id, closed: true };
     });
   }

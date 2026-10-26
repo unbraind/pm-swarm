@@ -7,7 +7,7 @@ import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
 import type { CommandHandlerContext, ExtensionApi, FlagDefinition } from '@unbrained/pm-cli/sdk/authoring';
 import { repositoryRoot } from './workspace.ts';
 import { SharedTracker, SHARED_LAND_REFUSAL } from './shared-tracker.ts';
-import { commitMutation, assertPrivatePathSafe, SettingsRefusal, updateSettings } from './settings.ts';
+import { guardItemDocument, commitMutation, assertPrivatePathSafe, SettingsRefusal, updateSettings } from './settings.ts';
 import { StaleFenceError } from './lease.ts';
 import { Swarm } from './swarm.ts';
 import { runWatch, watchInterval } from './watch.ts';
@@ -136,6 +136,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     try { assertPrivatePathSafe(String(error)); } catch (refusal) { error = refusal; }
     throw createPmCliExpectedError(String(error), { exitCode: error instanceof GitCommandFailure ? error.exitCode : 2, context: {
       ...(error instanceof SettingsRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
+      ...(error instanceof SettingsRefusal && error.field !== undefined ? { field: error.field } : {}),
       recovery: { recovery_mode: 'compact', attempted_command: 'pm swarm [values withheld]', normalized_args: ['swarm', '[values withheld]'], parsed_positionals: [{ role: 'arguments', value: '[values withheld]' }], provided_fields: ['[values withheld]'] },
     } });
   }
@@ -167,6 +168,7 @@ function safeRendererResult(result: unknown): unknown {
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
+  api.hooks.beforeMutation(guardItemDocument);
   for (const format of ['toon', 'json'] as const) api.registerRenderer(format, context => {
     const result = safeRendererResult(context.result);
     if ('swarm_watch_complete' in (result as object) && (result as { swarm_watch_complete?: boolean }).swarm_watch_complete === true) return '';

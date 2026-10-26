@@ -1,4 +1,4 @@
-import { commitMutation } from './settings.ts';
+import { assertPrivatePathSafe, commitItemMutation } from './settings.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
@@ -22,27 +22,29 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
     return settings;
   };
   /** Read only resource metadata; reject terminal items and preserve ordinary claims. */
-  const read = async (id: string): Promise<ResourceRecord> => {
+  const snapshot = async (id: string) => {
     const settings = await supported();
     const local = await inspectItem(engine.pmRoot, engine.repo, id);
     if (local === null) throw new ResourceRefusal('resource_backend_refused', 'Storage ownership changed during admission; configure its explicit ResourceBackend before retrying.');
     const item = local.item;
-    return { id: String(item.id), resource: (item.tags as string[]).includes(RESOURCE_TAG) && !statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(settings.schema)), token: String(item.swarm_token ?? '0'), owner: typeof item.assignee === 'string' && item.assignee.trim() ? item.assignee : null, expires_at: typeof item.swarm_resource_expires_at === 'string' ? item.swarm_resource_expires_at : null };
+    return { item: { ...item, body: local.body }, record: { id: String(item.id), resource: (item.tags as string[]).includes(RESOURCE_TAG) && !statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(settings.schema)), token: String(item.swarm_token ?? '0'), owner: typeof item.assignee === 'string' && item.assignee.trim() ? item.assignee : null, expires_at: typeof item.swarm_resource_expires_at === 'string' ? item.swarm_resource_expires_at : null } };
   };
   return {
-    read,
+    read: async (id: string): Promise<ResourceRecord> => (await snapshot(id)).record,
     /** Serialize with #12 claims and hold its live writer pin across the SDK commit. */
     async transact(id, author, decide) {
       await supported();
       return withSwarmLease(engine.pmRoot, author, lease => lease.write(async () => {
-        const next = decide(await read(id));
+        const { item, record: currentRecord } = await snapshot(id);
+        assertPrivatePathSafe(item, 'document');
+        const next = decide(currentRecord);
         lease.assert();
-        await commitMutation({ id: next.id, options: {
+        await commitItemMutation({ id: next.id, options: {
           author, force: true,
           ...(next.owner === null ? { unset: ['assignee', 'swarm_resource_expires_at'] } : { assignee: next.owner }),
           field: [`swarm_token=${next.token}`, ...(next.expires_at === null ? [] : [`swarm_resource_expires_at=${next.expires_at}`])],
           comment: [next.note === undefined ? `Swarm resource generation ${next.token}: ${next.owner === null ? 'released' : 'reserved until ' + next.expires_at}` : `Swarm resource generation ${next.token}: ${next.note}`],
-        } }, admitted => engine.client.update(admitted.id, admitted.options));
+        }, item }, admitted => engine.client.update(admitted.id, admitted.options));
         const { note: _note, ...record } = next; return record;
       }));
     },

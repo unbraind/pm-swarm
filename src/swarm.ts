@@ -14,7 +14,7 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { commitMutation, assertPrivatePathSafe, settings } from './settings.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, settings } from './settings.ts';
 import { inspectItem } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
@@ -115,7 +115,7 @@ export class Swarm {
   private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease) {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
-    if (local !== null) assertPrivatePathSafe(itemFootprint(local.item));
+    if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
     const item = (await this.client.get(id, { depth: 'full' })).item;
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
@@ -128,16 +128,16 @@ export class Swarm {
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
-    await lease.write(() => commitMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.claim(admitted.id, admitted.options)));
+    await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.claim(admitted.id, admitted.options)));
     let created = false;
     try {
       git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]);
-      await lease.write(() => commitMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item }, admitted => this.client.update(admitted.id, admitted.options)));
+      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item }, admitted => this.client.update(admitted.id, admitted.options)));
     } catch (error) {
       if (created) { git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]); git(this.repo, ['worktree', 'remove', path]); }
       if (branchExists(this.repo, branch)) git(this.repo, ['branch', '-D', branch]);
-      if (view.claim_state?.claimed === false) await lease.write(() => commitMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.release(admitted.id, admitted.options)));
+      if (view.claim_state?.claimed === false) await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.release(admitted.id, admitted.options)));
       throw error;
     }
     return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
@@ -189,7 +189,7 @@ export class Swarm {
         if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(id);
         const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
         if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
-        if (add.length > 0) await lease!.write(() => commitMutation({ id, options: { add, author: this.author }, item }, admitted => this.client.files(admitted.id, admitted.options)));
+        if (add.length > 0) await lease!.write(() => commitItemMutation({ id, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options)));
       }
       return { id, dry_run: !apply, add };
     };
@@ -304,7 +304,7 @@ export class Swarm {
         if (pathResult.status === 0) git(this.repo, ['config', '--local', '--unset', `swarm.lane.${lane.id}`]);
       }
       removed.push(lane.id);
-      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => commitMutation({ id: lane.id, options: { author: this.author }, item: current }, admitted => this.client.release(admitted.id, admitted.options))); released.push(lane.id); }
+      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.author }, item: current }, admitted => this.client.release(admitted.id, admitted.options))); released.push(lane.id); }
     }
     return { dry_run: dryRun, removed, released, cleanup, refused };
   }

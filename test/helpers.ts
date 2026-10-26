@@ -24,7 +24,7 @@ export async function fixture(t: TestContext) {
   const pmRoot = join(repo, '.agents/pm'); const client = new PmClient({ cwd: repo, pmRoot, author: 'swarm-test', noExtensions: false });
   await client.init('swarm-test', { defaults: true, agentGuidance: 'skip' });
   mkdirSync(join(pmRoot, 'extensions/pm-swarm'), { recursive: true });
-  writeFileSync(join(pmRoot, 'extensions/pm-swarm/manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers'] }));
+  writeFileSync(join(pmRoot, 'extensions/pm-swarm/manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers', 'hooks'] }));
   writeFileSync(join(pmRoot, 'extensions/pm-swarm/entry.js'), `export { default } from '${new URL('../index.ts', import.meta.url).href}';\n`);
   appendFileSync(join(repo, '.gitignore'), '\n.agents/pm/extensions/\n');
   const swarm = new Swarm(repo, pmRoot, client, 'swarm-test');

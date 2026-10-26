@@ -88,11 +88,15 @@ Refusal tests cover every registered mutator. Cold SDK reads can still create
 derived caches; see the documented SDK read-effect limit and the
 [per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
 
-Mutation payloads also pass a shared admission helper at each SDK write sink,
+Mutation payloads pass admission at each SDK write sink,
 including derived Git links, freshly locked settings, peer context and linked
 evidence. Percent decoding preserves valid Unicode sequences beside malformed
 bytes. Configured and resolved HOME/USERPROFILE spellings use the same
-canonicalization as candidate text; see [privacy admission](docs/privacy-admission.md).
+canonicalization as candidate text. POSIX and Windows normalization resolve dot
+and dot-dot segments with directory-boundary matching. A native SDK transactional
+hook validates each complete proposed item document under its writer lock,
+including preserved fields, links, comments and body. Typed refusals name the
+field to repair. See [privacy admission](docs/privacy-admission.md).
 
 ## Without git
 

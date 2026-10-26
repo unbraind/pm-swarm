@@ -52,7 +52,9 @@ function writeInventory(): string[] {
           while (index >= 0 && parents[index].type !== 'ArrowFunctionExpression') index--;
           assert.ok(index >= 0, `${file}:${method}: missing admission callback`);
           const callback = parents[index]; const wrapper = parents[index - 1];
-          assert.ok(wrapper.type === 'CallExpression' && wrapper.callee?.name === 'commitMutation', `${file}:${method}: unguarded SDK writer`);
+          const itemWriter = /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run'].includes(method);
+          assert.ok(wrapper.type === 'CallExpression' && wrapper.callee?.name === (itemWriter ? 'commitItemMutation' : 'commitMutation'), `${file}:${method}: unguarded SDK writer`);
+          if (itemWriter) assert.match(text(wrapper.arguments?.[0]), /\bitem(?:\s*[:,}])/, `${file}:${method}: missing full snapshot`);
           assert.equal(callback.params?.[0]?.name, 'admitted');
           assert.ok(node.arguments?.some(argument => /\badmitted\b/.test(text(argument))), `${file}:${method}: writer ignored the admitted payload`);
         }

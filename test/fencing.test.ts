@@ -116,7 +116,7 @@ test('lock retries wait through real SDK contention and never retry unrelated or
 
 test('new registered commands parse tokens and report actionable native errors without git', async t => {
   const f = await sharedFixture(t); const id = await f.item(['src']);
-  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   /** Dispatch registered handlers against the real fixture SDK. */
   const run = async (verb: string, args: string[] = [], options: Record<string, unknown> = {}) => (await harness.runCommand({ command: `swarm ${verb}`, pmRoot: f.pmRoot, args, options, global: { author: 'shared-test' } })).result;
   await run('start', [id]); await run('heartbeat'); await run('heartbeat', [id], { token: '1' });
