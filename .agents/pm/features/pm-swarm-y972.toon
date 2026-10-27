@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T06:27:07.457Z"
+updated_at: "2026-10-27T06:41:44.170Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[121]{created_at,author,text}:
+comments[123]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -134,6 +134,8 @@ comments[121]{created_at,author,text}:
   "2026-10-27T06:20:18.229Z",codex-agent,"Final CI correction closes native acquisition boundaries without weakening retained tests. General rules: native commit ownership requires the exact history version, and all fresh-document admission must complete before liveness or Git effects. A legacy existing assignment can add claim_principal during claim; cleanup now records the real onWrite version independently of previous_assignee. Native no-op claims skip SDK hooks, so start re-reads and admits the entire fresh document inside lease.write before heartbeat publication. Independent peer claims with private title, body or files preserve exact peer item/history and runtime bytes. An update plus restore to identical content is rejected by the locked history-head check. Superseded cleanup retains StaleFenceError; final receipts check their generation; dirty peer worktrees retain their attached branches; successful acquisition performs no fallible empty-directory cleanup after releasing its scope. Focused native/fence/start run: 63/63; identical-document history race: 1/1. Origin/main release-approval changes merged with both README sections and changelog entries preserved; no PM history conflicts."
   "2026-10-27T06:20:21.408Z",codex-agent,"Behavioral revert proof extension: eight isolated negative probes all exited 1, sources restored byte-for-byte after each. Superseded fence transport: 0/2; final generation check including void acquisition: 0/2; attached dirty-worktree branch ownership: 0/1; native blank-assignee acquisition cleanup: 0/2; post-success directory cleanup: 0/1; legacy existing-claim native history version: 0/1; fresh no-op admission before liveness: 0/4; exact native history-head admission after peer update/restore: 0/1. Together with the previously recorded sixteen probes: 24 probes, 44 expected failures across 50 results (six passing controls). Commands and boundaries are documented in docs/journal-and-acquisition-verification.md. Every negative result was a behavioral assertion against real SDK persistence, native history, Git resources or heartbeat bytes."
   "2026-10-27T06:27:05.414Z",codex-agent,"Final focused verification after merging origin/main: linked integration command 21 passes 127/127, zero failures, skipped, cancelled or todo results (203597 ms native runner). A test-only helper extraction was followed by the complete admission race file, 5/5. npm run typecheck, npm run lint, npm run duplication (0/11937 lines, 115 sources, zero clones), npm run docstring (161 declarations, 36 files), and npm run identity:check all pass. No thresholds or existing assertions changed. Local strict health reports only extension_host_pm_cli_version_skew for an ignored pm-github installation (pinned host 2026.10.23 versus local extension 2026.10.26); the pin is unchanged and fresh CI strict health is the authoritative release check. The earlier failing CI and superseded cancellation are not acceptance evidence. Metadata will now be frozen and the claim released before final-head CI; exact npm/Bun run URLs and measured counts will be recorded in the PR body and final report without creating an untested metadata-only head. Atomic-close remains explicitly closed/released, while the main item stays in_progress. Native settings registration and typed journal inspection remain blocked follow-ups, not unfinished atomic-close acceptance."
+  "2026-10-27T06:40:02.697Z",codex-agent,"Exact-head CI 40461242466 passed fresh strict PM health on Node 22 and 26, then failed before tests in identity verification. Reproduction against the fetched synthetic PR merge reports ENOBUFS at the default 1 MiB child-process output ceiling; ordinary branch commits pass. General rule: policy verification must consume the complete Git patch, including large accumulated PM history, rather than depending on a fixed subprocess pipe buffer. Git output now uses an owned temporary descriptor and complete-file read, with descriptor and directory cleanup in finally blocks. No audit range, identity rule, privacy pattern, threshold or existing assertion is weakened. The adversarial large-patch test admits a public patch larger than 2 MiB and detects a forbidden path at its tail. The claim is reacquired for this CI correction; the failed run is not release evidence."
+  "2026-10-27T06:41:41.231Z",codex-agent,"Large-patch gate correction verified: pinned linked command 22 passes 6/6; final direct identity regression command also passes 6/6. The actual fetched synthetic PR merge audits with zero violations using the corrected checker. Behavioral revert proof: restore only scripts/identity-gate.ts to the prior implementation and run node --test --test-concurrency=1 --test-name-pattern=\"complete large patches\" test/tooling.test.ts: exit 1, 0/1 pass, ENOBUFS; restore exact fixed source and rerun green. Aggregate current review evidence: 25 isolated revert probes, 45 expected failures in 51 results, with six passing controls. Final types, lint, zero duplication (0/11962 lines, 115 sources), identity and docstrings (162 declarations, 36 files) pass. Existing 127/127 acquisition integration remains green; only the identity audit and its adversarial test changed afterward. The claim is released again and metadata frozen before the replacement exact-head npm/Bun CI. Final accepted CI URL and measured counts belong in the PR body and final report; failed run 40461242466 is not acceptance evidence."
 files[81]{path,scope}:
   index.ts,project
   manifest.json,project
@@ -216,7 +218,7 @@ files[81]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[21]:
+tests[22]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -400,6 +402,16 @@ tests[21]:
     provenance:
       author: codex-agent
       created_at: "2026-10-27T06:20:57.212Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=2 --test-name-pattern=identity test/tooling.test.ts
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T06:40:09.691Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[4]{path,scope}:

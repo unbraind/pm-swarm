@@ -43,8 +43,8 @@ runs even if worktree removal fails.
 
 ## Behavioral revert proofs
 
-All 24 negative probes exited 1; production sources were restored immediately.
-The probes produced 44 expected failures and six passing controls across 50 results.
+All 25 negative probes exited 1; production sources were restored immediately.
+The probes produced 45 expected failures and six passing controls across 51 results.
 
 | Reverted behavior | Exact probe | Result |
 | --- | --- | --- |
@@ -87,6 +87,7 @@ Final native and completion boundaries use the same test runner prefix:
 | Legacy migration commit version | `--test-name-pattern='legacy existing claim' test/legacy-claim-cleanup.test.ts` | 0/1 pass |
 | Fresh no-op admission before liveness | `--test-name-pattern='peer-owned native claim no-op' test/start-admission-race.test.ts` | 0/4 pass |
 | Locked native history head | `--test-name-pattern='different native history head' test/start-admission-race.test.ts` | 0/1 pass |
+| Complete large-patch identity audit | `--test-name-pattern='complete large patches' test/tooling.test.ts` | 0/1 pass; default subprocess buffer rejects a valid public patch |
 
 Positive source checks exercise real SDK trackers and Git, including seven start
 boundaries for each of `start`, `next` and `schedule`, three heartbeat boundaries
@@ -103,6 +104,15 @@ runner), including the release-approval tests merged from main. The earlier
 journal and acquisition run passed **126/126**. Typecheck, lint, zero duplication and all declarations across 36
 authored files pass. Source coverage of the new journal verifier is 100 in all
 four dimensions; complete package coverage remains a separate CI gate.
+
+The identity gate audits the complete synthetic PR merge, whose accumulated
+tracker changes can exceed the default subprocess pipe buffer. Owned temporary
+file output removes that ceiling without changing the audited commit range or
+identity/privacy policy. A public patch larger than 2 MiB passes; a forbidden
+path at its tail still fails without disclosing the value. Descriptor and
+directory cleanup cover both successful and failed Git calls. The linked
+identity regressions pass **6/6**, and the actual synthetic merge audits with
+zero violations.
 
 Full release evidence comes from CI at the final pushed head, with at most two
 test workers and unchanged 100/100/100/100 source coverage thresholds. The PR and
