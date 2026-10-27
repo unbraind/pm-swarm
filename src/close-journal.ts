@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { getItemAt, readFileIfExists, readHistoryEntries, getHistoryPath, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument, WorkspaceTransactionJsonValue } from '@unbrained/pm-cli/sdk';
-import { documentFingerprint, SettingsRefusal, commitMutation } from './settings.ts';
+import { documentFingerprint, SettingsRefusal, commitMutation, assertMutationReceipt } from './settings.ts';
 import { historySnapshot } from './inspection.ts';
 
 /** Fixed domain steps; the transaction id also binds actor, item, fence and note. */
@@ -27,6 +27,10 @@ export interface CloseTrace { phase: number; snapshots: CloseSnapshot[]; journal
 /** Refuse uncertain recovery without exposing storage coordinates or caller-controlled messages. */
 export function closeConflict(detail = 'The item changed outside the recorded close transaction.'): never {
   throw new SettingsRefusal('swarm_document_changed', `${detail} Preserve its current document and inspect the SDK journal and history before retrying.`, 'document');
+}
+/** Share native receipt equality across every close preimage and write read-back. */
+export function assertCloseReceipt(actual: unknown, expected: unknown, detail = 'The item changed outside the recorded close transaction.'): void {
+  assertMutationReceipt(actual, expected, `${detail} Preserve its current document and inspect the SDK journal and history before retrying.`);
 }
 /** Distinguish journal objects from arrays and scalars without accepting prototypes as schema evidence. */
 function record(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }

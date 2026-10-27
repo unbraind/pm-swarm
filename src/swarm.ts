@@ -16,7 +16,7 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, assertMutationReceipt, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
 import { inspectItem, readItem, historySnapshot, mutationSnapshot } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
@@ -161,7 +161,8 @@ export class Swarm {
       let metadataClean = publication === undefined;
       if (publication !== undefined && receipt !== undefined) await clean(async () => {
         const current = await this.acquisitionSnapshot(String(item.id), claimVersion, receipt!.item, ownSuccessors);
-        for (const key of ['swarm_branch', 'swarm_base', 'swarm_base_ref']) if (current.document.metadata[key] !== publication![key]) throw new StaleFenceError('lane metadata');
+        const registration = (metadata: Record<string, unknown>) => Object.fromEntries(['swarm_branch', 'swarm_base', 'swarm_base_ref'].map(key => [key, metadata[key]]));
+        assertMutationReceipt(registration(current.document.metadata), registration(publication!), 'A peer changed lane metadata; preserve its claim and Git resources before retrying.');
         const keys = ['swarm_branch', 'swarm_base', 'swarm_base_ref'];
         await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => item[key] !== undefined).map(key => `${key}=${String(item[key])}`), unset: keys.filter(key => item[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options), { generation: { token: receipt!.item.swarm_token }, history: current.historyHead, onCommitted: (_before, after) => { ownSuccessors.set(current.version + 1, { ...after.metadata, body: after.body }); } }), { announce: false });
         metadataClean = true;
@@ -243,7 +244,7 @@ export class Swarm {
       mutate: async document => {
         await assertItemHistoryHead(this.pmRoot, admitted.id, admitted.history);
         assertClaimGeneration(document.metadata.swarm_token, admitted.token);
-        if (documentFingerprint({ ...document.metadata, body: document.body }) !== documentFingerprint(admitted.item)) throw new SettingsRefusal('swarm_document_changed', 'The item changed before Git cleanup; preserve peer state and refresh its document before retrying.', 'document');
+        assertMutationReceipt(documentFingerprint({ ...document.metadata, body: document.body }), documentFingerprint(admitted.item), 'The item changed before Git cleanup; preserve peer state and refresh its document before retrying.');
         lease.assertOwned(); await cleanup(); return { changedFields: [] };
       },
     }), { generation: { token: item.swarm_token }, history }));

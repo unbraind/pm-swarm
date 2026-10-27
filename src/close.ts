@@ -3,7 +3,7 @@ import type { CommitWorkspaceTransactionOptions, WorkspaceTransactionStep } from
 import { inspectItem, readItem, mutationSnapshot } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, assertClaimGeneration, assertItemHistoryHead } from './settings.ts';
-import { CLOSE_STEPS, closeCheckpoint, closeConflict, closeSnapshot, closeStepResult, closeTrace, closeWarnings, closeWarningsUnavailable, closeEffects, closeDocumentHash } from './close-journal.ts';
+import { CLOSE_STEPS, closeCheckpoint, closeSnapshot, closeStepResult, closeTrace, closeWarnings, closeWarningsUnavailable, closeEffects, closeDocumentHash, assertCloseReceipt } from './close-journal.ts';
 import { requirePrimaryOnlyCompensation, CompensationPartialRefusal } from './close-compensation.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import type { CloseEffect, CloseSnapshot } from './close-journal.ts';
@@ -70,7 +70,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
       async prepareCompensation() {
         const state = await trace(); const snapshot = await closeSnapshot(engine.pmRoot, canonicalId);
         const expected = index === 0 ? initialExpected : { ...state.snapshots[1].document.metadata, body: state.snapshots[1].document.body };
-        if (documentFingerprint({ ...snapshot.document.metadata, body: snapshot.document.body }) !== documentFingerprint(expected)) closeConflict();
+        assertCloseReceipt(documentFingerprint({ ...snapshot.document.metadata, body: snapshot.document.body }), documentFingerprint(expected));
         assertPrivatePathSafe(snapshot.document, 'document');
         const domain = [...relatedSnapshots].map(([id, value]) => {
           const point = { version: value.version, hash: value.hash, historyHead: value.historyHead };
@@ -92,7 +92,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
           } finally {
             if (committedHash !== undefined) {
               const written = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
-              if (written.hash !== committedHash) closeConflict('The metadata read-back does not match its admitted write.');
+              assertCloseReceipt(written.hash, committedHash, 'The metadata read-back does not match its admitted write.');
               expectedHistory = written.historyHead;
             }
           }
@@ -107,12 +107,12 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
               if (id === canonicalId) continue;
               const before = relatedSnapshots.get(id)!;
               const after = await closeSnapshot(engine.pmRoot, id, before.version + 1);
-              if (after.hash !== hash) closeConflict('The native dependent read-back does not match its admitted write.');
+              assertCloseReceipt(after.hash, hash, 'The native dependent read-back does not match its admitted write.');
               collected.push({ id, before: { version: before.version, hash: before.hash, historyHead: before.historyHead }, after: { version: after.version, hash: after.hash, historyHead: after.historyHead } });
             }
             if (written.has(canonicalId)) {
               const primary = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
-              if (primary.hash !== written.get(canonicalId)) closeConflict('The native close read-back does not match its admitted write.');
+              assertCloseReceipt(primary.hash, written.get(canonicalId), 'The native close read-back does not match its admitted write.');
               expectedHistory = primary.historyHead;
             }
             observedEffects = collected;

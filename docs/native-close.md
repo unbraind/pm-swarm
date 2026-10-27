@@ -8,7 +8,9 @@ actual native versions; it does not predict a close successor.
 Forward admission captures each native history head before reading the complete
 current item, and rechecks that head under the native item lock. Full resulting
 documents pass privacy admission. Historical prefixes use public SDK history APIs;
-forward admission does not require replaying legacy documents. A peer's history
+forward admission does not require replaying legacy documents. Native preimage,
+read-back and cleanup receipt comparisons share the SDK `stableValueEquals`-based
+admission check; mismatches report remedies without echoing document content. A peer's history
 advance produces `swarm_superseded` and preserves its claim and Git resources.
 
 ## Automatic compensation scope

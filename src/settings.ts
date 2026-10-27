@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { getSettingsPath, readFileIfExists, PmClient, getHistoryPath, readHistorySnapshot, hashHistoryStream, resolveHistoryTarget } from '@unbrained/pm-cli/sdk';
+import { getSettingsPath, readFileIfExists, PmClient, stableValueEquals, getHistoryPath, readHistorySnapshot, hashHistoryStream, resolveHistoryTarget } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import type { BeforeMutationHook, ExtensionCommandSdk, OnWriteHook } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
@@ -77,6 +77,10 @@ export function documentFingerprint(item: Record<string, unknown>): string {
   const metadata = Object.fromEntries(Object.entries(item).filter(([key, value]) => !['body', 'notes_count', 'tests_count', 'collection_counts'].includes(key)
     && !(collections.includes(key) && Array.isArray(value) && value.length === 0)));
   return JSON.stringify({ metadata, body: item.body ?? '' }, (_key, value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
+}
+/** Compare complete native receipts through the SDK and refuse without echoing their content. */
+export function assertMutationReceipt(actual: unknown, expected: unknown, remedy: string): void {
+  if (!stableValueEquals(actual, expected)) throw new SettingsRefusal('swarm_document_changed', remedy, 'document');
 }
 /** A changed fencing generation belongs to a peer, including a same-author replacement. */
 export function assertClaimGeneration(current: unknown, expected: unknown): void {

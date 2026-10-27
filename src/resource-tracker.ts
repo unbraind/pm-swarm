@@ -1,4 +1,4 @@
-import { assertPrivatePathSafe, commitItemMutation, SettingsRefusal } from './settings.ts';
+import { assertPrivatePathSafe, commitItemMutation, assertMutationReceipt } from './settings.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
 import { mutationSnapshot, inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
@@ -48,7 +48,7 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
         lease.onFailure(async () => {
           if (publication === undefined || next.owner !== author || next.token === currentRecord.token) return;
           const current = await engine.acquisitionSnapshot(String(item.id), initial!.version + 1, publication);
-          if (current.document.metadata.swarm_token !== next.token || current.document.metadata.swarm_resource_expires_at !== next.expires_at) throw new SettingsRefusal('swarm_document_changed', 'A peer changed the acquired reservation; preserve its state and inspect resource history before retrying.');
+          assertMutationReceipt({ token: current.document.metadata.swarm_token, expires: current.document.metadata.swarm_resource_expires_at }, { token: next.token, expires: next.expires_at }, 'A peer changed the acquired reservation; preserve its state and inspect resource history before retrying.');
           await lease.write(() => commitItemMutation({ id: next.id, item: { ...current.document.metadata, body: current.document.body }, options: { author, unset: ['assignee', 'swarm_resource_expires_at'], message: 'Release failed reservation acquisition' } }, admitted => engine.client.update(admitted.id, admitted.options), { generation: { token: next.token }, history: current.historyHead }), { announce: false });
         });
         await commitItemMutation({ id: next.id, options: {
