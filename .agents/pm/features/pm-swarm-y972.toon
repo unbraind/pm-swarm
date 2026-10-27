@@ -7,14 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T04:14:22.565Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-27T04:40:52.137Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[115]{created_at,author,text}:
+comments[117]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -130,7 +128,9 @@ comments[115]{created_at,author,text}:
   "2026-10-27T04:06:53.485Z",codex-agent,"The broader cleanup audit also covers shared-tracker claim acquisition and resource reservations, including post-commit liveness failures. Runtime temporary creation is exclusive and cleanup removes only owned files; nested leases release after rollback and the operation pin releases last. Typed Git cleanup conflicts now retain their code and remedy through the host handler. The SDK exports native Plan completion semantics, which the journal verifier reuses. Journal-inspection API absence is already tracked upstream as pm-cli#1597; public readFileIfExists reads the documented SDK journal location, while the SDK owns every journal write and state transition. Latest public CLI is 2026.10.26; dependency pin remains 2026.10.23."
   "2026-10-27T04:10:33.705Z",codex-agent,"Additional behavioral revert proofs close audited instances of the acquisition rule. Reverting only laneOperation typed-error preservation and running node --test --test-concurrency=1 --test-name-pattern=\"replaced Git configuration\" test/start-peer-cleanup.test.ts fails 0/1. Reverting only shared claimLane and running --test-name-pattern=\"shared .* releases only\" test/claim-lifecycle.test.ts fails 0/3. Reverting trackerResourceBackend and running test/reservation-cleanup.test.ts fails 0/2. Reverting cleanup-generation checks and running --test-name-pattern=\"cleanup writes retain generation\" test/claim-lifecycle.test.ts fails 0/1. Reverting only native Plan completion predicate and running --test-name-pattern=\"SDK Plan completion\" test/close-journal-adversarial.test.ts fails 0/1. Each command uses node --test --test-concurrency=1, exits 1, and production bytes are restored. Positive reservation/lifecycle tests pass 8/8. Pinned pm linked integration passes 110/110, exit 0, including the retained 36 close/crash tests; tracking_disabled is reported by project policy. Final sink inventory expands to 23 sites and 115 source-admission cases."
   "2026-10-27T04:12:49.586Z",codex-agent,"The host handler now projects worktree receipts using the repository already validated before acquisition, with no fallible post-acquisition Git rediscovery. Restoring only the old runCommand and running node --test --test-concurrency=1 --test-name-pattern=\"receipt projection performs\" test/start-peer-cleanup.test.ts exits 1, 0/1 pass because that late Git read fails after ownership commits. Fix restored; peer/host suite passes 4/4. The supplemental pinned pm-linked reservation/lifecycle run passes 8/8, exit 0; the original linked integration run passes 110/110. All eleven negative probes and their exact commands/counts are documented in docs/journal-and-acquisition-verification.md. Full release gates will run in CI with at most two workers; no local full suite is started."
-files[77]{path,scope}:
+  "2026-10-27T04:32:57.278Z",codex-agent,"Native-boundary audit: recordItemCommit now retains the exact admitted onWrite receipt before an SDK return can be lost. Git/shared claims and reservations release acquired ownership even when a real native write succeeds then its return throws. SDK-journaled close delegates native failures to compensation without a swarm_partial_commit path, including lost metadata/close/restore returns. Exclusive runtime open retains file ownership before writing, so a failure after the real write removes its temporary. Additional revert probes: remove only onWrite receipt delivery, node --test --test-concurrency=1 --test-name-pattern=\"onWrite receipt|shared and resource acquisitions\" test/acquisition-receipts.test.ts fails 0/3; remove nested journal failure mode, --test-name-pattern=\"SDK-journaled close compensates\" on that file fails 0/1; remove typed late-conflict preservation, --test-name-pattern=\"late receipt cleanup\" test/start-peer-cleanup.test.ts fails 0/1; remove stable-history comparison, --test-name-pattern=\"native history snapshot\" test/close-journal-adversarial.test.ts fails 0/1 after a real independent-process append; revert only exclusive-open publication, --test-name-pattern=\"runtime cleanup owns the file immediately\" test/privacy-lease.test.ts fails 0/1 with a real orphan. Each uses node --test --test-concurrency=1, exits 1 and is restored exactly. All sixteen negative probes produce 30 expected failures across 36 results, with six passing controls. Positive native receipt tests pass; the journal verifier measures 100/100/100/100 in targeted coverage. Full npm/Bun CI remains queued; no pending run is counted as passing."
+  "2026-10-27T04:40:48.726Z",codex-agent,"Final source candidate: pinned pm test --run --only-last --progress passes 126/126, exit 0, no failures/skips/cancellations/todo, 264287 ms including runner overhead. Typecheck, lint, zero duplication (0/11406 lines, 111 sources), all 161 declarations in 36 authored files, and the journal verifier targeted 100/100/100/100 pass. Sixteen exact behavioral revert probes are restored and documented. The code phase is complete; tracker state is frozen before the final full CI gate so its head includes evidence and claim release. Main stays in_progress. Atomic-close is closed only under the explicit orchestrator authorization; native-settings and typed-journal adoption remain blocked follow-ups. Full npm/Bun counts and immutable run URLs will be retained in ready PR 24 and the final report; no queued, superseded or failed run is acceptance evidence."
+files[78]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -155,6 +155,7 @@ files[77]{path,scope}:
   src/swarm.ts,project
   src/test-runner.ts,project
   src/watch.ts,project
+  test/acquisition-receipts.test.ts,project
   test/claim-lifecycle.test.ts,project
   test/close-journal-adversarial.test.ts,project
   test/close-journal-ownership.test.ts,project
@@ -208,7 +209,7 @@ files[77]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[19]:
+tests[20]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -372,6 +373,16 @@ tests[19]:
     provenance:
       author: codex-agent
       created_at: "2026-10-27T04:10:36.017Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=2 test/start-cleanup.test.ts test/start-peer-cleanup.test.ts test/claim-lifecycle.test.ts test/privacy-lease.test.ts test/privacy-sinks.test.ts test/close-journal-ownership.test.ts test/close-journal-adversarial.test.ts test/close-transaction.test.ts test/reservation-cleanup.test.ts test/acquisition-receipts.test.ts
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T04:33:00.403Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[4]{path,scope}:

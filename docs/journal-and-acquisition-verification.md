@@ -16,8 +16,8 @@ writes a journal or implements a second coordinator. Native settings registratio
 remains split into [pm-swarm-native-settings](../.agents/pm/issues/pm-swarm-native-settings.toon),
 blocked on [pm-cli#1580](https://github.com/unbraind/pm-cli/issues/1580).
 
-Git start retains the actual SDK claim receipt before any post-write liveness
-publication. Its cleanup includes the following SDK read, branch CAS, worktree,
+Git start retains the actual SDK `onWrite` commit receipt before a native
+operation can lose its return and before any post-write liveness publication. Its cleanup includes the following SDK read, branch CAS, worktree,
 Git configuration, item publication and receipt. Cleanup remains registered until
 outer receipt admission and final heartbeat succeed. Shared starts and newly
 acquired resource reservations follow the same rule. Every independent owned
@@ -26,14 +26,14 @@ including same-author ABA; full-document CAS preserves peer content edits.
 Cleanup does not announce liveness and still checks its pin generation when a
 renewal failed. Nested locks release before the tracker pin.
 
-Runtime temporary files use exclusive creation; failed publication removes only
+Runtime temporary files retain ownership immediately on exclusive open; failed publication removes only
 an owned temporary. Request cleanup is inside the pin cleanup scope. Verification
 worktree cleanup also encloses worktree creation, and temporary directory cleanup
 runs even if worktree removal fails.
 
 ## Behavioral revert proofs
 
-All eleven negative probes exited 1; production sources were restored immediately.
+All sixteen negative probes exited 1; production sources were restored immediately.
 
 | Reverted behavior | Exact probe | Result |
 | --- | --- | --- |
@@ -54,6 +54,16 @@ Additional probes use the same `node --test --test-concurrency=1` prefix:
 | SDK Plan completion predicate | `--test-name-pattern='SDK Plan completion' test/close-journal-adversarial.test.ts` | 0/1 pass |
 | No Git lookup after acquisition | `--test-name-pattern='receipt projection performs' test/start-peer-cleanup.test.ts` | 0/1 pass |
 
+Native-boundary probes use the same test runner prefix:
+
+| Reverted behavior | Probe arguments | Result |
+| --- | --- | --- |
+| Native `onWrite` acquisition receipt | `--test-name-pattern='onWrite receipt\|shared and resource acquisitions' test/acquisition-receipts.test.ts` | 0/3 pass; a lost return retains claims or lane metadata |
+| Journal-owned native failure handling | `--test-name-pattern='SDK-journaled close compensates' test/acquisition-receipts.test.ts` | 0/1 pass; compensated close incorrectly returns a partial-commit refusal |
+| Typed late cleanup conflicts | `--test-name-pattern='late receipt cleanup' test/start-peer-cleanup.test.ts` | 0/1 pass |
+| Stable native history reads | `--test-name-pattern='native history snapshot' test/close-journal-adversarial.test.ts` | 0/1 pass; a real independent peer append goes unnoticed |
+| Immediate temporary-file ownership | `--test-name-pattern='runtime cleanup owns the file immediately' test/privacy-lease.test.ts` | 0/1 pass; failure after the real exclusive write leaves an orphan |
+
 Positive source checks exercise real SDK trackers and Git, including seven start
 boundaries for each of `start`, `next` and `schedule`, three heartbeat boundaries
 per command, retained pre-existing claims, peer ABA and fresh peer-content cleanup.
@@ -62,6 +72,12 @@ foreign step data, forged hints and unrelated same-author mutations refuse witho
 item/history changes. Existing seven forward and four compensation crash
 boundaries remain covered. Packed npm and Bun consumers independently repeat the
 copied-message ownership proof in their installed module graph.
+
+The final pinned-pm linked integration command passes **126/126** with zero
+failures, skips, cancellations or todo results (264287 ms including runner
+overhead). Typecheck, lint, zero duplication and all 161 declarations across 36
+authored files pass. Source coverage of the new journal verifier is 100 in all
+four dimensions; complete package coverage remains a separate CI gate.
 
 Full release evidence comes from CI at the final pushed head, with at most two
 test workers and unchanged 100/100/100/100 source coverage thresholds. The PR and

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { getSettingsPath, readFileIfExists, PmClient } from '@unbrained/pm-cli/sdk';
+import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import type { BeforeMutationHook, ExtensionCommandSdk, OnWriteHook } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
 import { retryLock } from './lease.ts';
@@ -40,7 +41,7 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
 /** One admitted document and its verified native successors travel through the host commit. */
-interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; beforeWrite?: () => Promise<void> }
+interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -68,11 +69,11 @@ export function documentFingerprint(item: Record<string, unknown>): string {
   return JSON.stringify({ metadata, body: item.body ?? '' }, (_key, value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
 }
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; beforeWrite?: () => Promise<void> } = {}): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void } = {}): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   assertSdkInstance();
-  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0, beforeWrite: options.beforeWrite };
+  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
     await checkpoint?.('admitted');
@@ -112,6 +113,7 @@ export const recordItemCommit: OnWriteHook = context => {
   const after = documentFingerprint({ ...context.after.metadata, body: context.after.body });
   if (before !== scope.expected || after !== scope.pending) return;
   scope.expected = after; scope.pending = undefined; scope.committed++;
+  scope.onCommitted?.(context.before, context.after);
 };
 /** Admit the complete prospective mutation at its sink before invoking its sole writer.
  * Callbacks consume the admitted payload rather than recapturing uninspected data.

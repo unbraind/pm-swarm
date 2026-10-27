@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { WorkspaceTransactionInterruptedError } from '@unbrained/pm-cli/sdk';
+import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { WorkspaceTransactionInterruptedError, getHistoryPath } from '@unbrained/pm-cli/sdk';
 import { closeCheckpoint, closeTrace } from '../src/close-journal.ts';
 import { historySnapshot } from '../src/inspection.ts';
 import { SettingsRefusal } from '../src/settings.ts';
@@ -84,4 +86,25 @@ test('journal recovery follows SDK Plan completion semantics with and without co
     const item = (await f.client.get(id)).item;
     assert.equal(item.status, 'closed'); assert.equal(item.plan_mode, completedSteps ? 'completed' : 'draft');
   }
+});
+
+test('close refuses empty notes and malformed stored generations without changing tracker bytes', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); const claim = await f.shared.start(id);
+  const before = durableSnapshot(f.pmRoot);
+  await assert.rejects(f.shared.close(id, '  ', claim.token), /nonempty/); assert.equal(durableSnapshot(f.pmRoot), before);
+  await f.client.update(id, { field: ['swarm_token=malformed'] }); const damaged = durableSnapshot(f.pmRoot);
+  await assert.rejects(f.shared.close(id, 'Public', claim.token), /malformed swarm_token/); assert.equal(durableSnapshot(f.pmRoot), damaged);
+});
+
+test('native history snapshot refuses a peer append between its certified reads', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); let injected = false;
+  const path = getHistoryPath(f.pmRoot, id); const original = fs.readFile;
+  const observation = t.mock.method(fs, 'readFile', new Proxy(original, { async apply(target, receiver, args: unknown[]) {
+    const bytes: unknown = await Reflect.apply(target, receiver, args);
+    if (!injected && String(args[0]) === path) { injected = true; f.run('update', id, '--title', 'Public history peer edit'); }
+    return bytes;
+  } })); syncBuiltinESMExports();
+  try { await assert.rejects(historySnapshot(f.pmRoot, id), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed'); }
+  finally { observation.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(injected, true); assert.equal((await f.client.get(id)).item.title, 'Public history peer edit');
 });

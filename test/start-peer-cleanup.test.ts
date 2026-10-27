@@ -2,12 +2,16 @@ import assert from 'node:assert/strict';
 import childProcess from 'node:child_process';
 import { syncBuiltinESMExports } from 'node:module';
 import { test } from 'node:test';
+import { failRename } from './rename-faults.ts';
 import { swarmHost } from './settings-helpers.ts';
 import { isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import { withStartTransitionObserver } from '../src/swarm.ts';
 import { fixture } from './helpers.ts';
 import { fixtureGit as git } from './git-helpers.ts';
 import { branchExists } from '../src/git.ts';
+
+/** Both direct and late cleanup conflicts must survive the native host transport. */
+function typedCleanupConflict(error: unknown): boolean { return isPmCliExpectedError(error) && error.exitCode === 2 && error.context?.code === 'swarm_document_changed'; }
 
 test('branch creation refuses a competing ref without deleting it or retaining the new claim', async t => {
   const f = await fixture(t); const id = await f.item(); f.save(); const branch = `swarm/${id}`;
@@ -24,7 +28,7 @@ test('a replaced Git configuration survives cleanup while other owned resources 
     if (transition === 'configured') {
       git(f.repo, ['config', '--local', `swarm.lane.${id}`, 'peer-lane']); throw new Error('Fail after peer replaced configuration');
     }
-  }, () => host.runCommand({ command: 'swarm start', args: [id], pmRoot: f.pmRoot, global: { author: 'swarm-test' } })), error => isPmCliExpectedError(error) && error.exitCode === 2 && error.context?.code === 'swarm_document_changed');
+  }, () => host.runCommand({ command: 'swarm start', args: [id], pmRoot: f.pmRoot, global: { author: 'swarm-test' } })), typedCleanupConflict);
   assert.equal(git(f.repo, ['config', '--local', '--get', `swarm.lane.${id}`]), 'peer-lane');
   assert.equal(branchExists(f.repo, `swarm/${id}`), false); assert.equal((await f.client.get(id)).item.assignee, undefined);
 });
@@ -51,4 +55,16 @@ test('host receipt projection performs no new Git lookup after lane acquisition'
     const result = await withStartTransitionObserver(transition => { if (transition === 'receipt') acquired = true; }, () => host.runCommand({ command: 'swarm start', args: [id], pmRoot: f.pmRoot, global: { author: 'swarm-test' } }));
     assert.equal(typeof (result.result as { worktree: string }).worktree, 'string'); assert.equal(lateReads, 0);
   } finally { observation.mock.restore(); syncBuiltinESMExports(); }
+});
+
+test('late receipt cleanup preserves a peer replacement and transports its typed conflict', async t => {
+  const f = await fixture(t); const id = await f.item(); f.save(); const host = await swarmHost(); let failHeartbeat = false;
+  const restore = failRename(t, (_source, target) => failHeartbeat && target.includes('agent-'), 'Injected final heartbeat failure');
+  try {
+    await assert.rejects(withStartTransitionObserver(async transition => {
+      if (transition !== 'receipt') return;
+      await f.client.release(id); await f.client.claim(id, { author: 'peer' }); failHeartbeat = true;
+    }, () => host.runCommand({ command: 'swarm start', args: [id], pmRoot: f.pmRoot, global: { author: 'swarm-test' } })), typedCleanupConflict);
+  } finally { restore(); }
+  assert.equal((await f.client.get(id)).item.assignee, 'peer'); assert.equal(branchExists(f.repo, `swarm/${id}`), true);
 });

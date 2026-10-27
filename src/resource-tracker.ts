@@ -1,4 +1,4 @@
-import { assertPrivatePathSafe, commitItemMutation } from './settings.ts';
+import { assertPrivatePathSafe, commitItemMutation, SettingsRefusal } from './settings.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
 import { historySnapshot, inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
@@ -44,7 +44,7 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
         lease.onFailure(async () => {
           if (publication === undefined || next.owner !== author || next.token === currentRecord.token) return;
           const current = await engine.acquisitionSnapshot(String(item.id), initial.version + 1, publication);
-          if (current.document.metadata.swarm_token !== next.token || current.document.metadata.swarm_resource_expires_at !== next.expires_at) throw new ResourceRefusal('resource_stale_fence', 'A peer changed the acquired reservation; preserve its state and inspect resource history before retrying.');
+          if (current.document.metadata.swarm_token !== next.token || current.document.metadata.swarm_resource_expires_at !== next.expires_at) throw new SettingsRefusal('swarm_document_changed', 'A peer changed the acquired reservation; preserve its state and inspect resource history before retrying.');
           await lease.write(() => commitItemMutation({ id: next.id, item: { ...current.document.metadata, body: current.document.body }, options: { author, unset: ['assignee', 'swarm_resource_expires_at'], message: 'Release failed reservation acquisition' } }, admitted => engine.client.update(admitted.id, admitted.options)), { announce: false });
         });
         await commitItemMutation({ id: next.id, options: {
@@ -52,7 +52,7 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
           ...(next.owner === null ? { unset: ['assignee', 'swarm_resource_expires_at'] } : { assignee: next.owner }),
           field: [`swarm_token=${next.token}`, ...(next.expires_at === null ? [] : [`swarm_resource_expires_at=${next.expires_at}`])],
           comment: [next.note === undefined ? `Swarm resource generation ${next.token}: ${next.owner === null ? 'released' : 'reserved until ' + next.expires_at}` : `Swarm resource generation ${next.token}: ${next.note}`],
-        }, item }, async admitted => { const result = await engine.client.update(admitted.id, admitted.options); publication = result.item; return result; });
+        }, item }, async admitted => { const result = await engine.client.update(admitted.id, admitted.options); publication = result.item; return result; }, { onCommitted: (_before, after) => { publication = after.metadata; } });
         const { note: _note, ...record } = next; return record;
       }));
     },

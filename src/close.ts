@@ -59,15 +59,15 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         const checkpoint = closeCheckpoint(state.journal?.compensationData[step]);
         const before = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version);
         const document = { ...before.document.metadata, body: before.document.body };
-        if (index === 0) await lease.write(() => commitItemMutation({ id: canonicalId, item: document, options: { author: engine.author, message: 'Swarm close metadata', field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } }, admitted => engine.client.update(admitted.id, admitted.options), { beforeWrite: async () => { await trace(); } }));
-        else await lease.write(() => commitItemMutation({ id: canonicalId, item: document, note, options: { author: engine.author, message: 'Swarm close completion' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { beforeWrite: async () => { await trace(); } }));
+        if (index === 0) await lease.write(() => commitItemMutation({ id: canonicalId, item: document, options: { author: engine.author, message: 'Swarm close metadata', field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } }, admitted => engine.client.update(admitted.id, admitted.options), { transaction: true, beforeWrite: async () => { await trace(); } }));
+        else await lease.write(() => commitItemMutation({ id: canonicalId, item: document, note, options: { author: engine.author, message: 'Swarm close completion' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { transaction: true, beforeWrite: async () => { await trace(); } }));
         const after = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
         return closeStepResult(after);
       },
       async compensate(data) {
         const checkpoint = closeCheckpoint(data); const state = await trace();
         const current = state.snapshots.at(-1)!;
-        await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { beforeWrite: async () => { await trace(); } }));
+        await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, beforeWrite: async () => { await trace(); } }));
       },
     }));
     try {

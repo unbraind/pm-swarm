@@ -30,9 +30,14 @@ for(let retry=0;retry<3;retry++){
   assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8'),before);
   assert.equal((await client.get(id)).item.title,'Packed peer survives');
 }
-console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0}));
+const failedId=(await client.create({type:'Task',title:'Packed lost return'})).item.id;
+const update=client.update.bind(client);let lost=false;
+client.update=new Proxy(update,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);if(!lost){lost=true;throw new Error('Lost packed native return');}return result;}});
+try{await assert.rejects(shared.start(failedId),error=>error.code==='swarm_partial_commit');}finally{client.update=update;}
+assert.equal(lost,true);assert.equal((await client.get(failedId)).item.assignee,undefined);
+console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0 });
+  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1 });
 }

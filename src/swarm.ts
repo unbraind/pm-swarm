@@ -142,7 +142,7 @@ export class Swarm {
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
     const initial = await historySnapshot(this.pmRoot, String(item.id));
-    let receipt: ClaimResult | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
+    let receipt: Pick<ClaimResult, 'item' | 'previous_assignee' | 'skipped'> | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
     let branchOwned = false; let created = false; let configured = false;
     let cleaned = false;
     const cleanup = async () => {
@@ -179,7 +179,7 @@ export class Swarm {
       await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, async admitted => {
         receipt = await this.client.claim(admitted.id, admitted.options);
         claimed = { ...receipt.item, body: item.body ?? '' }; return receipt;
-      }));
+      }, { onCommitted: (before, after) => { receipt = { item: after.metadata, previous_assignee: before.metadata.assignee ?? null, skipped: false }; claimed = { ...after.metadata, body: after.body }; } }));
       await startTransition('claimed');
       claimed = (await readItem(this.client, id)).item;
       await startTransition('claim_read');
@@ -191,7 +191,7 @@ export class Swarm {
       await startTransition('configured');
       await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed! }, async admitted => {
         const published = await this.client.update(admitted.id, admitted.options); publication = { ...published.item, body: claimed!.body ?? '' }; return published;
-      }));
+      }, { onCommitted: (_before, after) => { publication = { ...after.metadata, body: after.body }; } }));
       await startTransition('published');
       const result = { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
       await startTransition('receipt');

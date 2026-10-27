@@ -13,6 +13,12 @@ import { unchanged, snapshot } from './privacy-snapshot.ts';
 /** A refused input is deliberately raised after real lease acquisition and optional renewals. */
 async function refused(): Promise<never> { await delay(15); throw new SettingsRefusal('swarm_input_invalid', 'Use valid fixture input.'); }
 
+/** A failed acquisition restores every tracker byte and leaves the next real operation usable. */
+async function recovered(pmRoot: string, before: string, injected: boolean): Promise<void> {
+  assert.equal(injected, true); assert.equal(snapshot(pmRoot), before);
+  assert.equal(await withSwarmLease(pmRoot, 'shared-test', async () => 'Recovered'), 'Recovered');
+}
+
 test('refused lease validation neither announces liveness nor changes cold or existing runtime', async t => {
   const f = await sharedFixture(t); const id = await f.item();
   await unchanged(f.pmRoot, () => withSwarmLease(f.pmRoot, 'shared-test', refused, { renewMs: 2 }), 'lease/cold-refusal');
@@ -28,8 +34,8 @@ test('refused lease validation neither announces liveness nor changes cold or ex
 
 /** Inject one real filesystem transition at the first request write, retaining all actual SDK behavior. */
 function observeRequest(t: TestContext, root: string, transition: (args: unknown[]) => void) {
-  let injected = false; let restored = false; const original = fs.writeFileSync;
-  const observation = t.mock.method(fs, 'writeFileSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+  let injected = false; let restored = false; const original = fs.openSync;
+  const observation = t.mock.method(fs, 'openSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
     if (!injected && String(args[0]).startsWith(join(root, 'request-'))) { injected = true; transition(args); }
     return Reflect.apply(target, receiver, args);
   } }));
@@ -100,8 +106,7 @@ test('a failure removing the request after pin acquisition still removes every o
   syncBuiltinESMExports();
   try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => 'unreachable'), /Injected post-pin/); }
   finally { observation.mock.restore(); syncBuiltinESMExports(); }
-  assert.equal(injected, true); assert.equal(snapshot(f.pmRoot), before);
-  assert.equal(await withSwarmLease(f.pmRoot, 'shared-test', async () => 'Recovered'), 'Recovered');
+  await recovered(f.pmRoot, before, injected);
 });
 
 test('a failed atomic runtime rename removes its owned temporary without announcing liveness', async t => {
@@ -119,9 +124,9 @@ test('a failed atomic runtime rename removes its owned temporary without announc
 
 test('runtime publication refuses a foreign temporary collision without truncating or deleting it', async t => {
   const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm'); let foreign = '';
-  const original = fs.writeFileSync;
-  const observation = t.mock.method(fs, 'writeFileSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
-    if (foreign === '' && String(args[0]).startsWith(join(root, 'request-'))) { foreign = String(args[0]); original(foreign, 'Foreign receipt'); }
+  const original = fs.openSync;
+  const observation = t.mock.method(fs, 'openSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    if (foreign === '' && String(args[0]).startsWith(join(root, 'request-'))) { foreign = String(args[0]); writeFileSync(foreign, 'Foreign receipt'); }
     return Reflect.apply(target, receiver, args);
   } }));
   syncBuiltinESMExports();
@@ -130,4 +135,23 @@ test('runtime publication refuses a foreign temporary collision without truncati
   assert.equal(readFileSync(foreign, 'utf8'), 'Foreign receipt');
   assert.deepEqual(readdirSync(root), [foreign.slice(root.length + 1)]);
   assert.equal(await withSwarmLease(f.pmRoot, 'shared-test', async () => 'Recovered'), 'Recovered');
+});
+
+test('runtime cleanup owns the file immediately after exclusive open even when writing loses its return', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm'); const before = snapshot(f.pmRoot);
+  let descriptor: number | undefined; let injected = false;
+  const opened = fs.openSync; const written = fs.writeFileSync;
+  const acquisition = t.mock.method(fs, 'openSync', new Proxy(opened, { apply(target, receiver, args: unknown[]) {
+    const result: number = Reflect.apply(target, receiver, args);
+    if (String(args[0]).startsWith(join(root, 'request-'))) descriptor = result;
+    return result;
+  } }));
+  const write = t.mock.method(fs, 'writeFileSync', new Proxy(written, { apply(target, receiver, args: unknown[]) {
+    const result: unknown = Reflect.apply(target, receiver, args);
+    if (!injected && (typeof args[0] === 'string' ? args[0].startsWith(join(root, 'request-')) : descriptor !== undefined && args[0] === descriptor)) { injected = true; throw new Error('Injected failure after exclusive runtime write'); }
+    return result;
+  } })); syncBuiltinESMExports();
+  try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => 'unreachable'), /Injected failure after exclusive/); }
+  finally { write.mock.restore(); acquisition.mock.restore(); syncBuiltinESMExports(); }
+  await recovered(f.pmRoot, before, injected);
 });
