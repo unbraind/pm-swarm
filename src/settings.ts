@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { getSettingsPath, readFileIfExists, PmClient } from '@unbrained/pm-cli/sdk';
+import { getSettingsPath, readFileIfExists, PmClient, getHistoryPath, readHistorySnapshot, hashHistoryStream } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import type { BeforeMutationHook, ExtensionCommandSdk, OnWriteHook } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
@@ -41,7 +41,7 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
 /** One admitted document and its verified native successors travel through the host commit. */
-interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
+interface ItemAdmissionScope { id: string; expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; history?: ItemHistoryHead; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -82,12 +82,26 @@ export function documentFingerprint(item: Record<string, unknown>): string {
 export function assertClaimGeneration(current: unknown, expected: unknown): void {
   if (current !== expected) throw new SettingsRefusal('swarm_superseded', 'A peer owns a different claim generation. Preserve its item and Git resources; refresh the current token before retrying.', 'swarm_token');
 }
+/** Append-only SDK revision: document hashes and fencing generations alone cannot distinguish ABA. */
+export interface ItemHistoryHead { length: number; hash: string }
+/** Read the native stream once through the SDK, retaining both its monotonic length and record identity. */
+export async function readItemHistoryHead(pmRoot: string, id: string): Promise<ItemHistoryHead> {
+  try {
+    const { entries } = await readHistorySnapshot(getHistoryPath(pmRoot, id), id);
+    return { length: entries.length, hash: hashHistoryStream(entries) };
+  } catch { throw new SettingsRefusal('swarm_superseded', 'Native item history cannot be verified. Preserve its claim and Git resources; inspect native history before retrying.', 'history'); }
+}
+/** Call only inside the native item writer lock, before any cleanup mutation or Git deletion. */
+export async function assertItemHistoryHead(pmRoot: string, id: string, expected: ItemHistoryHead): Promise<void> {
+  const current = await readItemHistoryHead(pmRoot, id);
+  if (current.length !== expected.length || current.hash !== expected.hash) throw new SettingsRefusal('swarm_superseded', 'Native item history advanced or changed after the checked snapshot. Preserve the peer claim and Git resources; refresh its history before retrying.', 'history');
+}
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void } = {}): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; generation?: { token: unknown }; history?: ItemHistoryHead; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void } = {}): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   assertSdkInstance();
-  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0, generation: options.generation, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
+  const scope: ItemAdmissionScope = { id: payload.id, expected: documentFingerprint(payload.item), committed: 0, generation: options.generation, history: options.history, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
     await checkpoint?.('admitted');
@@ -108,6 +122,7 @@ export const guardItemDocument: BeforeMutationHook = async context => {
   if (scope === undefined) return { allow: true };
   try {
     assertSdkInstance();
+    if (scope.history !== undefined) await assertItemHistoryHead(context.pm_root, scope.id, scope.history);
     if (scope.generation !== undefined) assertClaimGeneration(context.before?.metadata.swarm_token, scope.generation.token);
     assertPrivatePathSafe(context.after, 'document');
     if (context.before === null || documentFingerprint({ ...context.before.metadata, body: context.before.body }) !== scope.expected) throw new SettingsRefusal('swarm_document_changed', 'The item changed after admission; refresh its complete document, re-evaluate ownership and retry with the current receipt.', 'document');

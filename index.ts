@@ -43,3 +43,6 @@ export default defineExtension({ name: 'pm-swarm', version: '2026.10.15', descri
 export type { SettingsReceipt, SettingsMutationOptions, SettingsBoundary, SettingsRefusalCode } from './src/settings.ts';
 /** Project local operator coordinates and admit compact shared receipts through the same host boundary. */
 export { projectReceipt, admitReceipt, assertReceiptSafe } from './src/receipts.ts';
+
+/** Trusted request-local diagnostics for testing the handoff into native item writer locks. */
+export { ITEM_MUTATION_BOUNDARIES, withItemMutationObserver } from './src/settings.ts';

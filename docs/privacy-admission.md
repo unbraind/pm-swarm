@@ -512,3 +512,8 @@ bun run release:check
 Behavioral revert proofs and exact results are append-only comments on
 pm-swarm-y972. Earlier all-absolute-path expectations are superseded by this
 private-home scope; core ownership, recovery and field-domain checks remain.
+
+Cleanup and recovery also bind their checked document to the native history
+revision. The SDK re-reads that revision under its item lock before any write
+or Git deletion; a changed revision returns `swarm_superseded` without emitting
+foreign content. See [native-history-cas.md](native-history-cas.md).

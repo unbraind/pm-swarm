@@ -13,7 +13,8 @@ import { loseReturn } from './native-return-faults.ts';
 import { ITEM_MUTATION_BOUNDARIES, SettingsRefusal, withItemMutationObserver } from '../src/settings.ts';
 import { START_TRANSITIONS, withStartTransitionObserver } from '../src/swarm.ts';
 import { ResourceReservations, trackerResourceBackend } from '../index.ts';
-import { fixtureGit as git } from './git-helpers.ts';
+import { prepareTerminalHistoryLane } from './history-aba-helpers.ts';
+import { fixtureGit as git, snapshotGitResources as gitResources } from './git-helpers.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
 
 /** Native content/history are compared byte-for-byte, excluding only ignored SDK read caches. */
@@ -36,11 +37,6 @@ function advancedToken(base = 7n): string {
 
 /** Supersession has a stable SDK refusal and an explicit preservation remedy. */
 function superseded(error: unknown): boolean { return error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.remedy.includes('Preserve'); }
-
-/** Compare every Git resource a failed acquisition could otherwise remove. */
-function gitResources(repo: string): string[] {
-  return [['for-each-ref', '--format=%(refname) %(objectname)'], ['worktree', 'list', '--porcelain'], ['config', '--local', '--list']].map(args => git(repo, args));
-}
 
 /** A real lost return must preserve the exact independent peer successor. */
 async function preservesLostClaim(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, transition: () => Promise<unknown>): Promise<void> {
@@ -151,7 +147,7 @@ test('a peer document edit inside Git cleanup admission preserves the branch and
   await assert.rejects(withItemMutationObserver(async boundary => {
     if (!failed || edited || boundary !== 'before_commit') return;
     edited = true; await request.runInAsyncScope(() => f.client.update(id, { title: 'Public cleanup peer' }));
-  }, () => withStartTransitionObserver(step => { if (step === 'branch_created') { failed = true; throw new Error('Lost branch result'); } }, () => f.swarm.start(id))), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  }, () => withStartTransitionObserver(step => { if (step === 'branch_created') { failed = true; throw new Error('Lost branch result'); } }, () => f.swarm.start(id))), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
   const item = (await f.client.get(id)).item; assert.equal(item.title, 'Public cleanup peer'); assert.equal(item.assignee, undefined);
   assert.equal(git(f.repo, ['branch', '--list', `swarm/${id}`]).length > 0, true);
 });
@@ -237,8 +233,7 @@ for (const mode of ['Git', 'shared'] as const) test(`${mode} terminal cleanup re
   const engine = 'swarm' in f ? f.swarm : f.shared; const peer = generationPeer(f.client); t.after(peer.destroy);
   for (const boundary of ITEM_MUTATION_BOUNDARIES) await t.test(boundary, async () => {
     const id = await f.item([`src/reap-${boundary}.ts`]);
-    if ('swarm' in f) { f.save(); await f.swarm.start(id); } else await f.shared.start(id);
-    await f.client.update(id, { status: 'closed', message: 'Terminal cleanup fixture completed' }); await f.client.claim(id, { author: mode === 'Git' ? 'swarm-test' : 'shared-test', force: true });
+    await prepareTerminalHistoryLane(f, id);
     let injected = false; let bytes: string[] = []; let resources: string[] = [];
     await assert.rejects(withItemMutationObserver(async step => {
       if (injected || step !== boundary) return; injected = true; await peer.advance(id, advancedToken());

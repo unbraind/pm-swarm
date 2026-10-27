@@ -1,3 +1,4 @@
+import type { ItemHistoryHead } from './settings.ts';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { getItemAt, readFileIfExists, readHistoryEntries, getHistoryPath, readSettings, resolveRuntimeStatusRegistry, shouldCompletePlanOnClose, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
@@ -8,7 +9,7 @@ import { historySnapshot } from './inspection.ts';
 /** Fixed domain steps; the transaction id also binds actor, item, fence and note. */
 export const CLOSE_STEPS = ['metadata', 'close'] as const;
 /** One native history version bound to its complete canonical document. */
-export interface CloseSnapshot { version: number; hash: string; document: ItemDocument }
+export interface CloseSnapshot { version: number; hash: string; document: ItemDocument; historyHead: ItemHistoryHead }
 /** Journal-safe compensation receipt owned and persisted by the SDK coordinator. */
 export interface CloseCheckpoint { version: number; hash: string }
 /** Validated identity and semantic intent shared by preflight and locked checks. */
@@ -41,7 +42,7 @@ export function closeCheckpoint(value: unknown): CloseCheckpoint {
 /** Reconstruct a stable SDK history version; no timestamp is used as an ownership key. */
 export async function closeSnapshot(pmRoot: string, id: string, version?: number): Promise<CloseSnapshot> {
   const view = await historySnapshot(pmRoot, id, version);
-  return { version: view.version, hash: closeDocumentHash(view.document), document: view.document };
+  return { version: view.version, hash: closeDocumentHash(view.document), document: view.document, historyHead: view.historyHead };
 }
 /** Read only the coordinator's journal, after validating the exact deterministic identity. */
 async function closeJournal(pmRoot: string, author: string, intent: CloseIdentity): Promise<CloseJournal | undefined> {

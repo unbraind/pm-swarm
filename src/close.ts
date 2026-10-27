@@ -70,7 +70,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         if (latest.document.metadata.swarm_token !== initialExpected.swarm_token) assertClaimGeneration(latest.document.metadata.swarm_token, next);
         const state = await trace();
         const current = state.snapshots.at(-1)!;
-        await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, generation: { token: current.document.metadata.swarm_token }, beforeWrite: async () => { await trace(); } }));
+        await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, generation: { token: current.document.metadata.swarm_token }, history: current.historyHead, beforeWrite: async () => { await trace(); } }));
       },
     }));
     try {

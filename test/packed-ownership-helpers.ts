@@ -10,8 +10,8 @@ export function assertPackedCloseOwnership(runtime: string, repo: string, pmRoot
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { PmClient, getHistoryPath, getItemPath } from '@unbrained/pm-cli/sdk';
-import { SharedTracker, Swarm, ResourceReservations, trackerResourceBackend } from 'pm-swarm';
+import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt } from '@unbrained/pm-cli/sdk';
+import { SharedTracker, Swarm, ResourceReservations, trackerResourceBackend, withItemMutationObserver } from 'pm-swarm';
 const client = new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:'packed-worker'});
 const shared = new SharedTracker(new Swarm(process.cwd(),process.env.PM_PATH,client,'packed-worker'));
 const id=(await client.create({type:'Task',title:'Packed ownership fixture'})).item.id;
@@ -47,9 +47,28 @@ for(const resource of [false,true]){
   try{const reservations=new ResourceReservations(trackerResourceBackend(shared.engine),'packed-worker');await assert.rejects(resource?reservations.reserve(peerId):shared.start(peerId),error=>error.code==='swarm_superseded');}finally{client.update=update;}
   assert.equal(interrupted,true);assert.deepEqual(bytes(),peerBytes);const current=(await client.get(peerId)).item;assert.equal(current.assignee,'packed-worker');assert.equal(current.swarm_token,'9');preserved++;
 }
-console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved}));
+let historyPreserved=0;
+for(const resource of [false,true]){
+  const peerId=(await client.create({type:'Task',title:'Packed native history ABA',...(resource?{tags:'swarm-resource'}:{})})).item.id;
+  const bytes=()=>[getItemPath(process.env.PM_PATH,'Task',peerId),getHistoryPath(process.env.PM_PATH,peerId)].map(path=>readFileSync(path,'utf8'));
+  let lost=false;let peer=false;let peerBytes=[];
+  client.update=new Proxy(update,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);if(!lost){lost=true;throw new Error('Lost packed history return');}return result;}});
+  try{
+    const [attempt]=await Promise.allSettled([withItemMutationObserver(async boundary=>{
+      if(!lost||peer||boundary!=='before_commit')return;peer=true;
+      const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,peerId),peerId);
+      const before=await getItemAt(peerId,history.at(-1).ts,{pmRoot:process.env.PM_PATH});const original=bytes()[0];
+      for(const args of [['release',peerId],['claim',peerId,'--force'],['restore',peerId,String(before.as_of_version),'--force']]){
+        const result=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);
+      }
+      assert.equal(bytes()[0],original);assert.ok((await readHistoryEntries(getHistoryPath(process.env.PM_PATH,peerId),peerId)).length>history.length);peerBytes=bytes();
+    },()=>resource?new ResourceReservations(trackerResourceBackend(shared.engine),'packed-worker').reserve(peerId):shared.start(peerId))]);
+    assert.equal(peer,true);assert.deepEqual(bytes(),peerBytes);assert.equal(attempt.status,'rejected');assert.equal(attempt.reason.code,'swarm_superseded');historyPreserved++;
+  }finally{client.update=update;}
+}
+console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2 });
+  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2 });
 }

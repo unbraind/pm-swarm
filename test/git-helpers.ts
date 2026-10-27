@@ -24,3 +24,8 @@ export function fixtureGit(repo: string, args: string[], input?: string): string
 export function fixtureSnapshot(repo: string): [string, string][] {
   return readdirSync(repo, { recursive: true }).map(String).sort().filter(path => statSync(join(repo, path)).isFile()).map(path => [path, createHash('sha256').update(readFileSync(join(repo, path))).digest('hex')]);
 }
+
+/** Retain every branch, worktree and local registration a cleanup decision may remove. */
+export function snapshotGitResources(repo: string): string[] {
+  return [['for-each-ref', '--format=%(refname) %(objectname)'], ['worktree', 'list', '--porcelain'], ['config', '--local', '--list']].map(args => fixtureGit(repo, args));
+}

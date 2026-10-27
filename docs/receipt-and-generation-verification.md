@@ -109,3 +109,7 @@ cancellations or todo results. Typecheck and lint pass; duplication is zero
 (0/12468 lines across 119 sources), and all 169 declarations in 37 authored
 files are documented. Full-suite coverage and packed acceptance are reported
 separately from final-head CI in the PR.
+
+The subsequent [native-history CAS audit](native-history-cas.md) adds a locked
+monotonic native-history precondition to every item cleanup and recovery path;
+generation and content equality alone cannot distinguish release/claim/restore ABA.

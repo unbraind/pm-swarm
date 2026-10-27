@@ -28,11 +28,14 @@ const WRITE_SITES = [
   'test-runner.ts:runLinkedTests',
 ].sort();
 
+/** Native item recovery paths must carry an SDK history precondition, including no-op Git cleanup. */
+const HISTORY_SITES = ['swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'close.ts:restore'].sort();
+
 /** Minimal parser shape keeps inventory traversal independent of compiler internals. */
-interface AstNode { type: string; name?: string; property?: AstNode; object?: AstNode; callee?: AstNode; arguments?: AstNode[]; params?: AstNode[]; start?: number; end?: number }
+interface AstNode { type: string; name?: string; property?: AstNode; object?: AstNode; callee?: AstNode; id?: AstNode; key?: AstNode; arguments?: AstNode[]; params?: AstNode[]; start?: number; end?: number }
 /** Discover every client call, conservative provider write and imported SDK writer from authored source. */
 function writeInventory(): string[] {
-  const sites: string[] = [];
+  const sites: string[] = []; const recovery: string[] = [];
   for (const file of readdirSync(new URL('../src', import.meta.url)).filter(file => file.endsWith('.ts'))) {
     const source = readFileSync(new URL(`../src/${file}`, import.meta.url), 'utf8');
     const text = (node: AstNode | undefined) => source.slice(node?.start, node?.end);
@@ -57,6 +60,14 @@ function writeInventory(): string[] {
           const itemWriter = ['commitItemMutations', 'commitItemCompletion', 'commitWorkspaceTransaction', 'mutateItem'].includes(method) || /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run'].includes(method);
           assert.ok(wrapper.type === 'CallExpression' && wrapper.callee?.name === (itemWriter ? 'commitItemMutation' : 'commitMutation'), `${file}:${method}: unguarded SDK writer`);
           if (itemWriter) assert.match(text(wrapper.arguments?.[0]), /\bitem(?:\s*[:,}])/, `${file}:${method}: missing full snapshot`);
+          const cleanup = ['release', 'restore', 'mutateItem'].includes(method) || parents.some(parent => parent.type === 'VariableDeclarator' && parent.id?.name === 'cleanup' || parent.type === 'CallExpression' && parent.callee?.property?.name === 'onFailure' || parent.type === 'ClassMethod' && parent.key?.name === 'transfer');
+          if (itemWriter && cleanup) {
+            recovery.push(`${file}:${method}`);
+            assert.match(text(wrapper.arguments?.[2]), /\bhistory\b/, `${file}:${method}: missing native history precondition`);
+            if (method === 'mutateItem') {
+              const code = text(node); assert.ok(code.indexOf('await assertItemHistoryHead') >= 0 && code.indexOf('await assertItemHistoryHead') < code.indexOf('await cleanup()'), 'Git cleanup must check native history inside its locked SDK callback');
+            }
+          }
           assert.equal(callback.params?.[0]?.name, 'admitted');
           assert.ok(node.arguments?.some(argument => /\badmitted\b/.test(text(argument))), `${file}:${method}: writer ignored the admitted payload`);
         }
@@ -65,12 +76,13 @@ function writeInventory(): string[] {
     };
     visit(parse(source, { sourceType: 'module', plugins: ['typescript'] }), []);
   }
+  assert.deepEqual(recovery.sort(), HISTORY_SITES);
   return sites.sort();
 }
 
 test('every SDK and backend write site consumes the single sink admission payload', () => {
   assert.deepEqual(writeInventory(), WRITE_SITES);
-  console.log(JSON.stringify({ enumerated_write_sites: WRITE_SITES.length, sink_bypasses: 0 }));
+  console.log(JSON.stringify({ enumerated_write_sites: WRITE_SITES.length, sink_bypasses: 0, locked_history_sites: HISTORY_SITES.length }));
 });
 
 test('each enumerated sink refuses private values from CLI git settings files and peers before writing', async t => {

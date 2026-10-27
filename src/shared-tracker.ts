@@ -1,3 +1,4 @@
+import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
 import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
@@ -9,7 +10,7 @@ import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmL
 import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
-import { recoveryItem, recoverySnapshotMatches } from './recovery.ts';
+import { recoveryItem } from './recovery.ts';
 import { historySnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
 import { completeClaim } from './close.ts';
 import type { CloseOptions } from './close.ts';
@@ -229,9 +230,10 @@ export class SharedTracker {
       for (const lane of await this.sharedLanes(corpus, false)) {
         if (!lane.terminal) continue;
         if (lane.agent !== this.engine.author) { refused.push({ id: lane.id, reason: 'Terminal claim belongs to another agent; use reap --agent with its principal' }); continue; }
-        const current = await recoveryItem(this.engine.client, snapshots.get(lane.id)!, refused);
-        if (current === undefined) continue;
-        if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.engine.author }, item: current }, admitted => this.engine.client.release(admitted.id, admitted.options), { generation: { token: current.swarm_token } }));
+        const recovery = await recoveryItem(this.engine.client, snapshots.get(lane.id)!, refused, this.engine.pmRoot);
+        if (recovery === undefined) continue;
+        const { item: current, historyHead } = recovery;
+        if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.engine.author }, item: current }, admitted => this.engine.client.release(admitted.id, admitted.options), { generation: { token: current.swarm_token }, history: historyHead }));
         released.push(lane.id);
       }
       return { mode: 'shared-tracker', dry_run: dryRun, released, removed: [], cleanup: [], refused };
@@ -298,7 +300,7 @@ export class SharedTracker {
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
-  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease) {
+  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease, history?: ItemHistoryHead) {
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
     let files: string[];
     try { files = itemFootprint(item); }
@@ -312,7 +314,7 @@ export class SharedTracker {
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
-    }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
+    }, item }, admitted => this.engine.client.update(admitted.id, admitted.options), { history }));
     if (lease !== undefined) this.tokens.delete(id);
     return { id, previous_owner: item.assignee, agent: to ?? null, token, context };
   }
@@ -325,7 +327,7 @@ export class SharedTracker {
     /** Share eligibility and fresh-snapshot checks between preview and mutation. */
     const evaluate = async (lease?: Lease) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      const recovered = []; const refused: { id: string; reason: string }[] = [];
+      const recovered = []; const refused: { id: string; reason: string; code?: string }[] = [];
       for (const row of (await this.engine.corpus()).items) {
         if (row.tags.includes(RESOURCE_TAG) || !row.assignee?.trim() || statusIsTerminal(row.status, statuses) || (parent !== undefined && row.parent !== parent)) continue;
         if (row.assignee === this.engine.author) continue;
@@ -336,18 +338,19 @@ export class SharedTracker {
         const times = [recorded, observed].map(value => value === undefined ? NaN : Date.parse(value)).filter(Number.isFinite);
         if (times.length === 0) { refused.push({ id: row.id, reason: 'No valid claim or heartbeat timestamp; repair liveness evidence before reclaiming' }); continue; }
         if (Date.now() - Math.max(...times) < staleAfter * 1000) continue;
-        const item = (await readItem(this.engine.client, row.id)).item;
-        if (!recoverySnapshotMatches(row, item)) continue;
+        const recovery = await recoveryItem(this.engine.client, row, refused, this.engine.pmRoot);
+        if (recovery === undefined) continue;
+        const { item, historyHead } = recovery;
         if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
         const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
         if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
         const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        try { recovered.push(await this.transfer(item, to, note, lease)); }
+        try { recovered.push(await this.transfer(item, to, note, lease, historyHead)); }
         catch (error) {
           if (!(error instanceof SettingsRefusal)) throw error;
-          refused.push({ id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
+          refused.push(error.code === 'swarm_superseded' ? { id: row.id, code: error.code, reason: 'superseded: Native history advanced; preserve the peer claim and refresh before recovery' } : { id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
         }
       }
       return { dry_run: dryRun, recovered, refused };

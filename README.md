@@ -89,6 +89,11 @@ generation: preserve its claim and Git resources, refresh its receipt and retry.
 Terminal Git reaping holds the same native item lock and compares its fencing generation before local cleanup.
 Git cleanup runs inside the SDK item writer lock without adding an item/history
 mutation, and configuration removal compares the exact value atomically.
+Cleanup also compares the captured native history length and SDK stream hash
+inside that same lock. Release/claim/restore cycles cannot regain an older
+acquisition by recreating identical item content or tokens. See
+[native-history compare-and-set](docs/native-history-cas.md) for the recovery
+paths, SDK contract and adversarial matrix.
 
 Tracker locations are invocation inputs: absolute and relative `--path`, `PM_PATH`
 and cwd discovery work inside home directories and with spaces or Unicode.

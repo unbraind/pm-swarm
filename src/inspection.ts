@@ -1,5 +1,6 @@
-import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions, getItemAt, readHistoryEntries, getHistoryPath } from '@unbrained/pm-cli/sdk';
+import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions, getItemAt, readHistoryEntries, getHistoryPath, hashHistoryStream } from '@unbrained/pm-cli/sdk';
 import type { GetResult, GetItemAtResult, PmClient, PmReadOutputBudgetExceeded } from '@unbrained/pm-cli/sdk';
+import type { ItemHistoryHead } from './settings.ts';
 import { SettingsRefusal } from './settings.ts';
 
 /** Internal decisions must compare complete values rather than agent-facing budget projections. */
@@ -32,13 +33,13 @@ export async function inspectItem(pmRoot: string, cwd: string, id: string) { ret
 export async function inspectItems(pmRoot: string, cwd: string) { return runWithActiveExtensions({ cwd, path: pmRoot }, async () => (await localGuard(pmRoot, cwd))?.list() ?? null); }
 
 /** Reconstruct an exact SDK history version, including a stable latest head without timestamp guessing. */
-export async function historySnapshot(pmRoot: string, id: string, version?: number): Promise<GetItemAtResult & { version: number }> {
+export async function historySnapshot(pmRoot: string, id: string, version?: number): Promise<GetItemAtResult & { version: number; historyHead: ItemHistoryHead }> {
   try {
-    const history = version === undefined ? await readHistoryEntries(getHistoryPath(pmRoot, id), id) : undefined;
-    const target = version === undefined ? history?.at(-1)?.ts : String(version);
+    const history = await readHistoryEntries(getHistoryPath(pmRoot, id), id);
+    const target = version === undefined ? history.at(-1)?.ts : String(version);
     if (target === undefined) throw new Error('Empty history');
     const view = await getItemAt(id, target, { pmRoot });
-    if (view.as_of_version === null || history !== undefined && (view.history_length !== history.length || view.target.historyIndex !== history.length - 1)) throw new Error('Unstable history version');
-    return { ...view, version: view.as_of_version };
+    if (view.as_of_version === null || (view.history_length !== history.length || version === undefined && view.target.historyIndex !== history.length - 1)) throw new Error('Unstable history version');
+    return { ...view, version: view.as_of_version, historyHead: { length: history.length, hash: hashHistoryStream(history) } };
   } catch { throw new SettingsRefusal('swarm_document_changed', 'The item history could not be verified; preserve its document and inspect its native history before retrying.', 'document'); }
 }
