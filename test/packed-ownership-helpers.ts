@@ -10,25 +10,19 @@ export function assertPackedCloseOwnership(runtime: string, repo: string, pmRoot
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt, WorkspaceTransactionInterruptedError } from '@unbrained/pm-cli/sdk';
+import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt } from '@unbrained/pm-cli/sdk';
 import { SharedTracker, Swarm, ResourceReservations, trackerResourceBackend, withItemMutationObserver } from 'pm-swarm';
 const client = new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:'packed-worker'});
 const shared = new SharedTracker(new Swarm(process.cwd(),process.env.PM_PATH,client,'packed-worker'));
-const id=(await client.create({type:'Task',title:'Packed ownership fixture'})).item.id;
-const claim=await shared.start(id);let failed=false;let peer=false;
-await assert.rejects(shared.close(id,'Packed journal proof',claim.token,{onTransition:context=>{
-  if(!failed&&context.transition==='step_recorded'){failed=true;throw new Error('Force compensation');}
-  if(!peer&&context.transition==='step_compensating'){
-    peer=true;const row=JSON.parse(readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8').trim().split('\\n').at(-1));
-    const result=spawnSync(process.execPath,[process.argv[2],'update',id,'--title','Packed peer survives','--message',row.message,'--author','packed-worker','--json'],{encoding:'utf8'});
-    assert.equal(result.status,0,result.stdout+result.stderr);
-  }
-}}),error=>error.code==='swarm_superseded');
-assert.equal(peer,true);const before=readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8');
+const id=(await client.create({type:'Task',title:'Packed unsupported close recovery'})).item.id;
+const claim=await shared.start(id);const nativeClose=client.close.bind(client);let stopped=false;
+client.close=new Proxy(nativeClose,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);stopped=true;throw new Error('Lost native close return');}});
+try{await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_close_recovery_unsupported');}finally{client.close=nativeClose;}
+assert.equal(stopped,true);await client.update(id,{title:'Packed peer survives'});
+const before=[getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8'));
 for(let retry=0;retry<3;retry++){
-  await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_document_changed');
-  assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8'),before);
-  assert.equal((await client.get(id)).item.title,'Packed peer survives');
+  await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_close_recovery_unsupported');
+  assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8')),before);
 }
 const failedId=(await client.create({type:'Task',title:'Packed lost return'})).item.id;
 const update=client.update.bind(client);let lost=false;
@@ -69,14 +63,11 @@ for(const resource of [false,true]){
 const blocker=(await client.create({type:'Task',title:'Packed native lifecycle'})).item.id;
 const dependent=(await client.create({type:'Task',title:'Packed blocked dependent',status:'blocked',blockedBy:blocker,blockedReason:'Public dependency'})).item.id;
 const lifecycleClaim=await shared.start(blocker);await client.update(blocker,{blockedReason:'Public prior blocker'});
-let interrupted=false;
-await assert.rejects(shared.close(blocker,'Packed native completion',lifecycleClaim.token,{onTransition:context=>{
-  if(!interrupted&&context.transition==='step_applied'&&context.stepId==='close'){interrupted=true;throw new WorkspaceTransactionInterruptedError('Interrupt packed native close');}
-}}),WorkspaceTransactionInterruptedError);
-const recoveredClose=await shared.close(blocker,'Packed native completion',lifecycleClaim.token);assert.equal(recoveredClose.warnings_unavailable,true);assert.match(recoveredClose.required,/dependent items/);
+await shared.close(blocker,'Packed native completion',lifecycleClaim.token);
 assert.equal((await client.get(blocker)).item.blocked_reason,undefined);assert.equal((await client.get(dependent)).item.status,'open');
 const lifecycleHistory=readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8');
-await shared.close(blocker,'Packed native completion',lifecycleClaim.token);assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8'),lifecycleHistory);
+await assert.rejects(shared.close(blocker,'Packed native completion',lifecycleClaim.token),error=>error.code==='swarm_close_recovery_unsupported');
+assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8'),lifecycleHistory);
 const closing=(await client.create({type:'Task',title:'Packed forward close ABA'})).item.id;const closingClaim=await shared.start(closing);
 let closePeer=false;let closeBytes=[];
 const [closeAttempt]=await Promise.allSettled([withItemMutationObserver(async boundary=>{
@@ -92,29 +83,16 @@ assert.equal(closePeer,true);assert.equal(closeAttempt.status,'rejected');assert
 assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',closing),getHistoryPath(process.env.PM_PATH,closing)].map(path=>readFileSync(path,'utf8')),closeBytes);
 const paired=(await client.create({type:'Task',title:'Packed snapshot window'})).item.id;const pairedClaim=await shared.start(paired);
 const get=client.get.bind(client);let snapshotPeer=false;let snapshotBytes=[];
-client.get=new Proxy(get,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);if(!snapshotPeer){
+client.get=new Proxy(get,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);if(!snapshotPeer&&args[1]?.fields!=='id'){
   snapshotPeer=true;const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,paired),paired);const version=(await getItemAt(paired,history.at(-1).ts,{pmRoot:process.env.PM_PATH})).as_of_version;
   for(const args of [['release',paired],['claim',paired,'--force'],['restore',paired,String(version),'--force']]){const peer=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(peer.status,0,peer.stdout+peer.stderr);}
   snapshotBytes=[getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8'));
 }return result;}});
 try{await assert.rejects(shared.handoff(paired,'receiver','Packed paired handoff',pairedClaim.token),error=>error.code==='swarm_superseded');}finally{client.get=get;}
 assert.equal(snapshotPeer,true);assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8')),snapshotBytes);
-for(const crash of [false,true]){
-  const blocker=(await client.create({type:'Task',title:'Packed compensation refusal'})).item.id;
-  const dependent=(await client.create({type:'Task',title:'Packed preserved dependent',status:'blocked',blockedBy:blocker,blockedReason:'Public blocker'})).item.id;
-  const claim=await shared.start(blocker);let interrupted=false;
-  await assert.rejects(shared.close(blocker,'Packed bounded compensation',claim.token,{onTransition:context=>{
-    if(context.transition==='committing')throw new Error('Begin packed rollback');
-    if(crash&&context.transition==='compensating'){interrupted=true;throw new WorkspaceTransactionInterruptedError('Stop before packed rollback');}
-  }}),error=>crash||error.code==='swarm_compensation_partial');
-  assert.equal(interrupted,crash);
-  const ids=[blocker,dependent];const bytes=()=>ids.flatMap(id=>[getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8')));const preserved=bytes();
-  await assert.rejects(shared.close(blocker,'Packed bounded compensation',claim.token),error=>error.code==='swarm_compensation_partial'&&error.restored.length===0&&ids.every(id=>error.pending.includes(id)));
-  assert.deepEqual(bytes(),preserved);assert.equal((await client.get(blocker)).item.status,'closed');assert.equal((await client.get(dependent)).item.status,'open');
-}
-console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_recovery:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1,dependent_compensation_refusals:2}));
+console.log(JSON.stringify({unsupported_close_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_delegation:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_recovery: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1, dependent_compensation_refusals: 2 });
+  assert.deepEqual(JSON.parse(result.stdout), { unsupported_close_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_delegation: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1 });
 }

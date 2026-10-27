@@ -1,81 +1,66 @@
-# Native close with bounded compensation
+# Fresh native close; recovery requires explicit inspection
 
-`swarm close` uses one SDK `commitWorkspaceTransaction`: a fenced metadata update,
-then native `PmClient.close`. Core owns lifecycle policy, dependent unblocking,
-blocker-field removal, Plan completion and native warnings. Swarm reads back the
-actual native versions; it does not predict a close successor.
+`swarm close` resolves the selected ID through the host-bound native `get()` before
+reading history. It captures a native history head, reads the complete decision
+document, validates ownership, token and privacy, then delegates directly to native
+`PmClient.close`. The same head is checked under the native item writer lock.
 
-Forward admission captures each native history head before reading the complete
-current item, and rechecks that head under the native item lock. Full resulting
-documents pass privacy admission. Historical prefixes use public SDK history APIs;
-forward admission does not require replaying legacy documents. Native preimage,
-read-back and cleanup receipt comparisons share the SDK `stableValueEquals`-based
-admission check; mismatches report remedies without echoing document content. A peer's history
-advance produces `swarm_superseded` and preserves its claim and Git resources.
+Swarm adds no metadata mutation before close. It does not advance the token,
+clear the assignee, predict a successor, create a workspace transaction or restore
+an item afterward. Core owns the resulting item, Plan behavior, blocker-field
+removal, dependent auto-unblocking and native warnings. Dependents have complete
+snapshots and history admission; unreadable foreign rows stay unadmitted and core
+reports affected dependent failures unchanged.
 
-## Automatic compensation scope
+## Read-only refusal
 
-Automatic rollback is supported only when native close changed the primary item
-alone. SDK journal identity and checkpoints retain the two reverse mutations and
-allow primary-only recovery after interruption or a lost return. Audit history
-remains append-only. Ordinary metadata failures before native close also retain
-this behavior.
+Any earlier native close, a terminal primary or a legacy `swarm_close_transaction` marker returns
+`swarm_close_recovery_unsupported` before acquiring a swarm lease or writing item
+state. A lost native return also refuses recovery. SDK callers receive
+`CloseRecoveryUnsupported.item_id` and `.journal_entry`; CLI JSON and TOON retain
+the code and the remedy naming both in the host's supported `required` field.
 
-If native close changed a dependent, compensation stops **before any restore**.
-The SDK and CLI report `swarm_compensation_partial` with:
+The entry is tracker-relative: a native `history/<id>.jsonl` position, or the SDK
+transaction entry named by a valid legacy marker. A malformed marker is identified
+by its structural field, never interpreted as a filesystem path. The refusal does
+not attribute any native close to swarm. Author equality, copied messages,
+matching documents and matching tokens never prove ownership.
 
-- `restored`: members certified by durable rollback progress; empty in this scope.
-- `pending`: the primary item and recorded dependents requiring reconciliation.
-- `transaction_id`: the existing SDK transaction to inspect.
-- `scope_unknown`: true when old or unreadable receipts cannot establish membership.
+Previously closed items remain unsupported even after a native reopen or restore.
+This conservative rule never tries to decide who owned an earlier close.
+Repeated calls leave native items, histories and legacy journals unchanged.
+Swarm never resumes close, compensates the primary, restores dependents or repairs
+its own missing receipt automatically. Inspect the native item, dependency state
+and journal with core commands and reconcile explicitly. Core can leave the
+assignee and swarm token on a closed item; terminal reap follows its separate,
+reviewed ownership and history policy.
 
-SDK callers receive typed properties on `CompensationPartialRefusal`. The native
-CLI keeps its supported `code` and actionable `required` fields. `required` ends
-with `Compensation receipt: ` followed by the same JSON object, preserving a
-machine-readable list through the pinned host's error transport.
+The current contract deliberately permits only a fresh native operation. Native
+closed state is enough to refuse replay even if a prior swarm process died before
+returning its receipt. A process killed before any native close committed has no
+close mutation to recover; a later fresh command still uses normal native
+admission. There is no saved-result adoption or inference from historical authors.
 
-Pending means uncertified rollback, not a claim about an item's current status.
-The native close remains intact, including its reopened dependents. A peer edit is
-preserved. Repeated SDK/JSON/TOON retries return the refusal without another item
-or history write. A crash before compensation also returns this refusal on retry;
-a partial dependent restore from an older package is never silently adopted as
-progress. Inspect the native item histories and SDK journal before explicitly
-reconciling the affected work.
+## Deferred protocol
 
-This intentionally smaller scope replaces the unsafe member-restore loop. The SDK
-coordinator persists compensation progress at step boundaries; its current
-`compensate(data): Promise<void>` callback has no member-checkpoint operation.
-Writing the same journal independently would race its in-memory state. This is a
-design constraint, not a claim that durable member steps cannot be implemented.
-
-[Issue 32](https://github.com/unbraind/pm-swarm/issues/32) and
-[pm-swarm-durable-compensation](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-durable-compensation.toon)
-own the expanded protocol: unique compensation identity, complete member domain,
-pre-close byte digests and post-close heads, fsynced progress, exact restore
-ownership checks, and the SIGKILL matrix after every member boundary with 1–3
-dependents. Full multi-item restoration is not delivered by this PR.
-
-## Receipts and native warnings
-
-Native warnings are surfaced unchanged. If a crash occurs after native close but
-before its result is saved, recovery reports `warnings_unavailable` and asks the
-caller to inspect dependent items. Missing secondary receipts never authorize a
-restore. SDK identity validation and its journal establish transaction ownership;
-free-text messages and matching content do not substitute for a checkpoint.
-
-The source inventory enumerates 24 SDK/backend write sites, including 18 item
-writers. Each actual item write uses the shared full-document/history admission
-helper. Dependent restoration is absent from the implementation.
+[Issue 34](https://github.com/unbraind/pm-swarm/issues/34) and
+[pm-swarm-durable-close-recovery](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-durable-close-recovery.toon)
+own journaled multi-item recovery. Acceptance includes durable compensation
+identity, exact own-write receipts, native dependent restoration, fsynced progress,
+all forward/reverse SIGKILL boundaries, peer edits and byte-identical ABA.
+[Issue 32](https://github.com/unbraind/pm-swarm/issues/32) remains the narrower
+member-progress subtask. The retired prototype remains reproducible at commit
+`0157465`; it is absent from this implementation and package artifact.
 
 ## Validation
 
-Real non-Git tracker tests cover native lifecycle equivalence, primary-only crash
-and lost-return recovery, 1–3 dependent refusal domains, a real-process SIGKILL at
-the pre-restore barrier, repeated retries, and peer edits preserved through SDK,
-JSON and TOON refusals. Packed npm and Bun consumers assert the same limited
-compensation contract. Privacy refusal/allow corpora, framework routes and the
-read-only fleet path oracle remain unchanged.
+Tests use real non-Git trackers and native SDK calls. They compare native item and
+dependent bytes, retain warnings, refuse legacy same-author close adoption, resolve
+service-context short IDs before history selection, inject native lost returns and
+ABA, and kill a real process after native close. Read-only retries preserve all
+native state. Packed npm and Bun consumers exercise the same reduced contract.
 
-Exact focused commands and revert proofs are recorded in `pm-swarm-y972`. Full
-npm/Bun release, packed-consumer and coverage evidence comes from the current CI
-head; pending runs are not represented as passing gates.
+The SDK/backend writer inventory now contains 21 sites, including 15 item writers.
+No close restore or workspace-transaction writer remains. Full source coverage
+continues to require 100/100/100/100 without ignore pragmas; exact commands, revert
+proofs and gate counts are recorded in the pm item and PR.

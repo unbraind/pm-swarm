@@ -18,7 +18,7 @@ import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, assertMutationReceipt, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
-import { inspectItem, readItem, historySnapshot, mutationSnapshot } from './inspection.ts';
+import { inspectItem, readItem, historySnapshot, clientMutationSnapshot } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -131,7 +131,7 @@ export class Swarm {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
-    const initial = await mutationSnapshot(this.pmRoot, String(local?.item.id ?? id), async () => (await requireActiveExtensionRead(() => readItem(this.client, id))).item); const item = initial.item;
+    const initial = await clientMutationSnapshot(this.pmRoot, this.client, id, async canonicalId => (await requireActiveExtensionRead(() => readItem(this.client, canonicalId))).item); const item = initial.item;
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
@@ -226,13 +226,14 @@ export class Swarm {
   /** Release only the exact acquired native claim lineage; fresh content and peer ownership survive cleanup. */
   async releaseAcquiredClaim(id: string, version: number, expected: Record<string, unknown>, lease: Lease, ownSuccessors?: ReadonlyMap<number, Record<string, unknown>>): Promise<void> {
     const current = await this.acquisitionSnapshot(id, version, expected, ownSuccessors);
-    await lease.write(() => commitItemMutation({ id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author } }, admitted => this.client.release(admitted.id, admitted.options), { generation: { token: expected.swarm_token }, history: current.historyHead }), { announce: false });
+    const canonicalId = String(current.document.metadata.id);
+    await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author } }, admitted => this.client.release(admitted.id, admitted.options), { generation: { token: expected.swarm_token }, history: current.historyHead }), { announce: false });
   }
 
   /** Hold the SDK's native item writer lock across generation checks and Git compare-and-set cleanup. */
   private async guardAcquisitionCleanup(id: string, version: number, expected: Record<string, unknown>, lease: Lease, cleanup: () => Promise<void>, ownSuccessors?: ReadonlyMap<number, Record<string, unknown>>): Promise<void> {
     const current = await this.acquisitionSnapshot(id, version, expected, ownSuccessors);
-    await this.guardItemCleanup(id, { ...current.document.metadata, body: current.document.body }, current.historyHead, lease, cleanup);
+    await this.guardItemCleanup(String(current.document.metadata.id), { ...current.document.metadata, body: current.document.body }, current.historyHead, lease, cleanup);
   }
 
   /** Keep every Git cleanup decision and action inside the exact item's native writer lock. */
@@ -252,14 +253,15 @@ export class Swarm {
 
   /** Verify the acquired native receipt and every later ownership transition without trusting messages. */
   async acquisitionSnapshot(id: string, version: number, expected: Record<string, unknown>, ownSuccessors: ReadonlyMap<number, Record<string, unknown>> = new Map()) {
-    const acquired = await historySnapshot(this.pmRoot, id, version);
-    const current = await historySnapshot(this.pmRoot, id);
+    const canonicalId = String((await readItem(this.client, id, 'id')).item.id);
+    const acquired = await historySnapshot(this.pmRoot, canonicalId, version);
+    const current = await historySnapshot(this.pmRoot, canonicalId);
     assertClaimGeneration(current.document.metadata.swarm_token, acquired.document.metadata.swarm_token);
     if (documentFingerprint(acquired.document.metadata) !== documentFingerprint(expected)) throw new StaleFenceError('start claim receipt');
-    const history = await readHistoryEntries(getHistoryPath(this.pmRoot, id), id);
+    const history = await readHistoryEntries(getHistoryPath(this.pmRoot, canonicalId), canonicalId);
     let owner = acquired.document.metadata.assignee;
     for (let next = version + 1; next <= current.version; next++) {
-      const point = await historySnapshot(this.pmRoot, id, next); const entry = history[point.target.historyIndex];
+      const point = await historySnapshot(this.pmRoot, canonicalId, next); const entry = history[point.target.historyIndex];
       assertClaimGeneration(point.document.metadata.swarm_token, acquired.document.metadata.swarm_token);
       const own = ownSuccessors.get(next);
       if (own === undefined || documentFingerprint({ ...point.document.metadata, body: point.document.body }) !== documentFingerprint(own) || ['claim', 'release', 'restore'].includes(entry.op) || point.document.metadata.assignee !== owner) throw new SettingsRefusal('swarm_superseded', 'A peer changed native ownership history. Preserve its claim and Git resources; refresh its native history before retrying.', 'history');
@@ -301,24 +303,25 @@ export class Swarm {
   /** Preview footprint updates by default; apply through the SDK files mutation. */
   async sync(id: string, apply = false, explicitFiles?: string[], token?: string) {
     assertPrivatePathSafe({ id, explicitFiles, token, author: this.author });
+    if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
     /** Keep lane discovery, authoritative ownership and each write within the same pin. */
     const evaluate = async (lease?: Lease) => {
       const lane = (await this.lanes()).find(row => row.id === id);
       if (lane === undefined) throw new Error('No active lane for item');
-      if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
       const files = commitMutation([...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))], admitted => admitted);
-      const snapshot = apply ? await mutationSnapshot(this.pmRoot, id, async () => (await readItem(this.client, id)).item) : undefined;
+      const snapshot = apply ? await clientMutationSnapshot(this.pmRoot, this.client, id) : undefined;
+      const canonicalId = String(snapshot?.item.id ?? id);
       const item = snapshot?.item;
       const linked = item === undefined ? lane.files : itemFootprint(item);
       const add = files.filter(path => !linked.includes(path));
       if (apply && (add.length > 0 || token !== undefined)) {
         if (item!.assignee !== this.author) throw new Error(item!.assignee ? `Item claimed by ${String(item!.assignee)}` : 'Lane is unclaimed; claim it before applying file links');
-        if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(id);
+        if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(canonicalId);
         const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
         if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
-        if (add.length > 0) await lease!.write(() => commitItemMutation({ id, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
+        if (add.length > 0) await lease!.write(() => commitItemMutation({ id: canonicalId, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
       }
-      return { id, dry_run: !apply, add };
+      return { id: canonicalId, dry_run: !apply, add };
     };
     return apply ? withSwarmLease(this.pmRoot, this.author, evaluate, { allowBlocking: true }) : evaluate();
   }

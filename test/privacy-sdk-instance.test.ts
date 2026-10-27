@@ -127,7 +127,7 @@ for (const transitions of [1, 8]) test(`progress re-evaluates native conflicts a
   assert.equal(comments.filter(comment => comment.text.startsWith('swarm-progress/v2 ')).length, transitions === 1 ? 1 : 0);
 });
 
-test('native compound close advances only exact committed successors and ignores unrelated write notifications', async t => {
+test('native close advances only its exact committed successor and ignores unrelated write notifications', async t => {
   const f = await sharedFixture(t); const events: string[] = []; const key = Symbol.for('pm-swarm.test.native-steps');
   Reflect.set(globalThis, key, events); t.after(() => { Reflect.deleteProperty(globalThis, key); });
   const entry = `import extension from ${JSON.stringify(new URL('../index.ts', import.meta.url).href)};
@@ -143,9 +143,9 @@ if(['update','close'].includes(context.op)) globalThis[Symbol.for('pm-swarm.test
   writeFileSync(join(f.pmRoot, 'extensions/pm-swarm/entry.js'), entry);
   const id = await f.item(['src/public.ts']); const receipt = await f.shared.start(id); events.length = 0;
   await f.shared.close(id, 'Public completion', receipt.token);
-  assert.deepEqual(events, ['update', 'close'], 'The pinned SDK currently composes two native item commits');
+  assert.deepEqual(events, ['close'], 'Swarm delegates exactly one primary native close');
   const item = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, '2');
+  assert.equal(item.status, 'closed'); assert.equal(item.assignee, 'shared-test'); assert.equal(item.swarm_token, receipt.token);
 });
 
 test('compound native writes preserve later peer state and truthfully report an already committed prefix', async t => {

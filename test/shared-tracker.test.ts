@@ -348,7 +348,7 @@ for (const operation of ['plan', 'preview', 'next', 'start', 'sync', 'reap'] as 
       case 'reap': await f.shared.reap(); break;
     }
     assert.equal(corpusReads, operation === 'sync' ? 0 : 1, 'sync reads only its target; selection certifies the corpus');
-    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready] : operation === 'sync' ? [active] : [], 'only the selected item needs a direct ownership read');
+    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready, ready] : operation === 'sync' ? [active, active] : [], 'only the selected item needs canonical identity and authoritative ownership reads');
   });
 }
 

@@ -38,9 +38,9 @@ Git; returning no changed fields writes no item or history event. The outer
 lease releases last. Git configuration removal additionally uses the fixed-value
 compare-and-set form, while branch deletion retains its expected object id.
 A peer generation yields typed `swarm_superseded` with a preservation remedy.
-Close compensation retains SDK journal identity and additionally checks the
-current generation before its native restore. There is no free-text ownership
-inference and no new SDK gap.
+Close now delegates only fresh native operations. Interrupted or previously
+closed work refuses with `swarm_close_recovery_unsupported`; there is no automatic
+restore or free-text ownership inference. See [native close](native-close.md).
 
 The deterministic generation seed is `0xf37c9a21`; generated counters exceed the
 safe-number ceiling and remain exact strings. Adversarial coverage includes:
@@ -53,7 +53,6 @@ safe-number ceiling and remain exact strings. Adversarial coverage includes:
 | Git/shared terminal cleanup × three locked mutation boundaries | 6 |
 | Same-author fixed-generation lost returns | 4 |
 | Independent-process lost return; ABA; nested writers; existing claim | 5 |
-| Journal compensation boundaries with independent processes | 2 |
 
 Independent process tests also prove that the SDK item lock excludes a writer
 at the actual Git cleanup command for both rollback and reaping, and that retry
@@ -62,8 +61,9 @@ A raw Git peer changing configuration between read and unset retains its value.
 Byte comparisons cover peer item/history and Git resources. No-op cleanup tests
 require exactly claim/release history and prohibit an extra update event.
 
-The native mutation inventory now includes 24 routed write calls; the five-source
-sink property checks 120 refused writes with unchanged durable tracker bytes.
+The current inventory contains 21 SDK/backend write sites, including 15 item
+writers; the five-source sink property checks each one with unchanged durable
+tracker bytes.
 Existing private-content and benign corpora, real fleet paths, decoder and
 normalization fuzz remain in the release suite. Packed npm and Bun consumers run
 live next/schedule in JSON and TOON and independent-process same-author successor
@@ -102,9 +102,9 @@ passing acquisition control and one terminal failure. All sources are restored
 exactly. Combined this continuation has **13 probes, 52 reported results, 42
 expected failures and ten passing controls**, with zero skips/cancellations.
 
-The pinned PM linked broad integration passes **96/96** (329135.681442 ms).
-The subsequent restored terminal checks pass **12/12**, and the final linked
-cleanup/sink run passes **20/20** (66488.283977 ms), all without failures, skips,
+Historical pre-split evidence: the pinned PM linked broad integration passed **96/96** (329135.681442 ms).
+The subsequent restored terminal checks passed **12/12**, and the final linked
+cleanup/sink run passed **20/20** (66488.283977 ms), all without failures, skips,
 cancellations or todo results. Typecheck and lint pass; duplication is zero
 (0/12468 lines across 119 sources), and all 169 declarations in 37 authored
 files are documented. Full-suite coverage and packed acceptance are reported

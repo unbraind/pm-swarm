@@ -162,27 +162,6 @@ test('SDK-locked Git cleanup records no extra item mutation or history entry', a
   });
 });
 
-test('SDK close compensation preserves peer generations before either reverse mutation', async t => {
-  const f = await sharedFixture(t);
-  for (const boundary of ['step_recorded', 'committing'] as const) await t.test(boundary, async () => {
-    const id = await f.item(); const claim = await f.shared.start(id); let failed = false; let attempted = false; let replaced = false; let bytes: string[] = [];
-    const [attempt] = await Promise.allSettled([f.shared.close(id, 'Public close generation', claim.token, { onTransition: async context => {
-      if (!failed && context.transition === boundary) { failed = true; throw new Error('Force SDK compensation'); }
-      if (!attempted && context.transition === 'step_compensating') {
-        attempted = true;
-        const peer = spawnSync(process.execPath, [f.host, 'update', id, '--assignee', 'shared-test', '--field', `swarm_token=${advancedToken(2n)}`, '--author', 'shared-test', '--json'], { cwd: f.repo, env: { ...f.env, PM_LOCK_WAIT_MS: '0' }, encoding: 'utf8', timeout: 10000 });
-        assert.equal(peer.error, undefined);
-        if (peer.status === 0) { replaced = true; bytes = itemBytes(f.pmRoot, id); }
-        else assert.match(peer.stdout + peer.stderr, /locked|lock_held|contention/i);
-      }
-    } })]);
-    assert.equal(attempted, true); assert.ok(attempt.status === 'rejected');
-    if (replaced) { assert.deepEqual(itemBytes(f.pmRoot, id), bytes); assert.ok(superseded(attempt.reason)); }
-    else { const restored = (await f.client.get(id)).item; assert.equal(restored.assignee, 'shared-test'); assert.equal(restored.swarm_token, claim.token); }
-    console.log(JSON.stringify({ compensation_boundary: boundary, peer_outcome: replaced ? 'advanced_and_preserved' : 'blocked_by_sdk_lock' }));
-  });
-});
-
 for (const phase of ['acquisition', 'reap'] as const) test(`the native item lock excludes an independent peer throughout Git cleanup (${phase})`, async t => {
   const f = await fixture(t); const id = await f.item(); f.save(); const host = join(import.meta.dirname, '../node_modules/.bin/pm');
   const env = gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_SOURCE_WORKSPACE_ROOT: f.repo, PM_SOURCE_PM_PATH: f.pmRoot, PM_GLOBAL_PATH: join(f.root, 'global-pm'), PM_LOCK_WAIT_MS: '0' });

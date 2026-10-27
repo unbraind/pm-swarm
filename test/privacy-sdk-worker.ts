@@ -41,7 +41,7 @@ if (input.boundary === 'corpus-return') {
 }
 if (input.boundary === 'snapshot-return') {
   const get = client.get.bind(client);
-  client.get = async (...args) => { const result = await get(...args); if (args[0] === input.id && !injected) compete(); return result; };
+  client.get = async (...args) => { const result = await get(...args); if (args[0] === input.id && args[1]?.fields !== 'id' && !injected) compete(); return result; };
 }
 if (input.boundary === 'writer-entry') {
   const update = client.update.bind(client);

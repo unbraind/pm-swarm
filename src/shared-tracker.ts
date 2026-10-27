@@ -11,9 +11,8 @@ import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem } from './recovery.ts';
-import { mutationSnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
+import { clientMutationSnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
 import { completeClaim } from './close.ts';
-import type { CloseOptions } from './close.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -86,14 +85,15 @@ export class SharedTracker {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
     const preliminary = local ?? await readItem(this.engine.client, id);
+    const canonicalId = String(preliminary.item.id);
     await this.claimState(preliminary.item);
     corpus ??= await this.engine.corpus();
-    const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== id);
+    const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== canonicalId);
     this.claimWarnings(itemFootprint(preliminary.item), active, strict);
-    const initial = await mutationSnapshot(this.engine.pmRoot, String(preliminary.item.id), async () => (await readItem(this.engine.client, id)).item); const item = initial.item;
+    const initial = await clientMutationSnapshot(this.engine.pmRoot, this.engine.client, canonicalId); const item = initial.item;
     const token = await this.claimState(item); const heartbeat = new Date().toISOString();
     const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
-    const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
+    const receipt = { mode: 'shared-tracker', id: canonicalId, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
     assertPrivatePathSafe(receipt);
     let publication: Record<string, unknown> | undefined;
     lease.onFailure(async () => {
@@ -102,7 +102,7 @@ export class SharedTracker {
         this.tokens.delete(String(item.id));
       }
     });
-    await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, async admitted => {
+    await lease.write(() => commitItemMutation({ id: canonicalId, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, async admitted => {
       const result = await this.engine.client.update(admitted.id, admitted.options); publication = result.item; return result;
     }, { history: initial.historyHead, onCommitted: (_before, after) => { publication = after.metadata; } }));
     this.tokens.set(String(item.id), token);
@@ -194,7 +194,7 @@ export class SharedTracker {
     const evaluate = async (lease?: Lease) => {
       const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
       if (local !== null) await this.syncDecision(local.item, apply, files, token);
-      const snapshot = apply ? await mutationSnapshot(this.engine.pmRoot, String(local?.item.id ?? id), async () => (await readItem(this.engine.client, id)).item) : undefined;
+      const snapshot = apply ? await clientMutationSnapshot(this.engine.pmRoot, this.engine.client, id) : undefined;
       const item = snapshot?.item ?? (await readItem(this.engine.client, id)).item;
       const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
@@ -259,7 +259,7 @@ export class SharedTracker {
   private async fence(id: string, token?: string) {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
     if (local !== null) this.assertFence(local.item, token);
-    const snapshot = await mutationSnapshot(this.engine.pmRoot, String(local?.item.id ?? id), async () => (await readItem(this.engine.client, id)).item);
+    const snapshot = await clientMutationSnapshot(this.engine.pmRoot, this.engine.client, id);
     this.assertFence(snapshot.item, token); return snapshot;
   }
 
@@ -358,9 +358,9 @@ export class SharedTracker {
     return dryRun ? evaluate() : withSwarmLease(this.engine.pmRoot, this.engine.author, evaluate);
   }
 
-  /** Finish and release one claim through the SDK's resumable workspace transaction. */
-  async close(id: string, note: string, token?: string, options: CloseOptions = {}) {
-    return completeClaim(this.engine, id, note, token, this.tokens, options);
+  /** Close through native core once; interrupted or terminal work requires explicit inspection. */
+  async close(id: string, note: string, token?: string) {
+    return completeClaim(this.engine, id, note, token, this.tokens);
   }
 
 }

@@ -25,7 +25,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
-| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Finish and release a fenced claim in one resumable SDK transaction |
+| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Delegate one fenced native close; interrupted recovery refuses |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
 | resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
@@ -92,7 +92,7 @@ mutation, and configuration removal compares the exact value atomically.
 Cleanup also compares the captured native history length and SDK stream hash
 inside that same lock. Release/claim/restore cycles cannot regain an older
 acquisition by recreating identical item content or tokens. See
-[native-history compare-and-set](docs/native-history-cas.md) Native close and dependent warnings follow the [core lifecycle contract](docs/native-close.md). for the recovery
+[native-history compare-and-set](docs/native-history-cas.md) and [native close contract](docs/native-close.md) for the recovery
 paths, SDK contract and adversarial matrix.
 
 Tracker locations are invocation inputs: absolute and relative `--path`, `PM_PATH`
@@ -118,19 +118,17 @@ retry `swarm_document_changed`. Host commands reuse their injected client, and
 package copies share request scope. A second SDK module identity produces
 `swarm_sdk_mismatch`: share the host SDK installation and restart after removing
 the nested dependency. Full internal reads retain large bodies and annotations.
-Close uses one `commitWorkspaceTransaction` with a fenced metadata update
-followed by native close. Its deterministic identity, validated SDK journal and
-complete native document versions let the same token and note resume after
-ownership was cleared. Automatic compensation is limited to the primary item. If native close changed
-dependents, `swarm_compensation_partial` lists the uncertified pending members
-and preserves the current lifecycle state before any restore. Durable multi-item
-rollback is tracked in [issue 32](https://github.com/unbraind/pm-swarm/issues/32). Decision snapshots
-capture history before the document read and retain that head through the native
-writer lock. See [native close and recovery](docs/native-close.md).
-Free-text history messages and mutable markers never
-authorize recovery or rollback. Interrupted work resumes; ordinary failures compensate
-through the SDK. This flow does not return `swarm_partial_commit`.
-See [privacy admission](docs/privacy-admission.md).
+Close resolves IDs through native `get()` before history selection and delegates
+one fresh native close with full-document and history admission. It performs no
+swarm metadata update, transaction replay or automatic restore. Any earlier native
+close (including reopened items), terminal state, legacy markers and interrupted
+native returns produce
+`swarm_close_recovery_unsupported`, naming the canonical item and native/legacy
+journal entry for explicit inspection. Native lifecycle fields and dependent
+warnings remain core-owned. See [native close](docs/native-close.md).
+[Issue 34](https://github.com/unbraind/pm-swarm/issues/34) owns durable multi-item
+recovery; it is outside this PR's implementation.
+
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use
 `pm swarm heartbeat` separately when a long queue needs background liveness.

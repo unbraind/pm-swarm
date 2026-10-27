@@ -1,6 +1,6 @@
 import { assertPrivatePathSafe, commitItemMutation, assertMutationReceipt } from './settings.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
-import { mutationSnapshot, inspectItem } from './inspection.ts';
+import { clientMutationSnapshot, inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
 import { RESOURCE_TAG, ResourceRefusal } from './resources.ts';
 import type { ResourceBackend, ResourceRecord } from './resources.ts';
@@ -26,8 +26,8 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
     const settings = await supported();
     const local = await inspectItem(engine.pmRoot, engine.repo, id);
     if (local === null) throw new ResourceRefusal('resource_backend_refused', 'Storage ownership changed during admission; configure its explicit ResourceBackend before retrying.');
-    const paired = admit ? await mutationSnapshot(engine.pmRoot, String(local.item.id), async () => {
-      const fresh = await inspectItem(engine.pmRoot, engine.repo, id);
+    const paired = admit ? await clientMutationSnapshot(engine.pmRoot, engine.client, id, async canonicalId => {
+      const fresh = await inspectItem(engine.pmRoot, engine.repo, canonicalId);
       if (fresh === null) throw new ResourceRefusal('resource_backend_refused', 'Storage ownership changed; configure its explicit ResourceBackend.');
       return { ...fresh.item, body: fresh.body };
     }) : undefined;

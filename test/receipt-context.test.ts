@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { getHistoryPath } from '@unbrained/pm-cli/sdk';
 import { assertMutationReceipt, SettingsRefusal } from '../src/settings.ts';
-import { assertCloseReceipt, closeSnapshot } from '../src/close-journal.ts';
+import { historySnapshot } from '../src/inspection.ts';
 import { ResourceReservations, trackerResourceBackend } from '../index.ts';
 import { PlanProgress } from '../src/progress.ts';
 import { sharedFixture } from './shared-helpers.ts';
@@ -20,12 +20,11 @@ function serviceContext(pmRoot: string): void {
 }
 
 test('all native receipt equality checks share SDK comparison and a content-free refusal', async t => {
-  const f = await sharedFixture(t); const id = await f.item(); const before = await closeSnapshot(f.pmRoot, id);
-  await f.client.update(id, { title: 'Independent native receipt' }); const after = await closeSnapshot(f.pmRoot, id);
-  for (const [left, right] of [[before.hash, after.hash], [before.document, after.document]]) {
+  const f = await sharedFixture(t); const id = await f.item(); const before = await historySnapshot(f.pmRoot, id);
+  await f.client.update(id, { title: 'Independent native receipt' }); const after = await historySnapshot(f.pmRoot, id);
+  for (const [left, right] of [[before.historyHead.hash, after.historyHead.hash], [before.document, after.document]]) {
     assertMutationReceipt(left, left, 'Refresh the native receipt.');
     assert.throws(() => assertMutationReceipt(left, right, 'Refresh the native receipt.'), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed' && error.message === 'swarm_document_changed: Refresh the native receipt.');
-    assert.throws(() => assertCloseReceipt(left, right), SettingsRefusal);
   }
   assertMutationReceipt({ token: '1', expiry: undefined }, { expiry: undefined, token: '1' }, 'Refresh native fields.');
 });

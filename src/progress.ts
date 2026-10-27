@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
-import { inspectItem, readItem, mutationSnapshot } from './inspection.ts';
+import { inspectItem, readItem, clientMutationSnapshot } from './inspection.ts';
 import { commitItemMutation, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
@@ -124,12 +124,11 @@ export class PlanProgress {
 
   /** Read complete normalized core Plan metadata without agent output ceilings. */
   private async snapshot(id: string, admit = false) {
-    const local = await inspectItem(this.pmRoot, this.pmRoot, id);
-    const read = async () => {
-      const fresh = await inspectItem(this.pmRoot, this.pmRoot, id);
-      return fresh === null ? (await readItem(this.client, id)).item : { ...fresh.item, body: fresh.body };
+    const read = async (canonicalId = id) => {
+      const fresh = await inspectItem(this.pmRoot, this.pmRoot, canonicalId);
+      return fresh === null ? (await readItem(this.client, canonicalId)).item : { ...fresh.item, body: fresh.body };
     };
-    const snapshot = admit ? await mutationSnapshot(this.pmRoot, String(local?.item.id ?? id), read) : { item: await read(), historyHead: undefined };
+    const snapshot = admit ? await clientMutationSnapshot(this.pmRoot, this.client, id, read) : { item: await read(), historyHead: undefined };
     const item = snapshot.item as PlanSnapshot;
     if (item.type !== 'Plan' || !Array.isArray(item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
     return { ...snapshot, item };

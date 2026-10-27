@@ -23,13 +23,13 @@ const WRITE_SITES = [
   'resources.ts:transact',
   'settings.ts:mutateWorkspaceSettings',
   'shared-tracker.ts:update', 'shared-tracker.ts:files', 'shared-tracker.ts:release', 'shared-tracker.ts:update',
-  'close.ts:commitWorkspaceTransaction', 'close.ts:update', 'close.ts:close', 'close.ts:restore',
+  'close.ts:close',
   'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:files', 'swarm.ts:acknowledgeLinkedTests', 'swarm.ts:release',
   'test-runner.ts:runLinkedTests',
 ].sort();
 
 /** Every native item mutation must carry an SDK history precondition, including no-op Git cleanup. */
-const HISTORY_SITES = ['close.ts:commitWorkspaceTransaction', 'close.ts:update', 'close.ts:close', 'close.ts:restore', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
+const HISTORY_SITES = ['close.ts:close', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
 
 /** Minimal parser shape keeps inventory traversal independent of compiler internals. */
 interface AstNode { type: string; name?: string; property?: AstNode; object?: AstNode; callee?: AstNode; id?: AstNode; key?: AstNode; arguments?: AstNode[]; params?: AstNode[]; start?: number; end?: number }

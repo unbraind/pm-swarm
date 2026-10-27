@@ -17,7 +17,6 @@ export { SharedTracker } from './src/shared-tracker.ts';
 /** Compact shared selection and incoming-handoff result contract. */
 export type { SharedNextReceipt } from './src/shared-tracker.ts';
 /** Trusted crash-observer options for resumable SDK claim completion. */
-export type { CloseOptions } from './src/close.ts';
 /** Expose backend-neutral exclusive resource coordination and typed remedies. */
 export { ResourceReservations, ResourceRefusal, RESOURCE_TAG } from './src/resources.ts';
 /** Expose the adapter reusing the existing shared-tracker operation lease. */
@@ -47,5 +46,5 @@ export { projectReceipt, admitReceipt, assertReceiptSafe } from './src/receipts.
 /** Trusted request-local diagnostics for testing the handoff into native item writer locks. */
 export { ITEM_MUTATION_BOUNDARIES, withItemMutationObserver } from './src/settings.ts';
 
-/** Typed conservative recovery outcome with certified restored and pending members. */
-export { CompensationPartialRefusal } from './src/close-compensation.ts';
+/** Close replay is deliberately unsupported and never repairs native state automatically. */
+export { CloseRecoveryUnsupported } from './src/close.ts';

@@ -125,6 +125,6 @@ export function observeSdkReturn(client: PmClient, method: 'get' | 'restore', ob
     const value: unknown = Reflect.get(target, key);
     if (typeof value !== 'function') return value;
     if (key !== method) return value.bind(target);
-    return async (...args: unknown[]) => { const result: unknown = await Reflect.apply(value, target, args); await observe(); return result; };
+    return async (...args: unknown[]) => { const result: unknown = await Reflect.apply(value, target, args); if (!(method === 'get' && typeof args[1] === 'object' && args[1] !== null && Reflect.get(args[1], 'fields') === 'id')) await observe(); return result; };
   } });
 }

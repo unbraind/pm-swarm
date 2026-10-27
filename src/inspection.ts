@@ -1,7 +1,7 @@
 import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions, getItemAt, readHistoryEntries, getHistoryPath, hashHistoryStream } from '@unbrained/pm-cli/sdk';
 import type { GetResult, GetItemAtResult, PmClient, PmReadOutputBudgetExceeded } from '@unbrained/pm-cli/sdk';
 import type { ItemHistoryHead } from './settings.ts';
-import { SettingsRefusal, assertItemHistoryHead, assertSdkInstance, readItemHistoryHead } from './settings.ts';
+import { SettingsRefusal, assertItemHistoryHead, assertSdkInstance, readItemHistoryHead, requireActiveExtensionRead } from './settings.ts';
 
 /** Internal decisions must compare complete values rather than agent-facing budget projections. */
 const COMPLETE_READ_OUTPUT = { outputBudget: 'unbounded', outputLimit: 'unbounded' } as const;
@@ -53,4 +53,12 @@ export async function mutationSnapshot<Item extends Record<string, unknown>>(pmR
   await assertItemHistoryHead(pmRoot, String(item.id), historyHead);
   // Public SDK history versions are one-based stream positions; no reconstruction is required for forward admission.
   return { item, historyHead, version: historyHead.length };
+}
+
+/** Resolve aliases through the bound native client before choosing any history stream. */
+export async function clientMutationSnapshot(pmRoot: string, client: Pick<PmClient, 'get'>, id: string, read?: (canonicalId: string) => Promise<GetResult['item']>): Promise<{ item: GetResult['item']; historyHead: ItemHistoryHead; version: number }> {
+  assertSdkInstance();
+  const identity = (await requireActiveExtensionRead(() => readItem(client, id, 'id'))).item;
+  const canonicalId = String(identity.id);
+  return mutationSnapshot(pmRoot, canonicalId, () => read === undefined ? readItem(client, canonicalId).then(view => view.item) : read(canonicalId));
 }
