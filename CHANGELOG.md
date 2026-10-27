@@ -19,3 +19,7 @@
 ### Changed
 
 - Adopt pm-github 2026.10.16: default-branch-safe gated sync and daily gated closeout PRs ([pm-swarm-lux2](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-lux2.toon))
+
+### Other
+
+- Release readiness behind PM_RELEASE_APPROVED ([pm-swarm-release-gate](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-release-gate.toon))
