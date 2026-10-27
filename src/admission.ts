@@ -10,7 +10,9 @@ import { footprintPath } from './planner.ts';
 function invalid(remedy: string): never { throw new SettingsRefusal('swarm_input_invalid', remedy); }
 /** Validate the complete command payload before dispatch can read, lease or write a tracker. */
 export function validateCommandInputs(command: string, ctx: CommandHandlerContext): void {
-  assertPrivatePathSafe({ args: ctx.args, options: ctx.options, global: ctx.global });
+  // Host storage coordinates select an invocation; they are never shared content.
+  const { path: _trackerLocation, ...global } = ctx.global;
+  assertPrivatePathSafe({ args: ctx.args, options: ctx.options, global });
   if (ctx.global.author !== undefined && (typeof ctx.global.author !== 'string' || !ctx.global.author.trim())) invalid('Supply one nonempty author identity.');
   for (const arg of ctx.args) if (typeof arg !== 'string' || !arg.trim()) invalid('Supply nonempty item ids.');
   for (const [name, value] of Object.entries(ctx.options)) {

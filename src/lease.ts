@@ -2,7 +2,7 @@ import { commitMutation } from './settings.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { linkSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
 
@@ -118,7 +118,11 @@ export async function recoverLeasePin(pmRoot: string, author: string, locality: 
 }
 
 /** Tune durations; Git callers may retain the live process pin across synchronous work. */
-export interface LeaseOptions { leaseMs?: number; renewMs?: number; waitMs?: number; allowBlocking?: boolean }
+export interface LeaseOptions {
+  leaseMs?: number; renewMs?: number; waitMs?: number; allowBlocking?: boolean;
+  /** Project a local Git worktree coordinate exactly as the command does before admitting shared content. */
+  receiptWorkspace?: string;
+}
 
 /** Assertions and retriable writes bound to the current operation generation. */
 export interface Lease {
@@ -179,7 +183,10 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
         try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); if (admitted) announce(); }
         catch (error) { failure = error; }
       }, renewMs);
-      assert(); const result = await operation(lease); announce(); return result;
+      assert(); const result = await operation(lease);
+      const content = options.receiptWorkspace !== undefined && typeof result === 'object' && result !== null && 'worktree' in result && typeof result.worktree === 'string'
+        ? { ...result, worktree: relative(options.receiptWorkspace, result.worktree) } : result;
+      return commitMutation(content, () => { announce(); return result; });
     }
     finally {
       clearInterval(timer);

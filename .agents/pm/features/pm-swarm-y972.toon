@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T01:01:36.568Z"
+updated_at: "2026-10-27T02:10:25.883Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[101]{created_at,author,text}:
+comments[106]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -114,7 +114,12 @@ comments[101]{created_at,author,text}:
   "2026-10-27T00:53:14.938Z",codex-agent,"Final audit found and corrected a cross-attempt peer-loss path in resumed compensation. The atomic-close item was reopened and reclaimed, rather than leaving a known defect marked delivered. Latest SDK history ownership now gates recovery, including under the native item lock; the 36-test close suite passes and four additional revert probes fail as expected. Full current-head gates will run again before the item is reclosed."
   "2026-10-27T00:57:04.557Z",codex-agent,"Restored ownership checks pass 8/8 focused regressions after the four new reversions, and the complete installed SDK-copy suite passes 10/10 after rebuilding. Expanded close recovery is 36/36; types, lint, 150 documented declarations across 35 files and zero duplication pass. Cross-request rollback adoption now requires latest SDK history ownership both before journal entry and inside the native item lock. Superseded tracking-only CI was canceled, not used as positive evidence. The next source-head npm/Bun gates must pass before atomic-close is reclosed."
   "2026-10-27T01:01:30.480Z",codex-agent,"Recording final tracking state before the full gate: recovery acceptance is locally verified (36 close tests, 10 installed-copy tests and eight restored focused checks), atomic-close is explicitly closed and released, native registration is split to the blocked #1580 follow-up, and the main item stays in_progress. Eleven close-related revert probes produced 28 expected failures. Full npm/Bun gates will run on this final head with at most two workers and must pass before the final report; prior green runs are not substituted for the new history-admission code. Claims are released for read-only final verification."
-files[66]{path,scope}:
+  "2026-10-27T01:38:47.751Z",codex-agent,"Auto round 1: fixing two admission classes. Operator tracker-location inputs must be accepted independently of persisted and shared content privacy. All result and incoming handoff validation must precede heartbeat or lease effects. Will audit the package paths, retain both privacy corpora, add non-Git CLI/SDK and packed-consumer regressions, and record behavioral revert proofs. The branch already contains current origin/main. The supplied review lists two blockers; review APIs currently provide no additional findings."
+  "2026-10-27T01:47:21.357Z",codex-agent,"Admission audit: the only content scan of invocation coordinates was validateCommandInputs over global.path; constructors and mutation sinks already keep pmRoot/cwd and local file destinations separate from payloads. Reclassified that input slot into the must-allow corpus without removing any of the 85 private content encodings. Registry-derived tests cover every command and mutation variant. The output-ordering class also reaches schedule through SharedTracker.next, direct embedded SDK calls, handoff stored-document preview, and lease-completion liveness. Added preflight plus fresh in-lease decisions; incoming receipts are admitted before token-cache changes. Lease completion now admits shared output before announcing liveness, projecting only the local Git worktree coordinate exactly as CLI rendering does. Existing item, settings, runtime publication, recovery and watch sinks remain guarded."
+  "2026-10-27T01:57:10.000Z",codex-agent,"Behavioral revert proofs (auto round 1), each followed by exact source restoration: (1) restore validateCommandInputs from the prior head; node --test --test-concurrency=1 --test-name-pattern=\"every registered command admits\" test/privacy-invocation.test.ts exits 1 with 1 failed test. (2) restore only the prior SharedTracker.next function; node --test --test-concurrency=1 --test-name-pattern=\"refuses the entire incoming|shape and fence refusals\" test/privacy-invocation.test.ts exits 1 with 3 failures, observing preflight runtime writes. (3) restore only the prior owned handoff helper; node --test --test-concurrency=1 --test-name-pattern=\"handoff validates existing document\" test/privacy-invocation.test.ts exits 1 with 1 failure. (4) restore only the old lease completion block that announces before result admission; node --test --test-concurrency=1 --test-name-pattern=\"lease completion admits every|lease result admission projects\" test/privacy-invocation.test.ts exits 1 with 2 failures. Four isolated probes, seven expected failures; all changed source bytes restored exactly."
+  "2026-10-27T02:04:14.894Z",codex-agent,"Local validation: typecheck, lint, docstrings (153 declarations across 35 sources), zero duplication, retained one-corpus checks, and 23 boundary/sink/refusal tests pass. The linked invocation regression exceeded its 240-second wall-clock budget under host contention after its first three checks passed (including all 36 real location cases and the next corpus). Increased only that linked command budget to 600 seconds; no assertion, corpus, worker limit or coverage threshold changed. Rerunning it alone. SDK remains pinned at 2026.10.23; current public CLI is 2026.10.26."
+  "2026-10-27T02:10:21.733Z",codex-agent,"Final local auto-round-1 evidence: the linked invocation command passes all 10 tests when run alone with its 600-second budget; the first budget-limited run remains recorded as a timeout, not a pass. Registry property: 15 commands / 21 variants x 85 encodings gives 1785 location admissions plus 1785 content refusals. Incoming next/schedule x preview/mutation x 85 encodings gives 340 refusals, zero runtime-write attempts, unchanged heartbeat/lease/item/history bytes. Source CLI: 36 successful location cases and 16 unsafe-receiver refusals across JSON/TOON; provider, malformed-fence, stored-handoff and token-cache checks pass. Retained boundary/sink suite 23/23, ownership/provider/corpus probes pass, typecheck/lint/docstrings/duplication/identity pass. Packed consumers now repeat both matrices and pass absolute tracker flags to every command; full npm/Bun release gates run in CI with at most two workers. Final-head CI status and counts are published on the PR checks page and PR body. No extra non-blocking review findings were supplied or present in the review API."
+files[68]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -146,6 +151,7 @@ files[66]{path,scope}:
   test/helpers.ts,project
   test/install-prerequisites.test.ts,project
   test/install.acceptance.ts,project
+  test/invocation-helpers.ts,project
   test/next-watch.test.ts,project
   test/prepare-merge-driver.test.ts,project
   test/privacy-admission.test.ts,project
@@ -155,6 +161,7 @@ files[66]{path,scope}:
   test/privacy-fuzz.ts,project
   test/privacy-guard.test.ts,project
   test/privacy-home.test.ts,project
+  test/privacy-invocation.test.ts,project
   test/privacy-lease.test.ts,project
   test/privacy-mutations.ts,project
   test/privacy-normalization-worker.ts,project
@@ -181,7 +188,7 @@ files[66]{path,scope}:
   test/settings-worker.ts,project
   test/shared-tracker.test.ts,project
   test/tooling.test.ts,project
-tests[16]:
+tests[17]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -315,6 +322,18 @@ tests[16]:
       created_at: "2026-10-26T23:52:00.468Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=1 test/privacy-invocation.test.ts
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T01:58:21.760Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+    updated_by: codex-agent
+    updated_at: "2026-10-27T02:04:04.848Z"
 docs[3]{path,scope}:
   docs/privacy-admission.md,project
   docs/settings-and-quality-gates.md,project

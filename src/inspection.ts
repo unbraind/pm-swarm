@@ -1,4 +1,4 @@
-import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry } from '@unbrained/pm-cli/sdk';
+import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClient, PmReadOutputBudgetExceeded } from '@unbrained/pm-cli/sdk';
 import { SettingsRefusal } from './settings.ts';
 
@@ -20,9 +20,13 @@ export async function readItem(client: Pick<PmClient, 'get'>, id: string, fields
  * Service-backed reads remain owned by the host: a null result tells callers to
  * use their bound client, never to interpret a local shadow as provider state.
  */
-export async function inspectItem(pmRoot: string, cwd: string, id: string) {
+async function localGuard(pmRoot: string, cwd: string) {
   const settings = await readSettings(pmRoot);
   const discovered = await discoverExtensions({ pmRoot, cwd, settings });
   if (discovered.effective.some(extension => extension.capabilities === undefined || extension.capabilities.length === 0 || extension.capabilities.includes('services'))) return null;
-  return createMutationGuardSdk({ pmRoot, settings, typeToFolder: resolveItemTypeRegistry(settings).type_to_folder }).get(id);
+  return createMutationGuardSdk({ pmRoot, settings, typeToFolder: resolveItemTypeRegistry(settings).type_to_folder });
 }
+/** Inspect local metadata without client usage receipts; providers always retain their bound client. */
+export async function inspectItem(pmRoot: string, cwd: string, id: string) { return (await localGuard(pmRoot, cwd))?.get(id) ?? null; }
+/** Preflight receiver metadata through the SDK guard; this is never a selection or provider fallback. */
+export async function inspectItems(pmRoot: string, cwd: string) { return runWithActiveExtensions({ cwd, path: pmRoot }, async () => (await localGuard(pmRoot, cwd))?.list() ?? null); }

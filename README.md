@@ -74,6 +74,13 @@ paths in nested result values, keys, watch events or errors trigger a typed
 `swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
 worktree locations are relative to the project root.
 
+Tracker locations are invocation inputs: absolute and relative `--path`, `PM_PATH`
+and cwd discovery work inside home directories and with spaces or Unicode.
+These locations stay local; private paths in stored notes, settings or shared
+results remain refused. Incoming handoff context is checked before `next` or
+`schedule` acquires a lease, caches a token or renews the agent heartbeat, then
+checked again against the decision made inside the lease.
+
 Private input is checked before any swarm dispatch or writer lease, including
 notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanner
 runs first; whole-text canonicalization also detects embedded and encoded private home paths.

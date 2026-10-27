@@ -109,7 +109,7 @@ export class Swarm {
       // Coordination is not a domain write and must not announce principal liveness before admission.
       const release = await retryLock(() => { lease.assert(); return commitMutation({ resource: 'operation', author: this.author }, admitted => acquireLock(join(common, 'swarm.local'), admitted.resource, 1800, admitted.author)); });
       try { return await operation(lease); } finally { await release(); }
-    }, { allowBlocking: true });
+    }, { allowBlocking: true, receiptWorkspace: this.repo });
   }
 
   /** Publish a lane under the repository operation lease. */

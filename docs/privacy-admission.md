@@ -2,10 +2,36 @@
 
 Every command snapshots caller-owned input containers and enters
 `validateCommandInputs` before dispatch, settings reads, provider discovery or
-writer leases. Every supplied string and string key is inspected. Privacy runs
+writer leases. Every supplied content string and string key is inspected. Host
+invocation coordinates (`--path`, `PM_PATH`, cwd and resolved tracker/workspace
+roots) select storage and are accepted as absolute or relative paths, including
+home directories, spaces and Unicode. They are never persisted as item content
+or copied into shared output. Privacy runs
 before other input checks so a rejected value cannot select a diagnostic that
 echoes it. Error recovery withholds original argument values. Public SDK mutation
 entries independently validate before their first package write.
+
+Incoming handoff metadata is preflighted before `next` or `schedule` enters its
+operation lease. The public SDK mutation guard supplies local metadata; a
+service-capable host retains its bound client, never a local shadow. Selection
+still certifies one fresh complete corpus inside the lease and repeats receiver
+shape, fence, skill and privacy checks. The complete prospective receiver receipt
+is admitted before the embedded token cache changes. Handoff also previews its
+current local document before acquiring a lease and repeats the fenced decision
+inside it. Lease completion admits its shared result before announcing liveness;
+local Git worktree coordinates receive the same relative projection as CLI
+rendering. A refused receiver cannot extend stale-claim recovery.
+
+`test/privacy-invocation.test.ts` keeps all 85 must-refuse content spellings and
+moves only the tracker-location slot to the must-allow corpus: 21 registry
+variants produce 1,785 location admissions and 1,785 content refusals. Real source
+CLI cases cover six location modes in JSON and TOON across three home-directory
+projects, including spaces and Unicode. The same matrix runs in packed npm and
+Bun consumers, which additionally pass absolute `--path` to every command.
+Incoming next/schedule properties cover all 85 encodings in preview and mutation
+mode, malformed contexts and fences, direct SDK calls, native CLI and both
+renderers. Tracker/history bytes and all package heartbeat/lease state remain
+unchanged; filesystem observations also assert no preflight runtime-write attempt.
 
 ## Scope and canonicalization
 
@@ -444,6 +470,7 @@ deleted to hide this gap. Follow-up: [pm-swarm-write-free-reads](../.agents/pm/i
 ## Reproduction
 
 ```sh
+node --test --test-concurrency=1 test/privacy-invocation.test.ts
 node --test --test-concurrency=1 test/privacy-documents.test.ts test/privacy-normalization.test.ts test/privacy-sinks.test.ts test/privacy-home.test.ts test/privacy-admission.test.ts test/privacy-refusals.test.ts test/privacy-routes.test.ts test/privacy-guard.test.ts test/privacy-lease.test.ts
 node --test --test-concurrency=1 test/privacy-punctuation.test.ts
 npm run build && node --test --test-concurrency=1 test/privacy-sdk-instance.test.ts

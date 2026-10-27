@@ -10,12 +10,15 @@ import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem, recoverySnapshotMatches } from './recovery.ts';
-import { inspectItem, readItem } from './inspection.ts';
+import { inspectItem, inspectItems, readItem } from './inspection.ts';
 import { completeClaim } from './close.ts';
 import type { CloseOptions } from './close.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
+
+/** Portable shared selection receipt, including optional claim or receiver context. */
+export type SharedNextReceipt = Pick<ReturnType<typeof selectNext>, 'reason' | 'warnings' | 'skipped'> & Partial<Awaited<ReturnType<SharedTracker['start']>>> & { mode: string; selected: string | null; dry_run: boolean; context?: Record<string, unknown> };
 
 /** Accept only a decimal fencing generation; a missing value is generation zero. */
 function decimalFencingGeneration(value: unknown): string | undefined {
@@ -30,6 +33,7 @@ function parseHandoffContext(id: string, raw: string, token: unknown): Record<st
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new StaleFenceError(id);
   const context = parsed as Record<string, unknown>;
   if (typeof context.token !== 'string' || decimalFencingGeneration(context.token) === undefined || context.token !== token) throw new StaleFenceError(id);
+  assertPrivatePathSafe(context, 'context');
   return context;
 }
 
@@ -119,26 +123,41 @@ export class SharedTracker {
   }
 
   /** Pick by shared readiness and rank while holding the tracker coordination lease. */
-  async next(parent?: string, dryRun = false, policy?: FairPolicy) {
+  async next(parent?: string, dryRun = false, policy?: FairPolicy): Promise<SharedNextReceipt> {
     assertPrivatePathSafe({ parent, author: this.engine.author });
     /** Keep the read/claim decision inside a single bounded operation. */
     const choose = async (lease?: Lease) => {
       const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
-      const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      const incoming = corpus.items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
+      const incoming = await this.incomingHandoff(corpus.items, parent, dryRun, policy);
       if (incoming !== undefined) {
-        policy?.handoff(incoming);
-        const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
-        if (!dryRun) this.tokens.set(incoming.id, String(incoming.swarm_token));
-        return { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
+        if (lease !== undefined) this.tokens.set(incoming.id, incoming.token);
+        return incoming;
       }
       const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
       const { chosen, unknown, warnings, skipped, reason } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
       assertPrivatePathSafe({ warnings, skipped, reason });
-      const lane = chosen !== undefined && !dryRun ? await this.claimLane(chosen.item.id, !unknown, lease!, corpus) : undefined;
+      const lane = chosen !== undefined && lease !== undefined ? await this.claimLane(chosen.item.id, !unknown, lease, corpus) : undefined;
       return { mode: 'shared-tracker', ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
     };
-    return dryRun ? choose() : withSwarmLease(this.engine.pmRoot, this.engine.author, choose);
+    if (dryRun) return choose();
+    // Preflight cannot announce liveness, cache a token or acquire a writer lease.
+    // Only preflight receiver content here. Selection still certifies one fresh
+    // complete corpus inside the lease and performs no per-lane client reads.
+    const local = await inspectItems(this.engine.pmRoot, this.engine.repo);
+    await this.incomingHandoff(local ?? (await this.engine.corpus()).items, parent, dryRun, policy);
+    return withSwarmLease(this.engine.pmRoot, this.engine.author, choose);
+  }
+
+  /** Admit the complete prospective receiver receipt before caching a token or announcing liveness. */
+  private async incomingHandoff(items: Awaited<ReturnType<Swarm['corpus']>>['items'], parent: string | undefined, dryRun: boolean, policy?: FairPolicy) {
+    const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
+    const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
+    if (incoming === undefined) return undefined;
+    policy?.handoff(incoming);
+    const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
+    const receipt = { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
+    assertPrivatePathSafe(receipt);
+    return receipt;
   }
 
   /** Report ownership, claim age and declared overlaps without inventing Git measurements. */
@@ -244,12 +263,12 @@ export class SharedTracker {
   }
 
   /** Bind an ownership-dependent mutation to one checked item generation. */
-  private async owned<T>(id: string, token: string | undefined, operation: (item: Record<string, unknown>, lease: Lease) => Promise<T>, preview?: (item: Record<string, unknown>, lease: Lease) => Promise<unknown>): Promise<T> {
+  private async owned<T>(id: string, token: string | undefined, operation: (item: Record<string, unknown>, lease: Lease) => Promise<T>, preview?: (item: Record<string, unknown>) => Promise<unknown>): Promise<T> {
+    if (preview !== undefined) {
+      const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
+      if (local !== null) { this.assertFence(local.item, token); assertPrivatePathSafe({ ...local.item, body: local.body }, 'document'); await preview(local.item); }
+    }
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
-      if (preview !== undefined) {
-        const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
-        if (local !== null) { this.assertFence(local.item, token); await preview(local.item, lease); }
-      }
       return operation(await this.fence(id, token), lease);
     });
   }
@@ -260,16 +279,16 @@ export class SharedTracker {
     to = to.trim();
     if (!to || to === this.engine.author || !note.trim() || note.length > 4096) throw new Error('handoff requires a different --to agent and a nonempty --note of at most 4096 characters');
     /** Reuse the exact transfer preparation for preflight and the fresh fenced commit. */
-    const transfer = async (item: Record<string, unknown>, lease: Lease, dryRun = false) => {
+    const transfer = async (item: Record<string, unknown>, lease?: Lease) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot hand off a terminal item');
-      return this.transfer(item, to, note, lease, dryRun);
+      return this.transfer(item, to, note, lease);
     };
-    return this.owned(id, token, (item, lease) => transfer(item, lease), (item, lease) => transfer(item, lease, true));
+    return this.owned(id, token, (item, lease) => transfer(item, lease), item => transfer(item));
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
-  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease: Lease, dryRun = false) {
+  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease) {
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
     let files: string[];
     try { files = itemFootprint(item); }
@@ -278,13 +297,13 @@ export class SharedTracker {
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     assertPrivatePathSafe(context);
-    if (!dryRun) await lease.write(() => commitItemMutation({ id, options: {
+    if (lease !== undefined) await lease.write(() => commitItemMutation({ id, options: {
       author: this.engine.author, force: true, ...(to === undefined ? { status: statuses.open_status } : { assignee: to }),
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
     }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
-    if (!dryRun) this.tokens.delete(id);
+    if (lease !== undefined) this.tokens.delete(id);
     return { id, previous_owner: item.assignee, agent: to ?? null, token, context };
   }
 
@@ -315,7 +334,7 @@ export class SharedTracker {
         const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        try { recovered.push(await this.transfer(item, to, note, lease!, dryRun)); }
+        try { recovered.push(await this.transfer(item, to, note, lease)); }
         catch (error) {
           if (!(error instanceof SettingsRefusal)) throw error;
           refused.push({ id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });

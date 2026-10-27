@@ -60,7 +60,8 @@ test('every mutating command cross rejected encoding and input position is byte-
   let checked = 0;
   for (const [command, args, options] of scenarios) {
     const base: CommandHandlerContext = { command: `swarm ${command}`, pm_root: f.pmRoot, source_workspace_root: f.repo, sdk, args: [...args], options: { ...options }, global: { author: 'shared-test' } };
-    const slots = [...['author', 'path', 'outputInclude', 'outputLimit', 'outputBudget', 'outputFormat', 'outputSession', 'outputCursor', 'defaultOutputFormat'].map(key => `global:${key}`), ...base.args.map((_, index) => `arg:${index}`), ...Object.entries(base.options).filter(([, value]) => typeof value === 'string').map(([key]) => `flag:${key}`)];
+    // Tracker location is an invocation coordinate, covered by the must-allow property.
+    const slots = [...['author', 'outputInclude', 'outputLimit', 'outputBudget', 'outputFormat', 'outputSession', 'outputCursor', 'defaultOutputFormat'].map(key => `global:${key}`), ...base.args.map((_, index) => `arg:${index}`), ...Object.entries(base.options).filter(([, value]) => typeof value === 'string').map(([key]) => `flag:${key}`)];
     for (const [encoding, value] of rejectedCorpus) for (const slot of slots) {
       const ctx = { ...base, args: [...base.args], options: { ...base.options }, global: { ...base.global } };
       if (slot.startsWith('global:')) Object.assign(ctx.global, { [slot.slice(7)]: value });
