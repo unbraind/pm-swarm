@@ -3,17 +3,17 @@ title: Resume fenced close with an SDK workspace transaction
 description: Use the public commitItemMutations helper on commitWorkspaceTransaction for an ordered fenced metadata patch/unset and native close. deriveMutationTransactionId and the owned swarm_close_transaction receipt permit recovery after ownership clears. The SDK journal supplies idempotency and reverse-order compensation; package document admission preserves peer edits.
 type: Issue
 pm_format_version: 2
-status: in_progress
+status: closed
 priority: 2
 tags[1]: concurrency
 created_at: "2026-10-26T21:32:19.770Z"
-updated_at: "2026-10-27T00:53:07.319Z"
-assignee: codex-agent
-claim_principal: codex-agent
+updated_at: "2026-10-27T01:01:26.024Z"
+closed_at: "2026-10-27T01:01:25.374Z"
+completed_at: "2026-10-27T01:01:25.374Z"
 author: codex-agent
 acceptance_criteria: One SDK workspace transaction containing update then close; deterministic transaction identity; non-Git interruption at every forward boundary and fresh-process resume without duplicate history or lost fields; ordinary failure compensation and retry; no swarm_partial_commit path for close.; Resumed compensation verifies latest owned SDK history under the item lock and never deletes peer changes from a prior refused rollback
 parent: pm-swarm-y972
-comments[9]{created_at,author,text}:
+comments[10]{created_at,author,text}:
   "2026-10-26T22:01:31.001Z",codex-agent,"Native compound-close regression and partial-prefix peer-preservation test pass. Separate behavioral reversions of the committed-successor observer and partial-commit refusal each fail their regression once, exit 1; restored positives pass. This verifies guarded per-stage behavior and truthful receipts, not a single atomic close. The SDK gap remains open."
   "2026-10-26T23:21:05.145Z",codex-agent,"Implemented public commitItemMutations on commitWorkspaceTransaction, with deriveMutationTransactionId and an owned recovery receipt. Initial focused recovery suite passed 11/11: seven exact SDK forward boundaries resume in fresh CLI processes with exactly update then close and no duplicate history; ordinary failure compensates the metadata step, then retry completes once. This corrects the prior SDK-gap claim; no lifecycle or journal engine was reimplemented. Expanded peer and writer-inventory tests are running."
   "2026-10-26T23:25:52.970Z",codex-agent,"Behavioral revert proofs: node --test --test-concurrency=1 --test-name-pattern=\"SDK close journal resumes\" test/close-transaction.test.ts fails when only the prior unjournaled SharedTracker.close function is restored (exit 1, one failure). Disabling only the persisted-receipt resume condition fails eight results; removing only journaled-mode admission fails seven results by returning partial-commit errors instead of SDK interruptions. All three probes restored source byte-for-byte: sixteen expected failing results total. The restored 25-test suite passes, covering seven forward crashes, four compensation crashes, fresh-process resume, seven private-peer transitions and committed replay ownership checks."
@@ -23,6 +23,7 @@ comments[9]{created_at,author,text}:
   "2026-10-27T00:31:11.214Z",codex-agent,"Verified at e1286a3056eb8ac17d0551c052bb46e6c6cdae85: https://github.com/unbraind/pm-swarm/actions/runs/40424027439 . npm on Node 22 and 26 and Bun on Node 26 each pass 414 suite tests plus four packed-acceptance results, zero fail/skip/cancel/todo; coverage is 100/100/100/100 across 35 sources at unchanged thresholds, with at most two workers. The 28-test close suite proves seven forward interruptions, four compensation interruptions, fresh-process and canonical-ID recovery, native tokenless generation-one recovery, peer preservation and replay without duplicates. Seven behavioral revert probes produced 20 expected failures before exact restoration. Both mutation kinds are expressed by public commitItemMutations on commitWorkspaceTransaction; atomic close is not an SDK gap. Closing this item under the explicit orchestrator instruction."
   "2026-10-27T00:39:34.137Z",codex-agent,"Final retry audit reproduced a cross-attempt compensation bug on a real scratch tracker: after the first rollback was correctly refused on a public peer comment, a fresh retry adopted that peer state and SDK restore removed the comment. Reopening this explicitly scoped recovery item to fix the class before completion. Recovery receipts must be correlated with the latest SDK history entry before a new request adopts pending transaction state; a foreign latest writer must yield a typed conflict without touching item, history or journal. This is a package admission defect, not a missing SDK mutation kind."
   "2026-10-27T00:53:07.283Z",codex-agent,"Cross-attempt ownership correction passes the expanded 36-test close suite. Public SDK history reads correlate the latest actor, reserved bulk marker and native update/close/restore operation with the close receipt. Pure/fresh preflight and the native item-lock guard all check it. Four real peer variants (comment, title, body, copied marker on a comment) preserve item, history and journal bytes on retry; owned close-step compensation still resumes, and unreadable history yields a safe typed refusal. Four behavioral reversions fail as expected: remove foreign-receipt rejection (five failures), omit the final native-lock check (one), remove unreadable-history translation (one), reject owned restore receipts (one). Exact restoration follows each probe. Eleven close probes now produce 28 expected failures."
+  "2026-10-27T01:01:21.246Z",codex-agent,"Final recovery acceptance is verified locally: 36/36 close tests, 10/10 installed SDK-copy tests, eight restored ownership-focused checks, typecheck, lint, documented declarations and zero duplication. The cross-attempt peer-loss reproduction now refuses without changing item/history/journal bytes; checks run under the native item lock. Eleven behavioral probes yield 28 expected failures before restoration. Closing under the explicit orchestrator instruction with these recovery proofs; final-head npm/Bun release gates are still required before the final report. Record final tracking state before CI to avoid a second unchanged-source full run; reopen if CI exposes a behavioral defect."
 files[6]{path,scope}:
   src/close.ts,project
   src/commands.ts,project
@@ -50,4 +51,5 @@ tests[2]:
     updated_at: "2026-10-26T23:26:54.377Z"
 docs[1]{path,scope}:
   docs/privacy-admission.md,project
+close_reason: "SDK workspace transaction and ownership-safe recovery verified by 36 close tests, installed SDK-copy checks and behavioral revert proofs; final-head npm/Bun gates required before reporting completion."
 body: ""
