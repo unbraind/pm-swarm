@@ -134,6 +134,8 @@ export interface LeaseOptions {
 export interface Lease {
   /** Refuse a resumed operation whose lease expired or was superseded. */
   assert(): void;
+  /** Check the still-owned generation during cleanup, without requiring liveness renewal. */
+  assertOwned(): void;
   /** Recheck the generation before every SDK write attempt. */
   write<T>(operation: () => Promise<T>, options?: { announce?: boolean }): Promise<T>;
   /** Retain rollback until receipt admission and the final heartbeat have succeeded. */
@@ -155,12 +157,12 @@ async function releaseAll(releases: (() => Promise<void>)[]): Promise<void> {
  */
 export async function withSwarmLease<T>(pmRoot: string, author: string, operation: (lease: Lease) => Promise<T>, options: LeaseOptions = {}): Promise<T> {
   const leaseMs = options.leaseMs ?? 30000; const renewMs = options.renewMs ?? 5000; const waitMs = options.waitMs ?? 300000;
-  const root = join(pmRoot, 'runtime/swarm'); const created = mkdirSync(root, { recursive: true });
+  const root = join(pmRoot, 'runtime/swarm'); const created = mkdirSync(root, { recursive: true }); let admitted = false;
   try {
     const path = join(root, 'operation.json'); const pin = join(root, 'operation-pin.json');
     const identity = { pid: process.pid, process_start: processStart(process.pid), locality: leaseLocality() }; const token = randomUUID(); const started = Date.now();
     const candidate = join(root, `request-${String(started).padStart(16, '0')}-${token}.json`);
-    let timer: ReturnType<typeof setInterval> | undefined;
+    let timer: ReturnType<typeof setInterval> | undefined; let outcome: T;
     const rollbacks: (() => Promise<void>)[] = []; const releases: (() => Promise<void>)[] = [];
     try {
     publish(candidate, { ...identity, token });
@@ -197,19 +199,24 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
       const owner = generation();
       if (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs) throw new StaleFenceError('operation');
     };
-    let admitted = false;
     /** Announce principal liveness only after a successful write or completed operation. */
     const announce = () => { touchHeartbeat(pmRoot, author); admitted = true; };
-    const lease: Lease = { assert, write: (operation, options) => retryLock(async () => { if (options?.announce === false) generation(); else assert(); const result = await operation(); if (options?.announce !== false) announce(); return result; }), onFailure: cleanup => { rollbacks.push(cleanup); }, onRelease: release => { releases.push(release); } };
+    const lease: Lease = { assert, assertOwned: generation, write: (operation, options) => retryLock(async () => { if (options?.announce === false) generation(); else assert(); const result = await operation(); if (options?.announce !== false) announce(); return result; }), onFailure: cleanup => { rollbacks.push(cleanup); }, onRelease: release => { releases.push(release); } };
       publish(path, { ...identity, token, heartbeat: Date.now() });
       timer = setInterval(() => {
         try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); if (admitted) announce(); }
         catch (error) { failure = error; }
       }, renewMs);
       assert(); const result = await operation(lease);
+      try { assert(); }
+      catch (error) {
+        // Legacy coordination probes may consume a fence refusal and return no receipt.
+        if (error instanceof StaleFenceError && result === undefined && rollbacks.length === 0) return result;
+        throw error;
+      }
       const content = options.receiptWorkspace !== undefined && typeof result === 'object' && result !== null && 'worktree' in result && typeof result.worktree === 'string'
         ? { ...result, worktree: relative(options.receiptWorkspace, result.worktree) } : result;
-      return commitMutation(content, () => { announce(); return result; });
+      outcome = commitMutation(content, () => { announce(); return result; });
     } catch (error) {
       const failures: unknown[] = [];
       for (const rollback of rollbacks.reverse()) { try { await rollback(); } catch (failure) { failures.push(failure); } }
@@ -228,5 +235,6 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
       }
       }
     }
-  } finally { removeEmptyRuntime(root, created); }
+    return outcome;
+  } finally { if (!admitted) removeEmptyRuntime(root, created); }
 }

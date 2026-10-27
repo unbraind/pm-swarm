@@ -144,6 +144,7 @@ export class Swarm {
     const initial = await historySnapshot(this.pmRoot, String(item.id));
     let receipt: Pick<ClaimResult, 'item' | 'previous_assignee' | 'skipped'> | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
     let branchOwned = false; let created = false; let configured = false;
+    let claimVersion = initial.version; let claimDocument: Record<string, unknown> | undefined;
     let cleaned = false;
     const cleanup = async () => {
       if (cleaned) return; cleaned = true;
@@ -152,8 +153,7 @@ export class Swarm {
       const clean = async (action: () => void | Promise<void>) => { try { await action(); } catch (failure) { failures.push(failure); } };
       let metadataClean = publication === undefined;
       if (publication !== undefined && receipt !== undefined) await clean(async () => {
-        const version = receipt!.previous_assignee === null ? initial.version + 1 : initial.version;
-        const current = await this.acquisitionSnapshot(String(item.id), version, receipt!.item);
+        const current = await this.acquisitionSnapshot(String(item.id), claimVersion, receipt!.item);
         for (const key of ['swarm_branch', 'swarm_base', 'swarm_base_ref']) if (current.document.metadata[key] !== publication![key]) throw new StaleFenceError('lane metadata');
         const keys = ['swarm_branch', 'swarm_base', 'swarm_base_ref'];
         await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => item[key] !== undefined).map(key => `${key}=${String(item[key])}`), unset: keys.filter(key => item[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options)), { announce: false });
@@ -168,21 +168,33 @@ export class Swarm {
         git(this.repo, ['worktree', 'remove', path]);
       });
       if (metadataClean && branchOwned) await clean(() => {
-        if (git(this.repo, ['worktree', 'list', '--porcelain']).includes(`branch refs/heads/${branch}\n`)) throw new StaleFenceError('lane branch');
+        if (git(this.repo, ['worktree', 'list', '--porcelain']).split(/\r?\n/).includes(`branch refs/heads/${branch}`)) throw new StaleFenceError('lane branch');
         git(this.repo, ['update-ref', '-d', `refs/heads/${branch}`, base]);
       });
-      if (receipt !== undefined && receipt.previous_assignee === null && receipt.skipped !== true) await clean(() => this.releaseAcquiredClaim(String(item.id), initial.version + 1, receipt!.item, lease));
-      if (failures.length > 0) throw new SettingsRefusal('swarm_document_changed', 'Start failed and some owned cleanup could not be verified. Preserve peer changes, inspect the remaining claim or Git lane, and reconcile it before retrying.');
+      if (receipt !== undefined && receipt.previous_assignee === null && receipt.skipped !== true) await clean(() => this.releaseAcquiredClaim(String(item.id), claimVersion, receipt!.item, lease));
+      if (failures.length > 0) { lease.assertOwned(); throw new SettingsRefusal('swarm_document_changed', 'Start failed and some owned cleanup could not be verified. Preserve peer changes, inspect the remaining claim or Git lane, and reconcile it before retrying.'); }
     };
     lease.onFailure(cleanup);
     try {
-      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, async admitted => {
-        receipt = await this.client.claim(admitted.id, admitted.options);
-        claimed = { ...receipt.item, body: item.body ?? '' }; return receipt;
-      }, { onCommitted: (before, after) => { receipt = { item: after.metadata, previous_assignee: before.metadata.assignee ?? null, skipped: false }; claimed = { ...after.metadata, body: after.body }; } }));
-      await startTransition('claimed');
-      claimed = (await readItem(this.client, id)).item;
-      await startTransition('claim_read');
+      await lease.write(async () => {
+        const result = await commitItemMutation({ id: item.id, options: { author: this.author }, item }, async admitted => {
+          const value = await this.client.claim(admitted.id, admitted.options); receipt ??= value; return value;
+        }, {
+          beforeWrite: async () => {
+            if ((await historySnapshot(this.pmRoot, String(item.id))).version !== initial.version) throw new SettingsRefusal('swarm_document_changed', 'The native claim history changed after admission; refresh the item and retry.', 'document');
+          },
+          onCommitted: (before, after) => {
+            receipt = { item: after.metadata, previous_assignee: before.metadata.assignee ?? null, skipped: false };
+            claimVersion = initial.version + 1; claimDocument = { ...after.metadata, body: after.body };
+          },
+        });
+        await startTransition('claimed');
+        claimed = (await readItem(this.client, id)).item;
+        assertPrivatePathSafe(claimed, 'document');
+        if (documentFingerprint(claimed) !== documentFingerprint(claimDocument ?? item)) throw new SettingsRefusal('swarm_document_changed', 'The item changed during claim admission; preserve peer changes, refresh its document and retry.', 'document');
+        await startTransition('claim_read');
+        return result;
+      });
       git(this.repo, ['update-ref', `refs/heads/${branch}`, base, '0'.repeat(base.length)]); branchOwned = true;
       await startTransition('branch_created');
       git(this.repo, ['worktree', 'add', path, branch]); created = true;
@@ -190,8 +202,8 @@ export class Swarm {
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]); configured = true;
       await startTransition('configured');
       await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed! }, async admitted => {
-        const published = await this.client.update(admitted.id, admitted.options); publication = { ...published.item, body: claimed!.body ?? '' }; return published;
-      }, { onCommitted: (_before, after) => { publication = { ...after.metadata, body: after.body }; } }));
+        const published = await this.client.update(admitted.id, admitted.options); publication = published.item; return published;
+      }, { onCommitted: (_before, after) => { publication = after.metadata; } }));
       await startTransition('published');
       const result = { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
       await startTransition('receipt');

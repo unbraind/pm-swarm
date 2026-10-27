@@ -26,6 +26,16 @@ including same-author ABA; full-document CAS preserves peer content edits.
 Cleanup does not announce liveness and still checks its pin generation when a
 renewal failed. Nested locks release before the tracker pin.
 
+Admission and cleanup bind to the native history head even when a peer restores
+an identical document. The recorded claim version comes from the actual native
+commit, including legacy assignment migration. A native no-op can skip SDK
+mutation hooks: its complete fresh document is therefore read and checked before
+the claim write scope announces liveness or creates any Git resource. Independent
+peer title, body and file changes survive a refusal with unchanged heartbeat and
+lease bytes. Final receipts recheck their generation. Dirty peer worktrees keep
+their attached branches, and successful acquisition performs no fallible
+empty-directory removal after releasing its cleanup scope.
+
 Runtime temporary files retain ownership immediately on exclusive open; failed publication removes only
 an owned temporary. Request cleanup is inside the pin cleanup scope. Verification
 worktree cleanup also encloses worktree creation, and temporary directory cleanup
@@ -33,7 +43,8 @@ runs even if worktree removal fails.
 
 ## Behavioral revert proofs
 
-All sixteen negative probes exited 1; production sources were restored immediately.
+All 24 negative probes exited 1; production sources were restored immediately.
+The probes produced 44 expected failures and six passing controls across 50 results.
 
 | Reverted behavior | Exact probe | Result |
 | --- | --- | --- |
@@ -64,6 +75,19 @@ Native-boundary probes use the same test runner prefix:
 | Stable native history reads | `--test-name-pattern='native history snapshot' test/close-journal-adversarial.test.ts` | 0/1 pass; a real independent peer append goes unnoticed |
 | Immediate temporary-file ownership | `--test-name-pattern='runtime cleanup owns the file immediately' test/privacy-lease.test.ts` | 0/1 pass; failure after the real exclusive write leaves an orphan |
 
+Final native and completion boundaries use the same test runner prefix:
+
+| Reverted behavior | Probe arguments | Result |
+| --- | --- | --- |
+| Superseded generation transport | `--test-name-pattern='Git lane (publication\|rollback) never' test/review-r9.test.ts` | 0/2 pass |
+| Final generation admission | `--test-name-pattern='final receipt checks\|void acquisition' test/cleanup-boundaries.test.ts` | 0/2 pass |
+| Attached branch ownership | `--test-name-pattern='peer-changed dirty worktree' test/cleanup-boundaries.test.ts` | 0/1 pass |
+| Native legacy blank assignment | `--test-name-pattern='cleanup treats imported blank' test/legacy-claim-cleanup.test.ts` | 0/2 pass |
+| No fallible cleanup after success | `--test-name-pattern='successful claim receipts' test/cleanup-boundaries.test.ts` | 0/1 pass |
+| Legacy migration commit version | `--test-name-pattern='legacy existing claim' test/legacy-claim-cleanup.test.ts` | 0/1 pass |
+| Fresh no-op admission before liveness | `--test-name-pattern='peer-owned native claim no-op' test/start-admission-race.test.ts` | 0/4 pass |
+| Locked native history head | `--test-name-pattern='different native history head' test/start-admission-race.test.ts` | 0/1 pass |
+
 Positive source checks exercise real SDK trackers and Git, including seven start
 boundaries for each of `start`, `next` and `schedule`, three heartbeat boundaries
 per command, retained pre-existing claims, peer ABA and fresh peer-content cleanup.
@@ -73,9 +97,10 @@ item/history changes. Existing seven forward and four compensation crash
 boundaries remain covered. Packed npm and Bun consumers independently repeat the
 copied-message ownership proof in their installed module graph.
 
-The final pinned-pm linked integration command passes **126/126** with zero
-failures, skips, cancellations or todo results (264287 ms including runner
-overhead). Typecheck, lint, zero duplication and all 161 declarations across 36
+The final pinned-pm linked integration command passes **127/127** with zero
+failures, skips, cancellations or todo results (203597 ms in the native test
+runner), including the release-approval tests merged from main. The earlier
+journal and acquisition run passed **126/126**. Typecheck, lint, zero duplication and all declarations across 36
 authored files pass. Source coverage of the new journal verifier is 100 in all
 four dimensions; complete package coverage remains a separate CI gate.
 
