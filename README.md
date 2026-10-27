@@ -2,7 +2,7 @@
 
 Coordinate dozens of agents on one pm tracker, with renewed heartbeats, fenced ownership, dead-agent recovery and context handoff. pm-swarm uses SDK readiness, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
-Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. This new package stays unreleased until maintainer approval. After publication:
+Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. Automated GitHub releases require the repository variable `PM_RELEASE_APPROVED=true`. After publication:
 
 ```sh
 pm install pm-swarm --project
@@ -123,6 +123,32 @@ and dot-dot segments with directory-boundary matching. A native SDK transactiona
 hook validates each complete proposed item document under its writer lock,
 including preserved fields, links, comments and body. Typed refusals name the
 field to repair. See [privacy admission](docs/privacy-admission.md).
+
+## Install and release approval
+
+The first npm release is pending the maintainer's interactive bootstrap. After
+that first publish, the maintainer configures npm trusted publishing for
+`release.yml` and sets the repository variable `PM_RELEASE_APPROVED` to `true`.
+The daily workflow and manual dispatch both require this variable and `main`.
+Publishing uses OIDC with provenance; no stored npm token is needed.
+
+Once published, install the package and compatible pm host, then activate the
+extension in an initialized pm project:
+
+```sh
+npm install pm-swarm @unbrained/pm-cli
+npx --no-install pm package install ./node_modules/pm-swarm
+
+bun add pm-swarm @unbrained/pm-cli
+bunx --bun --no-install pm package install ./node_modules/pm-swarm
+
+pm package install npm:pm-swarm
+pm swarm --help
+```
+
+The package exports its SDK through `main` and `types` and registers commands
+with pm. It has no standalone `bin`: use `npx pm` or `bunx --bun pm` through
+the installed host. npm/Bun dependency installation alone does not activate it.
 
 ## Without git
 
@@ -455,3 +481,10 @@ metadata), `schedule_skills` (declare the required skills or hand off to a quali
 receiver), and `schedule_backend_refused` (use supported tracker-wide coordination).
 The CLI exits 2 with the code and remedy. An empty eligible set is a successful
 receipt with `selected: null`, not an ownership transfer.
+
+Every workflow job granted write permissions, including CodeQL, Dependabot and
+reusable workflow calls, requires the exact repository `unbraind/pm-swarm`.
+The approval variable controls GitHub releases; it does not impose a local npm
+publishing hold. Maintainers run the prepublish checks and authenticate with npm
+for local publication. The first local publish uses `--provenance=false`; daily
+GitHub OIDC releases keep provenance enabled.

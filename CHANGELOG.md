@@ -24,3 +24,7 @@
 ### Fixed
 
 - Resume fenced close with an SDK workspace transaction ([pm-swarm-atomic-close](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-atomic-close.toon))
+
+### Other
+
+- Release readiness behind PM_RELEASE_APPROVED ([pm-swarm-release-gate](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-release-gate.toon))
