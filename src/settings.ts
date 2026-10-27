@@ -97,15 +97,16 @@ export async function assertItemHistoryHead(pmRoot: string, id: string, expected
   if (current.length !== expected.length || current.hash !== expected.hash) throw new SettingsRefusal('swarm_superseded', 'Native item history advanced or changed after the checked snapshot. Preserve the peer claim and Git resources; refresh its history before retrying.', 'history');
 }
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: ({ pmRoot: string; history?: ItemHistoryHead } | { pmRoot?: string; history: ItemHistoryHead }) & { related?: ReadonlyMap<string, { item: Record<string, unknown>; history: ItemHistoryHead }>; transaction?: boolean; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { history: ItemHistoryHead } & { related?: ReadonlyMap<string, { item: Record<string, unknown>; history: ItemHistoryHead }>; transaction?: boolean; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
+  if (options.history === undefined || !Number.isSafeInteger(options.history.length) || typeof options.history.hash !== 'string') throw new SettingsRefusal('swarm_input_invalid', 'Supply the native history head captured before reading the complete decision document; never refresh it at commit time.', 'history');
   assertSdkInstance();
   const id = String(payload.item.id); const expected = documentFingerprint(payload.item);
-  const related = options.related === undefined ? undefined : new Map([...options.related].map(([id, value]) => [id, { id, expected: documentFingerprint(value.item), history: value.history, committed: 0 }]));
+  const related = options.related === undefined ? undefined : new Map([...options.related].map(([id, value]) => [id, { id, expected: documentFingerprint(value.item), history: value.history, committed: 0, onCommitted: options.onCommitted }]));
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
-    const history = options.history ?? await readItemHistoryHead(options.pmRoot!, id);
+    const history = options.history;
     const scope: ItemAdmissionScope = { id, expected, related, committed: 0, generation: options.generation, history, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
     await checkpoint?.('admitted');
     return ADMISSION.scopes.run(scope, async () => {

@@ -90,9 +90,29 @@ const [closeAttempt]=await Promise.allSettled([withItemMutationObserver(async bo
 },()=>shared.close(closing,'Packed stale completion',closingClaim.token))]);
 assert.equal(closePeer,true);assert.equal(closeAttempt.status,'rejected');assert.equal(closeAttempt.reason.code,'swarm_superseded');
 assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',closing),getHistoryPath(process.env.PM_PATH,closing)].map(path=>readFileSync(path,'utf8')),closeBytes);
-console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_recovery:1,forward_close_aba_preserved:1}));
+const paired=(await client.create({type:'Task',title:'Packed snapshot window'})).item.id;const pairedClaim=await shared.start(paired);
+const get=client.get.bind(client);let snapshotPeer=false;let snapshotBytes=[];
+client.get=new Proxy(get,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);if(!snapshotPeer){
+  snapshotPeer=true;const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,paired),paired);const version=(await getItemAt(paired,history.at(-1).ts,{pmRoot:process.env.PM_PATH})).as_of_version;
+  for(const args of [['release',paired],['claim',paired,'--force'],['restore',paired,String(version),'--force']]){const peer=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(peer.status,0,peer.stdout+peer.stderr);}
+  snapshotBytes=[getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8'));
+}return result;}});
+try{await assert.rejects(shared.handoff(paired,'receiver','Packed paired handoff',pairedClaim.token),error=>error.code==='swarm_superseded');}finally{client.get=get;}
+assert.equal(snapshotPeer,true);assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8')),snapshotBytes);
+const rollbackBlocker=(await client.create({type:'Task',title:'Packed compensation domain'})).item.id;
+const rollbackDependent=(await client.create({type:'Task',title:'Packed compensated dependent',status:'blocked',blockedBy:rollbackBlocker,blockedReason:'Public blocker'})).item.id;
+const rollbackClaim=await shared.start(rollbackBlocker);const domain=[rollbackBlocker,rollbackDependent];const originals=domain.map(id=>readFileSync(getItemPath(process.env.PM_PATH,'Task',id),'utf8'));
+await assert.rejects(shared.close(rollbackBlocker,'Packed full compensation',rollbackClaim.token,{onTransition:context=>{if(context.transition==='committing')throw new Error('Packed ordinary failure');}}),/Packed ordinary failure/);
+assert.deepEqual(domain.map(id=>readFileSync(getItemPath(process.env.PM_PATH,'Task',id),'utf8')),originals);
+let compensationCrash=false;
+await assert.rejects(shared.close(rollbackBlocker,'Packed full compensation',rollbackClaim.token,{onTransition:context=>{
+  if(context.transition==='committing')throw new Error('Packed compensation crash');
+  if(context.transition==='compensating'){compensationCrash=true;throw new WorkspaceTransactionInterruptedError('Stop before packed compensation');}
+}}));
+assert.equal(compensationCrash,true);await shared.close(rollbackBlocker,'Packed full compensation',rollbackClaim.token);assert.equal((await client.get(rollbackDependent)).item.status,'open');
+console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_recovery:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1,complete_close_compensation:1}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_recovery: 1, forward_close_aba_preserved: 1 });
+  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_recovery: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1, complete_close_compensation: 1 });
 }

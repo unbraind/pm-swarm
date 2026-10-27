@@ -6,12 +6,15 @@ status: blocked
 priority: 2
 tags[2]: durability,sdk-gap
 created_at: "2026-10-27T14:32:22.495Z"
-updated_at: "2026-10-27T14:51:35.144Z"
+updated_at: "2026-10-27T16:39:02.223Z"
 author: codex-agent
 parent: pm-swarm-y972
 blocked_reason: Pinned SDK exposes step_applied before persisting the native result and exports no durable native-close warning receipt; an upstream SDK change is needed.
-files[1]{path,scope}:
+comments[1]{created_at,author,text}:
+  "2026-10-27T16:25:46.348Z",codex-agent,"Round 6: the same public WorkspaceTransactionStep.apply result boundary also governs secondary ownership receipts. The SDK persists results after step_applied, so a process loss before recording can lose native dependent receipts as well as warnings. Pre-admitted secondary heads are now journaled before native close; recovery refuses compensation when those advanced and ownership cannot be proven, preserving native state instead of reopening only its blocker. Exact durable receipts, when recorded, compensate every owned dependent and resume without duplicate restores. See docs/native-close.md and test/close-compound-effects.test.ts."
+files[2]{path,scope}:
   src/close-journal.ts,project
+  test/close-compound-effects.test.ts,project
 docs[1]{path,scope}:
   docs/native-close.md,project
 body: ""

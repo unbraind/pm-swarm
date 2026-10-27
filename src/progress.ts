@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
-import { inspectItem, readItem } from './inspection.ts';
+import { inspectItem, readItem, mutationSnapshot } from './inspection.ts';
 import { commitItemMutation, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
@@ -123,11 +123,16 @@ export class PlanProgress {
   }
 
   /** Read complete normalized core Plan metadata without agent output ceilings. */
-  private async snapshot(id: string): Promise<PlanSnapshot> {
+  private async snapshot(id: string, admit = false) {
     const local = await inspectItem(this.pmRoot, this.pmRoot, id);
-    const item = local === null ? (await readItem(this.client, id)).item : { ...local.item, body: local.body };
+    const read = async () => {
+      const fresh = await inspectItem(this.pmRoot, this.pmRoot, id);
+      return fresh === null ? (await readItem(this.client, id)).item : { ...fresh.item, body: fresh.body };
+    };
+    const snapshot = admit ? await mutationSnapshot(this.pmRoot, String(local?.item.id ?? id), read) : { item: await read(), historyHead: undefined };
+    const item = snapshot.item as PlanSnapshot;
     if (item.type !== 'Plan' || !Array.isArray(item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
-    return item;
+    return { ...snapshot, item };
   }
 
   /** Derive all levels from the same snapshot before applying bounded pagination. */
@@ -158,7 +163,7 @@ export class PlanProgress {
   /** Inspect progress without acquiring writer leases or changing item history. */
   async view(id: string, options: ProgressOptions = {}): Promise<ProgressView> {
     const { orchestrator } = await this.authority(options);
-    return this.project(await this.snapshot(id), options, orchestrator);
+    return this.project((await this.snapshot(id)).item, options, orchestrator);
   }
 
   /** Preview or explicitly append an attributed declaration; stale races stay stale.
@@ -184,7 +189,7 @@ export class PlanProgress {
     assertPrivatePathSafe({ id, options, author: this.sdkAuthor });
     const witness = validateProgressWitness(options);
     const { actor, orchestrator } = await this.authority(options);
-    const item = await this.snapshot(id);
+    const { item, historyHead } = await this.snapshot(id, options.apply === true);
     const step = item.plan_steps!.find(row => row.id === witness.step);
     if (step === undefined) throw new ProgressRefusal('progress_invalid', 'Use a step id from the current Plan progress view.');
     const view = this.project(item, { ...options, offset: item.plan_steps!.indexOf(step), limit: 1 }, orchestrator);
@@ -196,7 +201,7 @@ export class PlanProgress {
       if (step.owner === actor || (witness.stage === 'accepted' && (view.orchestrator !== actor || selected.reviewers.includes(actor)))) throw new ProgressRefusal('progress_role', 'Use an independent reviewer and the tracker-configured orchestrator for acceptance.');
       if (!selected.produced || (witness.stage === 'accepted' && !selected.reviewed)) throw new ProgressRefusal('progress_prerequisite', 'Production evidence and then an independent review are required before acceptance.');
     }
-    if (options.apply === true) await commitItemMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options), { pmRoot: this.pmRoot });
+    if (options.apply === true) await commitItemMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options), { history: historyHead! });
     return { id: item.id, revision: view.revision, dry_run: options.apply !== true, actor, witness };
   }
 }

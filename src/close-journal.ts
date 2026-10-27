@@ -111,7 +111,7 @@ export async function closeTrace(pmRoot: string, author: string, intent: CloseId
 }
 
 /** Compact SDK-journal result proving the exact native version written by one step. */
-export function closeStepResult(snapshot: CloseSnapshot, warnings?: string[], unavailable = false): WorkspaceTransactionJsonValue { return commitMutation({ version: snapshot.version, hash: snapshot.hash, ...(warnings === undefined ? {} : { warnings }), ...(unavailable ? { warnings_unavailable: true } : {}) }, admitted => admitted); }
+export function closeStepResult(snapshot: CloseSnapshot, warnings?: string[], unavailable = false, effects?: CloseEffect[]): WorkspaceTransactionJsonValue { return commitMutation({ version: snapshot.version, hash: snapshot.hash, ...(warnings === undefined ? {} : { warnings }), ...(unavailable ? { warnings_unavailable: true } : {}), ...(effects === undefined ? {} : { effects: effects.map(effect => ({ ...effect, before: { ...effect.before, historyHead: { ...effect.before.historyHead } }, after: { ...effect.after, historyHead: { ...effect.after.historyHead } } })) }) }, admitted => admitted); }
 
 /** Retain the native lifecycle receipts without translating, rebuilding or silently dropping them. */
 export function closeWarnings(result: unknown): string[] {
@@ -122,3 +122,20 @@ export function closeWarnings(result: unknown): string[] {
 
 /** Native warnings cannot be inferred from item history when the SDK interrupted before saving its result. */
 export function closeWarningsUnavailable(result: unknown): boolean { return !record(result) || !Array.isArray(result.warnings) || result.warnings_unavailable === true; }
+
+/** Exact native secondary mutations observed by this admitted SDK call, persisted only in its journal result. */
+export interface CloseEffect { id: string; before: CloseCheckpoint & { historyHead: ItemHistoryHead }; after: CloseCheckpoint & { historyHead: ItemHistoryHead } }
+/** Preserve opaque journal receipts across inspect/replay without rebuilding native lifecycle policy. */
+export function closeEffects(result: unknown): CloseEffect[] | undefined {
+  if (!record(result) || result.effects === undefined) return undefined;
+  if (!Array.isArray(result.effects)) closeConflict('The native close effect receipt is invalid.');
+  return result.effects.map(value => {
+    if (!record(value) || typeof value.id !== 'string') closeConflict('The native close effect identity is invalid.');
+    const point = (raw: unknown) => {
+      const checkpoint = closeCheckpoint(raw);
+      if (!record(raw) || !record(raw.historyHead) || !Number.isSafeInteger(raw.historyHead.length) || typeof raw.historyHead.hash !== 'string') closeConflict('The native close effect history is invalid.');
+      return { ...checkpoint, historyHead: { length: Number(raw.historyHead.length), hash: raw.historyHead.hash } };
+    };
+    return { id: value.id, before: point(value.before), after: point(value.after) };
+  });
+}

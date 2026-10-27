@@ -6,7 +6,7 @@ import { getHistoryPath, WorkspaceTransactionInterruptedError } from '@unbrained
 import type { WorkspaceTransactionTransitionContext } from '@unbrained/pm-cli/sdk';
 import { sharedFixture } from './shared-helpers.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
-import { commitItemMutation, SettingsRefusal } from '../src/settings.ts';
+import { readItemHistoryHead, commitItemMutation, SettingsRefusal } from '../src/settings.ts';
 import { StaleFenceError } from '../src/lease.ts';
 import { durableSnapshot } from './privacy-snapshot.ts';
 import { inspectItem } from '../src/inspection.ts';
@@ -159,7 +159,7 @@ test('unreadable recovery history refuses safely without rewriting original hist
 test('native item admission invokes its final ownership check before persistence', async t => {
   const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
   const before = durableSnapshot(f.pmRoot); let checked = 0;
-  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Refused write' } }, admitted => f.client.update(admitted.id, admitted.options), { pmRoot: f.pmRoot,
+  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Refused write' } }, admitted => f.client.update(admitted.id, admitted.options), { history: await readItemHistoryHead(f.pmRoot, id),
     beforeWrite: async () => { checked++; throw new SettingsRefusal('swarm_document_changed', 'Ownership changed before persistence.', 'document'); },
   }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
   assert.equal(checked, 1); assert.equal(durableSnapshot(f.pmRoot), before);

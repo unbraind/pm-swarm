@@ -18,7 +18,7 @@ import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
-import { inspectItem, readItem, historySnapshot } from './inspection.ts';
+import { inspectItem, readItem, historySnapshot, mutationSnapshot } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -131,7 +131,7 @@ export class Swarm {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
-    const item = (await requireActiveExtensionRead(() => readItem(this.client, id))).item;
+    const initial = await mutationSnapshot(this.pmRoot, String(local?.item.id ?? id), async () => (await requireActiveExtensionRead(() => readItem(this.client, id))).item); const item = initial.item;
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
@@ -143,7 +143,6 @@ export class Swarm {
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     admitReceipt({ id: item.id, branch, base, worktree: path, overlap_warnings }, this.repo);
-    const initial = await historySnapshot(this.pmRoot, String(item.id));
     let receipt: Pick<ClaimResult, 'item' | 'previous_assignee' | 'skipped'> | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
     let branchOwned = false; let created = false; let configured = false;
     let claimVersion = initial.version; let claimDocument: Record<string, unknown> | undefined;
@@ -305,7 +304,8 @@ export class Swarm {
       if (lane === undefined) throw new Error('No active lane for item');
       if (explicitFiles !== undefined && (explicitFiles.length === 0 || explicitFiles.some(path => path.trim() === ''))) throw new Error('sync --files requires nonempty comma-separated paths');
       const files = commitMutation([...new Set((explicitFiles ?? changedFiles(this.repo, commit(this.repo, lane.target), lane.sha)).map(footprintPath))], admitted => admitted);
-      const item = apply ? (await readItem(this.client, id)).item : undefined;
+      const snapshot = apply ? await mutationSnapshot(this.pmRoot, id, async () => (await readItem(this.client, id)).item) : undefined;
+      const item = snapshot?.item;
       const linked = item === undefined ? lane.files : itemFootprint(item);
       const add = files.filter(path => !linked.includes(path));
       if (apply && (add.length > 0 || token !== undefined)) {
@@ -313,7 +313,7 @@ export class Swarm {
         if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(id);
         const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
         if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
-        if (add.length > 0) await lease!.write(() => commitItemMutation({ id, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { pmRoot: this.pmRoot }));
+        if (add.length > 0) await lease!.write(() => commitItemMutation({ id, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
       }
       return { id, dry_run: !apply, add };
     };

@@ -121,7 +121,11 @@ the nested dependency. Full internal reads retain large bodies and annotations.
 Close uses one `commitWorkspaceTransaction` with a fenced metadata update
 followed by native close. Its deterministic identity, validated SDK journal and
 complete native document versions let the same token and note resume after
-ownership was cleared. Free-text history messages and mutable markers never
+ownership was cleared. Native dependent changes join the same journaled
+compensation domain; a peer history advance refuses rollback. Decision snapshots
+capture history before the document read and retain that head through the native
+writer lock. See [native close and recovery](docs/native-close.md).
+Free-text history messages and mutable markers never
 authorize recovery or rollback. Interrupted work resumes; ordinary failures compensate
 through the SDK. This flow does not return `swarm_partial_commit`.
 See [privacy admission](docs/privacy-admission.md).

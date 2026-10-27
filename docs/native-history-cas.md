@@ -32,8 +32,8 @@ writer, alternate lock or free-text ownership proof is introduced.
 | Journal close compensation | Journal-verified native snapshot; native restore hook |
 
 The original cleanup audit covered eight SDK sites. The source inventory now
-requires a history precondition at all 18 item writer sites among the unchanged
-24 SDK/backend writer sites. Every new item writer must join the inventory.
+requires a history precondition at all 19 item writer sites among
+25 SDK/backend writer sites. Every new item writer must join the inventory.
 [Native close admission](native-close.md) documents the added forward writes and
 core dependent lifecycle updates. The journal remains SDK-owned and its
 persisted checkpoint format remains version/hash, retaining interrupted-close

@@ -11,7 +11,7 @@ import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem } from './recovery.ts';
-import { historySnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
+import { mutationSnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
 import { completeClaim } from './close.ts';
 import type { CloseOptions } from './close.ts';
 
@@ -90,12 +90,11 @@ export class SharedTracker {
     corpus ??= await this.engine.corpus();
     const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal && lane.id !== id);
     this.claimWarnings(itemFootprint(preliminary.item), active, strict);
-    const view = local === null ? preliminary : await readItem(this.engine.client, id); const item = view.item;
+    const initial = await mutationSnapshot(this.engine.pmRoot, String(preliminary.item.id), async () => (await readItem(this.engine.client, id)).item); const item = initial.item;
     const token = await this.claimState(item); const heartbeat = new Date().toISOString();
     const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
     const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
     assertPrivatePathSafe(receipt);
-    const initial = await historySnapshot(this.engine.pmRoot, String(item.id));
     let publication: Record<string, unknown> | undefined;
     lease.onFailure(async () => {
       if (publication !== undefined && !item.assignee) {
@@ -195,10 +194,11 @@ export class SharedTracker {
     const evaluate = async (lease?: Lease) => {
       const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
       if (local !== null) await this.syncDecision(local.item, apply, files, token);
-      const item = (await readItem(this.engine.client, id)).item;
+      const snapshot = apply ? await mutationSnapshot(this.engine.pmRoot, String(local?.item.id ?? id), async () => (await readItem(this.engine.client, id)).item) : undefined;
+      const item = snapshot?.item ?? (await readItem(this.engine.client, id)).item;
       const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
-        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options), { pmRoot: this.engine.pmRoot }));
+        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
       }
       return { mode: 'shared-tracker', id, dry_run: !apply, add };
     };
@@ -259,8 +259,8 @@ export class SharedTracker {
   private async fence(id: string, token?: string) {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
     if (local !== null) this.assertFence(local.item, token);
-    const item = (await readItem(this.engine.client, id)).item;
-    this.assertFence(item, token); return item;
+    const snapshot = await mutationSnapshot(this.engine.pmRoot, String(local?.item.id ?? id), async () => (await readItem(this.engine.client, id)).item);
+    this.assertFence(snapshot.item, token); return snapshot;
   }
 
   /** Renew the agent heartbeat, optionally verifying one held item generation. */
@@ -275,13 +275,13 @@ export class SharedTracker {
   }
 
   /** Bind an ownership-dependent mutation to one checked item generation. */
-  private async owned<T>(id: string, token: string | undefined, operation: (item: Record<string, unknown>, lease: Lease) => Promise<T>, preview?: (item: Record<string, unknown>) => Promise<unknown>): Promise<T> {
+  private async owned<T>(id: string, token: string | undefined, operation: (item: Record<string, unknown>, lease: Lease, history: ItemHistoryHead) => Promise<T>, preview?: (item: Record<string, unknown>) => Promise<unknown>): Promise<T> {
     if (preview !== undefined) {
       const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
       if (local !== null) { this.assertFence(local.item, token); assertPrivatePathSafe({ ...local.item, body: local.body }, 'document'); await preview(local.item); }
     }
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
-      return operation(await this.fence(id, token), lease);
+      const snapshot = await this.fence(id, token); return operation(snapshot.item, lease, snapshot.historyHead);
     });
   }
 
@@ -291,12 +291,12 @@ export class SharedTracker {
     to = to.trim();
     if (!to || to === this.engine.author || !note.trim() || note.length > 4096) throw new Error('handoff requires a different --to agent and a nonempty --note of at most 4096 characters');
     /** Reuse the exact transfer preparation for preflight and the fresh fenced commit. */
-    const transfer = async (item: Record<string, unknown>, lease?: Lease) => {
+    const transfer = async (item: Record<string, unknown>, lease?: Lease, history?: ItemHistoryHead) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot hand off a terminal item');
-      return this.transfer(item, to, note, lease);
+      return this.transfer(item, to, note, lease, history);
     };
-    return this.owned(id, token, (item, lease) => transfer(item, lease), item => transfer(item));
+    return this.owned(id, token, (item, lease, history) => transfer(item, lease, history), item => transfer(item));
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
@@ -314,7 +314,7 @@ export class SharedTracker {
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
-    }, item }, admitted => this.engine.client.update(admitted.id, admitted.options), { history, pmRoot: this.engine.pmRoot }));
+    }, item }, admitted => this.engine.client.update(admitted.id, admitted.options), { history: history! }));
     if (lease !== undefined) this.tokens.delete(id);
     return { id, previous_owner: item.assignee, agent: to ?? null, token, context };
   }

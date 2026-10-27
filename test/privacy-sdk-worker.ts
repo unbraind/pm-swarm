@@ -51,7 +51,7 @@ let returned = false; let refusalCode = '';
 await assert.rejects(withItemMutationObserver(boundary => { if (boundary === input.boundary && !injected) compete(); }, async () => { await shared.start(input.id); returned = true; }), (error: unknown) => {
   assert.ok(error instanceof SettingsRefusal, `Use a portable typed refusal across package copies: ${String(error).replace(/(?:file:\/\/)?\/[^\s"')]+/g, '[coordinate]')}`);
   refusalCode = error.code;
-  const expectedCode = input.boundary === 'corpus-return' ? 'swarm_private_path' : input.layout === 'separate' ? 'swarm_sdk_mismatch' : input.boundary === 'snapshot-return' ? (input.private ? 'swarm_private_path' : 'swarm_document_changed') : 'swarm_superseded';
+  const expectedCode = input.boundary === 'snapshot-return' ? 'swarm_superseded' : input.layout === 'separate' ? 'swarm_sdk_mismatch' : input.boundary === 'corpus-return' ? 'swarm_private_path' : 'swarm_superseded';
   assert.equal(error.code, expectedCode);
   if (expectedCode === 'swarm_superseded') assert.equal(error.field, 'history');
   assert.ok(error.remedy.length > 20); return true;

@@ -106,3 +106,25 @@ export async function claimedHistoryFixture(t: TestContext) {
   const f = await sharedFixture(t); const id = await f.item(); await f.client.claim(id);
   return { f, id, item: (await f.client.get(id, { depth: 'full' })).item };
 }
+
+/** Exercise the actual native writers through one shared SDK operation inventory. */
+export function nativeWriters(client: PmClient) {
+  return new Map<string, (id: string, version: number) => Promise<unknown>>([
+    ['update', id => client.update(id, { description: 'Public update' })],
+    ['files', id => client.files(id, { add: ['src/public.ts'] })],
+    ['comments', id => client.comments(id, { add: 'Public receipt' })],
+    ['claim', id => client.claim(id)], ['release', id => client.release(id)],
+    ['restore', (id, version) => client.restore(id, String(version), { force: true })],
+    ['close', id => client.close(id, 'Public completion')],
+  ]);
+}
+
+/** Observe a completed real SDK method while preserving every original result and native side effect. */
+export function observeSdkReturn(client: PmClient, method: 'get' | 'restore', observe: () => Promise<void> | void): PmClient {
+  return new Proxy(client, { get(target, key) {
+    const value: unknown = Reflect.get(target, key);
+    if (typeof value !== 'function') return value;
+    if (key !== method) return value.bind(target);
+    return async (...args: unknown[]) => { const result: unknown = await Reflect.apply(value, target, args); await observe(); return result; };
+  } });
+}

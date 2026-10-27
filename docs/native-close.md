@@ -35,10 +35,11 @@ history messages or mutable marker text. Compensation uses the same native
 revision guard before restore, and follows the SDK's removal of completed
 compensation checkpoints.
 
-All item mutations now require either an explicit snapshot history head or a
-tracker root from which the common admission helper captures one before emitting
-an admission boundary. The source inventory asserts this at all **18 item writer
-sites**, within the unchanged **24 total SDK/backend writer sites**. A historical
+All item mutations require an explicit snapshot history head. `mutationSnapshot`
+captures the native head before reading the complete decision document, verifies
+the head and document still agree, and retains that exact head through the writer
+lock. The commit helper refuses a missing head instead of capturing a later one. The source inventory asserts this at all **19 item writer
+sites**, within **25 total SDK/backend writer sites** (including dependent restore). A historical
 snapshot carries the hash of its exact history prefix rather than today's head.
 Close retains its admission head through preparation and advances it only after
 reading back its own successful write or compensation. A peer release/claim/
@@ -53,8 +54,8 @@ role again.
 | Git native claim | Initial SDK snapshot head |
 | Git lane metadata publication | Exact native claim history prefix |
 | Shared claim and resource reserve/renew/publish/release | Initial SDK snapshot head |
-| Git/shared file linking; ordinary handoff | Common helper captures admission head |
-| Progress declaration | Common helper captures admission head; full semantic revalidation on retry |
+| Git/shared file linking; ordinary handoff | Head captured before the decision document |
+| Progress declaration | Head captured before the decision document; full semantic revalidation on retry |
 | Git metadata rollback, failed acquisition release, terminal release/deletion | Verified acquisition/recovery head |
 | Stale recovery transfer | Verified recovery head |
 | Close transaction admission and forward metadata | Original admitted head |
@@ -94,3 +95,50 @@ unchanged coverage thresholds. Thirteen isolated behavioral revert probes report
 zero skips or cancellations; every source byte is restored afterward. Exact
 commands and each revert proof are recorded in `pm-swarm-y972`. Full release,
 packed npm/Bun, and coverage counts must come from the current CI run.
+
+Round 6 closes the snapshot-to-history ABA window across Git/shared claims,
+resource updates, file linking, handoff, progress, and close. Historical acquisition
+and recovery receipts retain their exact prefixes. Read-only previews retain their
+existing behavior rather than requiring new history validation.
+
+Native dependent writes are observed through the same host admission hook as the
+primary close. Their exact preimages and committed version/hash/history heads are
+saved in the SDK close-step result. Ordinary failures compensate those writes in
+reverse order before restoring the primary item. Each restore compares the native
+head again under its item lock; a peer's advanced head refuses compensation before
+reopening the blocker. Successful compensation refreshes only its own restored
+version for a subsequent native-close retry. Audit history remains append-only.
+Crash recovery preserves those receipts. A lost restore return is reconciled only
+from this invocation's native commit hook and exact history head; matching content
+after an unobserved history advance never proves compensation ownership. Native close remains the only lifecycle policy.
+
+If the process loses the close result before the SDK saves it, there is no durable
+proof of which secondary writes belonged to that call. Recovery never invents such
+ownership from messages or matching content: a compensation attempt requires all
+pre-admitted secondary heads to remain unchanged, otherwise it refuses and leaves
+the native lifecycle state for explicit journal review. The existing SDK receipt
+gap item tracks this boundary together with unavailable native warning receipts.
+
+Round-6 verification passes **116/116** in the linked pm regression command
+(133755.233549 ms), plus all **22** installed-layout interleavings on one non-Git
+tracker. Both dependency representations compensate completely after an ordinary
+`committing` failure; four SDK compensation boundaries and two lost restore returns
+resume without duplicate restores. A copied preimage from a peer's single restore
+and a full peer ABA both refuse compensation. Missing dependent receipts preserve
+the native lifecycle state and require explicit journal review.
+
+The unchanged privacy oracle/fuzz command passes **5/5**: **5,000** home inputs
+produce **95,000** registered-mutator refusals and **10,000** renderer refusals,
+with zero tracker changes; **2,500** relative paths plus **2,500** web URLs produce
+**95,000** admissions with zero false refusals. The fixed embedded corpus refuses
+**31/31**, and benign prose admits **34/34**. Seeds remain `0x51a7c0de` and
+`0x6a09e667`. Reverting history-before-read produces **9** expected failures;
+removing secondary compensation produces **5**. The fixed source is restored in
+`finally` and the linked passing run follows restoration. Typecheck, lint, build,
+docstrings and the zero-duplication gate pass; CI owns full npm/Bun and coverage
+evidence for the pushed head.
+
+The fresh read-only fleet oracle passes **1/1** across **35** checkouts,
+**18122** tracked relative paths and **163098** presentations, with zero
+false refusals or source writes. The inventory is generated at test time and is
+never committed.

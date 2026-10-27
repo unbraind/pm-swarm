@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ITEM_MUTATION_BOUNDARIES, assertSdkInstance, SettingsRefusal, withItemMutationObserver, commitItemMutation } from '../src/settings.ts';
+import { readItemHistoryHead, ITEM_MUTATION_BOUNDARIES, assertSdkInstance, SettingsRefusal, withItemMutationObserver, commitItemMutation } from '../src/settings.ts';
 import { PlanProgress } from '../src/progress.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { hostSdk } from './settings-helpers.ts';
@@ -85,17 +85,17 @@ test('interruption at every item admission boundary writes nothing and a rerun c
 test('the locked comparison rejects benign title edits without replacing the peer success', async t => {
   const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
   await f.client.update(id, { title: 'Peer success' }); const before = durableSnapshot(f.pmRoot);
-  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Our stale update' } }, admitted => f.client.update(admitted.id, admitted.options), { pmRoot: f.pmRoot }), documentChange);
+  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Our stale update' } }, admitted => f.client.update(admitted.id, admitted.options), { history: await readItemHistoryHead(f.pmRoot, id) }), documentChange);
   assert.equal(durableSnapshot(f.pmRoot), before);
-  await assert.rejects(commitItemMutation({ id, item: (await f.client.get(id, { depth: 'full' })).item, options: { type: 'Task', title: 'Unexpected create' } }, admitted => f.client.create(admitted.options), { pmRoot: f.pmRoot }), documentChange);
+  await assert.rejects(commitItemMutation({ id, item: (await f.client.get(id, { depth: 'full' })).item, options: { type: 'Task', title: 'Unexpected create' } }, admitted => f.client.create(admitted.options), { history: await readItemHistoryHead(f.pmRoot, id) }), documentChange);
   assert.equal(durableSnapshot(f.pmRoot), before);
 });
 
 test('metadata-only admission cannot overwrite an unobserved nonempty item body', async t => {
   const f = await sharedFixture(t); const id = await f.item(); await f.client.update(id, { body: 'Public body that must survive' });
   const { body: _body, ...metadata } = (await f.client.get(id, { depth: 'full' })).item;
-  const before = durableSnapshot(f.pmRoot);
-  await assert.rejects(commitItemMutation({ id, item: metadata, options: { description: 'Unobserved update' } }, admitted => f.client.update(admitted.id, admitted.options), { pmRoot: f.pmRoot }), documentChange);
+  const before = durableSnapshot(f.pmRoot); const history = await readItemHistoryHead(f.pmRoot, id);
+  await assert.rejects(commitItemMutation({ id, item: metadata, options: { description: 'Unobserved update' } }, admitted => f.client.update(admitted.id, admitted.options), { history }), documentChange);
   assert.equal(durableSnapshot(f.pmRoot), before);
 });
 
@@ -156,12 +156,12 @@ test('compound native writes preserve later peer state and truthfully report an 
     const peer = f.cli('update', id, '--title', privateTitle, '--json'); assert.equal(peer.status, 0);
     peerHistory = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
     await f.client.update(admitted.id, { description: 'Refused successor' });
-  }, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /1 native item mutation/.test(error.remedy) && !error.remedy.includes(privateTitle));
+  }, { history: await readItemHistoryHead(f.pmRoot, id) }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /1 native item mutation/.test(error.remedy) && !error.remedy.includes(privateTitle));
   assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), peerHistory);
   const other = await f.item(); const current = (await f.client.get(other, { depth: 'full' })).item;
   await assert.rejects(commitItemMutation({ id: other, item: current, options: { add: 'Public committed step' } }, async admitted => {
     await f.client.comments(admitted.id, admitted.options); throw new Error('Interrupted after commit');
-  }, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
+  }, { history: await readItemHistoryHead(f.pmRoot, id) }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
   assert.equal((await f.client.get(other, { depth: 'full' })).item.comments!.length, 1);
 });
 

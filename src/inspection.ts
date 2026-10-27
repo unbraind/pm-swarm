@@ -1,7 +1,7 @@
 import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions, getItemAt, readHistoryEntries, getHistoryPath, hashHistoryStream } from '@unbrained/pm-cli/sdk';
 import type { GetResult, GetItemAtResult, PmClient, PmReadOutputBudgetExceeded } from '@unbrained/pm-cli/sdk';
 import type { ItemHistoryHead } from './settings.ts';
-import { SettingsRefusal } from './settings.ts';
+import { SettingsRefusal, documentFingerprint, assertItemHistoryHead, assertSdkInstance } from './settings.ts';
 
 /** Internal decisions must compare complete values rather than agent-facing budget projections. */
 const COMPLETE_READ_OUTPUT = { outputBudget: 'unbounded', outputLimit: 'unbounded' } as const;
@@ -42,4 +42,15 @@ export async function historySnapshot(pmRoot: string, id: string, version?: numb
     if (view.as_of_version === null || (view.history_length !== history.length || version === undefined && view.target.historyIndex !== history.length - 1)) throw new Error('Unstable history version');
     return { ...view, version: view.as_of_version, historyHead: { length: view.target.historyIndex + 1, hash: hashHistoryStream(history.slice(0, view.target.historyIndex + 1)) } };
   } catch { throw new SettingsRefusal('swarm_document_changed', 'The item history could not be verified; preserve its document and inspect its native history before retrying.', 'document'); }
+}
+
+/** Pair the decision document with a native head captured before its read; never refresh a stale baseline. */
+export async function mutationSnapshot<Item extends Record<string, unknown>>(pmRoot: string, id: string, read: () => Promise<Item>) {
+  assertSdkInstance();
+  const native = await historySnapshot(pmRoot, id);
+  const item = await read();
+  assertSdkInstance();
+  await assertItemHistoryHead(pmRoot, String(item.id), native.historyHead);
+  if (documentFingerprint(item) !== documentFingerprint({ ...native.document.metadata, body: native.document.body })) throw new SettingsRefusal('swarm_document_changed', 'The native history does not describe the checked document; refresh the complete item and its history before retrying.', 'document');
+  return { item, historyHead: native.historyHead, version: native.version };
 }
