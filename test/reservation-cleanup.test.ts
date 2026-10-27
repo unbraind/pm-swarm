@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { failRename } from './rename-faults.ts';
 import { test } from 'node:test';
 import { ResourceReservations, trackerResourceBackend } from '../index.ts';
+import { peerBytes } from './history-aba-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 
 for (const heartbeat of [1, 2]) test(`new resource reservation releases after post-write heartbeat ${heartbeat} failure`, async t => {
@@ -38,15 +39,15 @@ test('reservation cleanup preserves later same-author token or expiry transition
   const f = await sharedFixture(t); const reservations = new ResourceReservations(trackerResourceBackend(f.shared.engine), 'shared-test');
   for (const field of ['swarm_token', 'swarm_resource_expires_at']) {
     const id = (await f.client.create({ type: 'Task', title: 'Peer resource lineage', tags: 'swarm-resource' })).item.id;
-    const value = field === 'swarm_token' ? '9' : '2099-01-01T00:00:00.000Z'; const original = f.client.update.bind(f.client); let edited = false;
+    const value = field === 'swarm_token' ? '9' : '2099-01-01T00:00:00.000Z'; const original = f.client.update.bind(f.client); let edited = false; let preserved: string[] = [];
     f.client.update = new Proxy(original, { async apply(target, receiver, args: unknown[]) {
       const result: unknown = await Reflect.apply(target, receiver, args);
-      if (!edited) { edited = true; f.run('update', id, '--field', `${field}=${value}`); throw new Error('Lost reservation return after peer update'); }
+      if (!edited) { edited = true; f.run('update', id, '--field', `${field}=${value}`); preserved = peerBytes(f.pmRoot, id); throw new Error('Lost reservation return after peer update'); }
       return result;
     } });
-    try { await assert.rejects(reservations.reserve(id), error => typeof error === 'object' && error !== null && 'code' in error && error.code === 'swarm_document_changed'); }
+    try { await assert.rejects(reservations.reserve(id), error => typeof error === 'object' && error !== null && 'code' in error && error.code === 'swarm_superseded'); }
     finally { Reflect.set(f.client, 'update', original); }
-    assert.equal(edited, true); const item = (await f.client.get(id)).item;
+    assert.equal(edited, true); assert.deepEqual(peerBytes(f.pmRoot, id), preserved); const item = (await f.client.get(id)).item;
     assert.equal(item.assignee, 'shared-test'); assert.equal(item[field], value);
   }
 });

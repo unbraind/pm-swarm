@@ -62,8 +62,8 @@ for (const phase of ['publication', 'rollback'] as const) {
     assert.equal(item.assignee, 'swarm-test', 'a superseded operation cannot release even its own prior claim');
     assert.equal(item.swarm_branch, undefined);
     assert.equal(readFileSync(history, 'utf8').trim().split('\n').length, before + 1, 'only the valid initial claim persisted');
-    assert.equal(branchExists(f.repo, `swarm/${id}`), false);
-    if (phase === 'publication') assert.equal(existsSync(path), false);
+    assert.equal(branchExists(f.repo, `swarm/${id}`), true, 'superseded leases preserve Git resources for the current owner');
+    if (phase === 'publication') assert.equal(existsSync(path), true);
     else assert.equal(readFileSync(join(path, 'keep'), 'utf8'), 'Unrelated data');
   });
 }

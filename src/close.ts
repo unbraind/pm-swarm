@@ -83,7 +83,18 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         const document = { ...before.document.metadata, body: before.document.body };
         let warnings: string[] = [];
         const written = new Map<string, string>();
-        if (index === 0) await lease.write(() => commitItemMutation({ id: canonicalId, item: document, options: { author: engine.author, message: 'Swarm close metadata', field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } }, admitted => engine.client.update(admitted.id, admitted.options), { transaction: true, history: expectedHistory, beforeWrite: async () => { await trace(); } }));
+        if (index === 0) {
+          let committedHash: string | undefined;
+          try {
+            await lease.write(() => commitItemMutation({ id: canonicalId, item: document, options: { author: engine.author, message: 'Swarm close metadata', field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } }, admitted => engine.client.update(admitted.id, admitted.options), { transaction: true, history: expectedHistory, onCommitted: (_before, after) => { committedHash = closeDocumentHash(after); }, beforeWrite: async () => { await trace(); } }));
+          } finally {
+            if (committedHash !== undefined) {
+              const written = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
+              if (written.hash !== committedHash) closeConflict('The metadata read-back does not match its admitted write.');
+              expectedHistory = written.historyHead;
+            }
+          }
+        }
         else {
           try {
             const result = await lease.write(() => commitItemMutation({ id: canonicalId, item: document, note, options: { author: engine.author, message: 'Swarm close completion' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { transaction: true, history: expectedHistory, related, onCommitted: (_before, after) => { written.set(after.metadata.id, closeDocumentHash(after)); }, beforeWrite: async () => { await trace(); } }));

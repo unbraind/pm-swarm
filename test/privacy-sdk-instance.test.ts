@@ -161,7 +161,7 @@ test('compound native writes preserve later peer state and truthfully report an 
   const other = await f.item(); const current = (await f.client.get(other, { depth: 'full' })).item;
   await assert.rejects(commitItemMutation({ id: other, item: current, options: { add: 'Public committed step' } }, async admitted => {
     await f.client.comments(admitted.id, admitted.options); throw new Error('Interrupted after commit');
-  }, { history: await readItemHistoryHead(f.pmRoot, id) }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
+  }, { history: await readItemHistoryHead(f.pmRoot, other) }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
   assert.equal((await f.client.get(other, { depth: 'full' })).item.comments!.length, 1);
 });
 

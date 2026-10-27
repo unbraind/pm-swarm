@@ -16,7 +16,7 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead } from './settings.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
 import { inspectItem, readItem, historySnapshot, mutationSnapshot } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
@@ -145,6 +145,7 @@ export class Swarm {
     admitReceipt({ id: item.id, branch, base, worktree: path, overlap_warnings }, this.repo);
     let receipt: Pick<ClaimResult, 'item' | 'previous_assignee' | 'skipped'> | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
     let branchOwned = false; let created = false; let configured = false;
+    const ownSuccessors = new Map<number, Record<string, unknown>>();
     let claimVersion = initial.version; let claimDocument: Record<string, unknown> | undefined;
     let cleaned = false;
     const cleanup = async () => {
@@ -159,10 +160,10 @@ export class Swarm {
       const clean = async (action: () => void | Promise<void>) => { try { await action(); } catch (failure) { failures.push(failure); } };
       let metadataClean = publication === undefined;
       if (publication !== undefined && receipt !== undefined) await clean(async () => {
-        const current = await this.acquisitionSnapshot(String(item.id), claimVersion, receipt!.item);
+        const current = await this.acquisitionSnapshot(String(item.id), claimVersion, receipt!.item, ownSuccessors);
         for (const key of ['swarm_branch', 'swarm_base', 'swarm_base_ref']) if (current.document.metadata[key] !== publication![key]) throw new StaleFenceError('lane metadata');
         const keys = ['swarm_branch', 'swarm_base', 'swarm_base_ref'];
-        await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => item[key] !== undefined).map(key => `${key}=${String(item[key])}`), unset: keys.filter(key => item[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options), { generation: { token: receipt!.item.swarm_token }, history: current.historyHead }), { announce: false });
+        await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => item[key] !== undefined).map(key => `${key}=${String(item[key])}`), unset: keys.filter(key => item[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options), { generation: { token: receipt!.item.swarm_token }, history: current.historyHead, onCommitted: (_before, after) => { ownSuccessors.set(current.version + 1, { ...after.metadata, body: after.body }); } }), { announce: false });
         metadataClean = true;
       });
       if (metadataClean && receipt !== undefined && (configured || created || branchOwned)) await clean(() => this.guardAcquisitionCleanup(String(item.id), claimVersion, receipt!.item, lease, async () => {
@@ -178,8 +179,8 @@ export class Swarm {
         if (git(this.repo, ['worktree', 'list', '--porcelain']).split(/\r?\n/).includes(`branch refs/heads/${branch}`)) throw new StaleFenceError('lane branch');
         git(this.repo, ['update-ref', '-d', `refs/heads/${branch}`, base]);
       });
-      }));
-      if (receipt !== undefined && receipt.previous_assignee === null && receipt.skipped !== true) await clean(() => this.releaseAcquiredClaim(String(item.id), claimVersion, receipt!.item, lease));
+      }, ownSuccessors));
+      if (receipt !== undefined && receipt.previous_assignee === null && receipt.skipped !== true) await clean(() => this.releaseAcquiredClaim(String(item.id), claimVersion, receipt!.item, lease, ownSuccessors));
       if (failures.length > 0) refuse();
     };
     lease.onFailure(cleanup);
@@ -210,7 +211,7 @@ export class Swarm {
       await startTransition('configured');
       await lease.write(async () => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed! }, async admitted => {
         const published = await this.client.update(admitted.id, admitted.options); publication = published.item; return published;
-      }, { history: (await historySnapshot(this.pmRoot, String(item.id), claimVersion)).historyHead, onCommitted: (_before, after) => { publication = after.metadata; } }));
+      }, { history: claimVersion === initial.version ? initial.historyHead : await readItemHistoryHead(this.pmRoot, String(item.id), claimVersion), onCommitted: (_before, after) => { publication = after.metadata; ownSuccessors.set(claimVersion + 1, { ...after.metadata, body: after.body }); } }));
       await startTransition('published');
       const result = { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
       await startTransition('receipt');
@@ -222,14 +223,14 @@ export class Swarm {
   }
 
   /** Release only the exact acquired native claim lineage; fresh content and peer ownership survive cleanup. */
-  async releaseAcquiredClaim(id: string, version: number, expected: Record<string, unknown>, lease: Lease): Promise<void> {
-    const current = await this.acquisitionSnapshot(id, version, expected);
+  async releaseAcquiredClaim(id: string, version: number, expected: Record<string, unknown>, lease: Lease, ownSuccessors?: ReadonlyMap<number, Record<string, unknown>>): Promise<void> {
+    const current = await this.acquisitionSnapshot(id, version, expected, ownSuccessors);
     await lease.write(() => commitItemMutation({ id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author } }, admitted => this.client.release(admitted.id, admitted.options), { generation: { token: expected.swarm_token }, history: current.historyHead }), { announce: false });
   }
 
   /** Hold the SDK's native item writer lock across generation checks and Git compare-and-set cleanup. */
-  private async guardAcquisitionCleanup(id: string, version: number, expected: Record<string, unknown>, lease: Lease, cleanup: () => Promise<void>): Promise<void> {
-    const current = await this.acquisitionSnapshot(id, version, expected);
+  private async guardAcquisitionCleanup(id: string, version: number, expected: Record<string, unknown>, lease: Lease, cleanup: () => Promise<void>, ownSuccessors?: ReadonlyMap<number, Record<string, unknown>>): Promise<void> {
+    const current = await this.acquisitionSnapshot(id, version, expected, ownSuccessors);
     await this.guardItemCleanup(id, { ...current.document.metadata, body: current.document.body }, current.historyHead, lease, cleanup);
   }
 
@@ -249,7 +250,7 @@ export class Swarm {
   }
 
   /** Verify the acquired native receipt and every later ownership transition without trusting messages. */
-  async acquisitionSnapshot(id: string, version: number, expected: Record<string, unknown>) {
+  async acquisitionSnapshot(id: string, version: number, expected: Record<string, unknown>, ownSuccessors: ReadonlyMap<number, Record<string, unknown>> = new Map()) {
     const acquired = await historySnapshot(this.pmRoot, id, version);
     const current = await historySnapshot(this.pmRoot, id);
     assertClaimGeneration(current.document.metadata.swarm_token, acquired.document.metadata.swarm_token);
@@ -259,7 +260,8 @@ export class Swarm {
     for (let next = version + 1; next <= current.version; next++) {
       const point = await historySnapshot(this.pmRoot, id, next); const entry = history[point.target.historyIndex];
       assertClaimGeneration(point.document.metadata.swarm_token, acquired.document.metadata.swarm_token);
-      if (['claim', 'release', 'restore'].includes(entry.op) || point.document.metadata.assignee !== owner) throw new SettingsRefusal('swarm_superseded', 'A peer changed native ownership history. Preserve its claim and Git resources; refresh its native history before retrying.', 'history');
+      const own = ownSuccessors.get(next);
+      if (own === undefined || documentFingerprint({ ...point.document.metadata, body: point.document.body }) !== documentFingerprint(own) || ['claim', 'release', 'restore'].includes(entry.op) || point.document.metadata.assignee !== owner) throw new SettingsRefusal('swarm_superseded', 'A peer changed native ownership history. Preserve its claim and Git resources; refresh its native history before retrying.', 'history');
       owner = point.document.metadata.assignee;
     }
     if (owner !== this.author) throw new StaleFenceError('start claim owner');

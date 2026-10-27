@@ -37,7 +37,7 @@ compensation checkpoints.
 
 All item mutations require an explicit snapshot history head. `mutationSnapshot`
 captures the native head before reading the complete decision document, verifies
-the head and document still agree, and retains that exact head through the writer
+history did not advance during the read, and retains that exact head through the writer
 lock. The commit helper refuses a missing head instead of capturing a later one. The source inventory asserts this at all **19 item writer
 sites**, within **25 total SDK/backend writer sites** (including dependent restore). A historical
 snapshot carries the hash of its exact history prefix rather than today's head.
@@ -142,3 +142,19 @@ The fresh read-only fleet oracle passes **1/1** across **35** checkouts,
 **18122** tracked relative paths and **163098** presentations, with zero
 false refusals or source writes. The inventory is generated at test time and is
 never committed.
+
+The completed prior CI run exposed stale cleanup expectations and a lost metadata
+return. The close metadata step now retains its native commit observation even
+when the caller loses the return, so compensation uses the exact owned revision.
+Git acquisition cleanup accepts later versions only when this invocation observed
+their commits; arbitrary same-author updates no longer refresh its baseline.
+Tests now require preservation of peer claims, history and Git resources, including
+superseded leases. The independent-peer loss fixture leaves the caller's admission
+scope before performing its real SDK mutation; all state assertions remain.
+
+Forward admission captures the raw SDK history stream head before its authoritative
+item read, without requiring historical document reconstruction. Publication uses
+`readHistorySnapshot` and `resolveHistoryTarget` for the exact history prefix. The
+unchanged legacy start/next positive cases pass without rewriting audit records.
+Additional behavioral reverts produce five expected failures: one lost metadata
+return, two foreign-update cleanup cases, and both legacy positive cases.

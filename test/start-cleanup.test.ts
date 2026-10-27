@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fixture } from './helpers.ts';
 import { fixtureGit as git } from './git-helpers.ts';
 import { branchExists } from '../src/git.ts';
+import { SettingsRefusal } from '../src/settings.ts';
 import { START_TRANSITIONS, withStartTransitionObserver } from '../src/swarm.ts';
 
 test('Git start releases its newly acquired claim when the following real SDK read fails', async t => {
@@ -56,19 +57,19 @@ test('start cleanup never releases a peer replacement, including same-author ABA
       if (transition !== 'claimed') return;
       await f.client.release(id); await f.client.claim(id, { author });
       throw new Error('Injected peer ownership transition');
-    }, () => f.swarm.start(id)), /cleanup could not be verified/);
+    }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
     assert.equal((await f.client.get(id)).item.assignee, author);
   }
 });
 
-test('a peer content edit survives claim cleanup without leaving the failed start assigned', async t => {
+test('a peer content edit preserves its native history and newer claim during cleanup', async t => {
   const f = await fixture(t); const id = await f.item(); f.save();
   await assert.rejects(withStartTransitionObserver(async transition => {
     if (transition !== 'claimed') return;
     await f.client.update(id, { title: 'Public peer edit' }); throw new Error('Injected read boundary');
-  }, () => f.swarm.start(id)), /Injected read boundary/);
+  }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
   const current = (await f.client.get(id)).item;
-  assert.equal(current.title, 'Public peer edit'); assert.equal(current.assignee, undefined);
+  assert.equal(current.title, 'Public peer edit'); assert.equal(current.assignee, 'swarm-test');
 });
 
 for (const command of ['start', 'next', 'schedule'] as const) test(`${command} retains cleanup through every post-write heartbeat including final receipt`, async t => {

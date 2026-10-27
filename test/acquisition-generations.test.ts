@@ -148,7 +148,7 @@ test('a peer document edit inside Git cleanup admission preserves the branch and
     if (!failed || edited || boundary !== 'before_commit') return;
     edited = true; await request.runInAsyncScope(() => f.client.update(id, { title: 'Public cleanup peer' }));
   }, () => withStartTransitionObserver(step => { if (step === 'branch_created') { failed = true; throw new Error('Lost branch result'); } }, () => f.swarm.start(id))), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
-  const item = (await f.client.get(id)).item; assert.equal(item.title, 'Public cleanup peer'); assert.equal(item.assignee, undefined);
+  const item = (await f.client.get(id)).item; assert.equal(item.title, 'Public cleanup peer'); assert.equal(item.assignee, 'swarm-test');
   assert.equal(git(f.repo, ['branch', '--list', `swarm/${id}`]).length > 0, true);
 });
 

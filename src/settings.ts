@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { getSettingsPath, readFileIfExists, PmClient, getHistoryPath, readHistorySnapshot, hashHistoryStream } from '@unbrained/pm-cli/sdk';
+import { getSettingsPath, readFileIfExists, PmClient, getHistoryPath, readHistorySnapshot, hashHistoryStream, resolveHistoryTarget } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import type { BeforeMutationHook, ExtensionCommandSdk, OnWriteHook } from '@unbrained/pm-cli/sdk/authoring';
 import { containsPrivatePath } from './privacy.ts';
@@ -85,10 +85,11 @@ export function assertClaimGeneration(current: unknown, expected: unknown): void
 /** Append-only SDK revision: document hashes and fencing generations alone cannot distinguish ABA. */
 export interface ItemHistoryHead { length: number; hash: string }
 /** Read the native stream once through the SDK, retaining both its monotonic length and record identity. */
-export async function readItemHistoryHead(pmRoot: string, id: string): Promise<ItemHistoryHead> {
+export async function readItemHistoryHead(pmRoot: string, id: string, version?: number): Promise<ItemHistoryHead> {
   try {
     const { entries } = await readHistorySnapshot(getHistoryPath(pmRoot, id), id);
-    return { length: entries.length, hash: hashHistoryStream(entries) };
+    const end = version === undefined ? entries.length : resolveHistoryTarget(String(version), entries).historyIndex + 1;
+    return { length: end, hash: hashHistoryStream(entries.slice(0, end)) };
   } catch { throw new SettingsRefusal('swarm_superseded', 'Native item history cannot be verified. Preserve its claim and Git resources; inspect native history before retrying.', 'history'); }
 }
 /** Call only inside the native item writer lock, before any cleanup mutation or Git deletion. */
