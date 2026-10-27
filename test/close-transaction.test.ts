@@ -35,6 +35,21 @@ test('a service-capable host retains bound-client reads and native journaled clo
   assert.deepEqual(await f.shared.close(id, 'Public completion', receipt.token), { id, closed: true });
 });
 
+test('a native SDK claim without a swarm token closes and resumes with its legacy generation', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); await f.client.claim(id);
+  assert.equal((await f.client.get(id)).item.swarm_token, undefined);
+  const baseline = operations(f.pmRoot, id).length;
+  await assert.rejects(f.shared.close(id, 'Public legacy completion', undefined, { onTransition: context => {
+    if (context.transition === 'step_recorded') throw new WorkspaceTransactionInterruptedError('Interrupted legacy close');
+  } }), WorkspaceTransactionInterruptedError);
+  assert.deepEqual(await new SharedTracker(f.shared.engine).close(id, 'Public legacy completion'), { id, closed: true });
+  assert.equal((await f.client.get(id)).item.swarm_token, '1');
+  assert.deepEqual(operations(f.pmRoot, id).slice(baseline), ['update', 'close']);
+  const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
+  await f.shared.close(id, 'Public legacy completion');
+  assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), history);
+});
+
 test('SDK close journal resumes every forward boundary without duplicate item mutations', async t => {
   const f = await sharedFixture(t); const trace: WorkspaceTransactionTransitionContext[] = [];
   const control = await f.item(['src/public.ts']); const controlReceipt = await f.shared.start(control);
