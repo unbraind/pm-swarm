@@ -121,8 +121,10 @@ the nested dependency. Full internal reads retain large bodies and annotations.
 Close uses one `commitWorkspaceTransaction` with a fenced metadata update
 followed by native close. Its deterministic identity, validated SDK journal and
 complete native document versions let the same token and note resume after
-ownership was cleared. Native dependent changes join the same journaled
-compensation domain; a peer history advance refuses rollback. Decision snapshots
+ownership was cleared. Automatic compensation is limited to the primary item. If native close changed
+dependents, `swarm_compensation_partial` lists the uncertified pending members
+and preserves the current lifecycle state before any restore. Durable multi-item
+rollback is tracked in [issue 32](https://github.com/unbraind/pm-swarm/issues/32). Decision snapshots
 capture history before the document read and retain that head through the native
 writer lock. See [native close and recovery](docs/native-close.md).
 Free-text history messages and mutable markers never

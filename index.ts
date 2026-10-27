@@ -46,3 +46,6 @@ export { projectReceipt, admitReceipt, assertReceiptSafe } from './src/receipts.
 
 /** Trusted request-local diagnostics for testing the handoff into native item writer locks. */
 export { ITEM_MUTATION_BOUNDARIES, withItemMutationObserver } from './src/settings.ts';
+
+/** Typed conservative recovery outcome with certified restored and pending members. */
+export { CompensationPartialRefusal } from './src/close-compensation.ts';

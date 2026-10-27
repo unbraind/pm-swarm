@@ -24,6 +24,16 @@ function peerBytes(f: Awaited<ReturnType<typeof fixture>>, id: string): string[]
   return [getItemPath(f.pmRoot, 'Task', id), getHistoryPath(f.pmRoot, id)].map(path => readFileSync(path, 'utf8'));
 }
 
+/** Keep the peer's exact item and history receipt across every refused Git acquisition. */
+function assertPeerReceipt(f: Awaited<ReturnType<typeof fixture>>, id: string, peer: string[]) {
+  assert.equal(peer.length, 2); assert.deepEqual(peerBytes(f, id), peer);
+}
+
+/** The locked history rule preserves every public or ABA peer mutation with one typed diagnosis. */
+function historyRefusal(error: unknown): boolean {
+  return error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history';
+}
+
 test('a peer-owned native claim no-op admits its entire fresh document before liveness or Git writes', async t => {
   for (const field of ['title', 'body', 'files']) await t.test(field, async child => {
     const f = await fixture(child); const id = await f.item(); f.save(); const root = join(f.pmRoot, 'runtime/swarm');
@@ -35,7 +45,7 @@ test('a peer-owned native claim no-op admits its entire fresh document before li
       if (field === 'files') peerCommand(f, 'files', id, '--add', secret); else peerCommand(f, 'update', id, `--${field}`, secret);
       peer = peerBytes(f, id);
     }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && ['swarm_private_path', 'swarm_document_changed'].includes(error.code));
-    assert.equal(injected, true); assert.deepEqual(peerBytes(f, id), peer);
+    assertPeerReceipt(f, id, peer); assert.equal(injected, true);
     assert.equal(snapshot(root), before, 'refused no-op changed heartbeat or lease bytes');
   });
 });
@@ -49,8 +59,8 @@ test('claim ownership refuses a restored identical document with a different nat
     if (boundary !== 'before_commit' || injected) return;
     injected = true; peerCommand(f, 'update', id, '--title', 'Independent public update');
     peerCommand(f, 'restore', id, String(original.version), '--force'); peer = peerBytes(f, id);
-  }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
-  assert.equal(injected, true); assert.deepEqual(peerBytes(f, id), peer);
+  }, () => f.swarm.start(id)), historyRefusal);
+  assertPeerReceipt(f, id, peer); assert.equal(injected, true);
   assert.equal((await f.client.get(id)).item.assignee, undefined);
   assert.equal(snapshot(root), before);
 });
@@ -70,17 +80,18 @@ test('every Git acquisition path refuses an SDK client without active hooks befo
 
 test('a public peer edit after native claim is refused before liveness and survives owned rollback', async t => {
   for (const field of ['title', 'body', 'files'] as const) await t.test(field, async child => {
-    const f = await fixture(child); const id = await f.item(); f.save(); let injected = false;
+    const f = await fixture(child); const id = await f.item(); f.save(); let injected = false; let peer: string[] = [];
     const heartbeat = heartbeatPath(f.pmRoot, 'swarm-test'); writeFileSync(heartbeat, '{"heartbeat":"2000-01-01T00:00:00.000Z"}'); const before = snapshot(join(f.pmRoot, 'runtime/swarm'));
     const value = field === 'files' ? 'src/public-peer.ts' : `Public peer ${field}`;
     await assert.rejects(withStartTransitionObserver(async transition => {
       if (transition !== 'claimed') return;
       injected = true;
       if (field === 'files') await f.client.files(id, { add: [value] }); else await f.client.update(id, { [field]: value });
-    }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
-    assert.equal(injected, true); const item = (await f.client.get(id, { depth: 'full' })).item;
+      peer = peerBytes(f, id);
+    }, () => f.swarm.start(id)), historyRefusal);
+    assertPeerReceipt(f, id, peer); assert.equal(injected, true); const item = (await f.client.get(id, { depth: 'full' })).item;
     if (field === 'files') assert.ok(JSON.stringify(item.files).includes(value)); else assert.equal(item[field], value);
-    assert.equal(item.assignee, undefined); assert.equal(branchExists(f.repo, `swarm/${id}`), false);
+    assert.equal(item.assignee, 'swarm-test'); assert.equal(branchExists(f.repo, `swarm/${id}`), false);
     assert.equal(snapshot(join(f.pmRoot, 'runtime/swarm')), before, 'refused post-claim peer edit renewed liveness');
   });
 });

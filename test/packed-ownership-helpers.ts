@@ -99,20 +99,22 @@ client.get=new Proxy(get,{async apply(target,receiver,args){const result=await R
 }return result;}});
 try{await assert.rejects(shared.handoff(paired,'receiver','Packed paired handoff',pairedClaim.token),error=>error.code==='swarm_superseded');}finally{client.get=get;}
 assert.equal(snapshotPeer,true);assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8')),snapshotBytes);
-const rollbackBlocker=(await client.create({type:'Task',title:'Packed compensation domain'})).item.id;
-const rollbackDependent=(await client.create({type:'Task',title:'Packed compensated dependent',status:'blocked',blockedBy:rollbackBlocker,blockedReason:'Public blocker'})).item.id;
-const rollbackClaim=await shared.start(rollbackBlocker);const domain=[rollbackBlocker,rollbackDependent];const originals=domain.map(id=>readFileSync(getItemPath(process.env.PM_PATH,'Task',id),'utf8'));
-await assert.rejects(shared.close(rollbackBlocker,'Packed full compensation',rollbackClaim.token,{onTransition:context=>{if(context.transition==='committing')throw new Error('Packed ordinary failure');}}),/Packed ordinary failure/);
-assert.deepEqual(domain.map(id=>readFileSync(getItemPath(process.env.PM_PATH,'Task',id),'utf8')),originals);
-let compensationCrash=false;
-await assert.rejects(shared.close(rollbackBlocker,'Packed full compensation',rollbackClaim.token,{onTransition:context=>{
-  if(context.transition==='committing')throw new Error('Packed compensation crash');
-  if(context.transition==='compensating'){compensationCrash=true;throw new WorkspaceTransactionInterruptedError('Stop before packed compensation');}
-}}));
-assert.equal(compensationCrash,true);await shared.close(rollbackBlocker,'Packed full compensation',rollbackClaim.token);assert.equal((await client.get(rollbackDependent)).item.status,'open');
-console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_recovery:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1,complete_close_compensation:1}));
+for(const crash of [false,true]){
+  const blocker=(await client.create({type:'Task',title:'Packed compensation refusal'})).item.id;
+  const dependent=(await client.create({type:'Task',title:'Packed preserved dependent',status:'blocked',blockedBy:blocker,blockedReason:'Public blocker'})).item.id;
+  const claim=await shared.start(blocker);let interrupted=false;
+  await assert.rejects(shared.close(blocker,'Packed bounded compensation',claim.token,{onTransition:context=>{
+    if(context.transition==='committing')throw new Error('Begin packed rollback');
+    if(crash&&context.transition==='compensating'){interrupted=true;throw new WorkspaceTransactionInterruptedError('Stop before packed rollback');}
+  }}),error=>crash||error.code==='swarm_compensation_partial');
+  assert.equal(interrupted,crash);
+  const ids=[blocker,dependent];const bytes=()=>ids.flatMap(id=>[getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8')));const preserved=bytes();
+  await assert.rejects(shared.close(blocker,'Packed bounded compensation',claim.token),error=>error.code==='swarm_compensation_partial'&&error.restored.length===0&&ids.every(id=>error.pending.includes(id)));
+  assert.deepEqual(bytes(),preserved);assert.equal((await client.get(blocker)).item.status,'closed');assert.equal((await client.get(dependent)).item.status,'open');
+}
+console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_recovery:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1,dependent_compensation_refusals:2}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_recovery: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1, complete_close_compensation: 1 });
+  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_recovery: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1, dependent_compensation_refusals: 2 });
 }

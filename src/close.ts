@@ -4,6 +4,7 @@ import { inspectItem, readItem, mutationSnapshot } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, assertClaimGeneration, assertItemHistoryHead } from './settings.ts';
 import { CLOSE_STEPS, closeCheckpoint, closeConflict, closeSnapshot, closeStepResult, closeTrace, closeWarnings, closeWarningsUnavailable, closeEffects, closeDocumentHash } from './close-journal.ts';
+import { requirePrimaryOnlyCompensation, CompensationPartialRefusal } from './close-compensation.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import type { CloseEffect, CloseSnapshot } from './close-journal.ts';
 import type { ItemHistoryHead } from './settings.ts';
@@ -38,6 +39,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
     const admission = await mutationSnapshot(engine.pmRoot, String(local?.item.id ?? id), async () => (await readItem(engine.client, id)).item); const item = admission.item;
     const intent = closeIntent(engine, note, token, tokens, item);
     const entryTrace = await closeTrace(engine.pmRoot, engine.author, intent, note);
+    if (entryTrace.journal?.status === 'compensating' && entryTrace.phase >= 2) await requirePrimaryOnlyCompensation(engine.pmRoot, intent.canonicalId, intent.transactionId, entryTrace.journal.results.close, entryTrace.journal.compensationData.close ?? entryTrace.journal.compensationData.metadata);
     const initialExpected = entryTrace.snapshots[0] === undefined ? item : { ...entryTrace.snapshots[0].document.metadata, body: entryTrace.snapshots[0].document.body };
     const { canonicalId, next, transactionId } = intent;
     // Core alone selects dependents; capture their admission domain before the first journal/item write.
@@ -70,7 +72,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         const expected = index === 0 ? initialExpected : { ...state.snapshots[1].document.metadata, body: state.snapshots[1].document.body };
         if (documentFingerprint({ ...snapshot.document.metadata, body: snapshot.document.body }) !== documentFingerprint(expected)) closeConflict();
         assertPrivatePathSafe(snapshot.document, 'document');
-        const domain = index === 0 ? undefined : [...relatedSnapshots].map(([id, value]) => {
+        const domain = [...relatedSnapshots].map(([id, value]) => {
           const point = { version: value.version, hash: value.hash, historyHead: value.historyHead };
           return { id, before: point, after: point };
         });
@@ -100,19 +102,20 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
             const result = await lease.write(() => commitItemMutation({ id: canonicalId, item: document, note, options: { author: engine.author, message: 'Swarm close completion' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { transaction: true, history: expectedHistory, related, onCommitted: (_before, after) => { written.set(after.metadata.id, closeDocumentHash(after)); }, beforeWrite: async () => { await trace(); } }));
             warnings = result.warnings;
           } finally {
-            observedEffects = [];
+            const collected: CloseEffect[] = [];
             for (const [id, hash] of written) {
               if (id === canonicalId) continue;
               const before = relatedSnapshots.get(id)!;
               const after = await closeSnapshot(engine.pmRoot, id, before.version + 1);
               if (after.hash !== hash) closeConflict('The native dependent read-back does not match its admitted write.');
-              observedEffects.push({ id, before: { version: before.version, hash: before.hash, historyHead: before.historyHead }, after: { version: after.version, hash: after.hash, historyHead: after.historyHead } });
+              collected.push({ id, before: { version: before.version, hash: before.hash, historyHead: before.historyHead }, after: { version: after.version, hash: after.hash, historyHead: after.historyHead } });
             }
             if (written.has(canonicalId)) {
               const primary = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
               if (primary.hash !== written.get(canonicalId)) closeConflict('The native close read-back does not match its admitted write.');
               expectedHistory = primary.historyHead;
             }
+            observedEffects = collected;
           }
         }
         const after = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
@@ -125,27 +128,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         if (latest.document.metadata.swarm_token !== initialExpected.swarm_token) assertClaimGeneration(latest.document.metadata.swarm_token, next);
         const state = await trace();
         const current = state.snapshots.at(-1)!;
-        if (index === 1) {
-          const effects = closeEffects(state.journal?.results.close) ?? observedEffects;
-          if (effects === undefined) {
-            // No durable ownership receipt means no permission to restore a secondary or its blocker.
-            for (const effect of closeEffects(data) ?? []) await assertItemHistoryHead(engine.pmRoot, effect.id, effect.before.historyHead);
-          } else for (const effect of [...effects].reverse()) {
-            const snapshot = await closeSnapshot(engine.pmRoot, effect.id);
-            await assertItemHistoryHead(engine.pmRoot, effect.id, effect.after.historyHead);
-            let restoredHash: string | undefined;
-            try {
-              await lease.write(() => commitItemMutation({ id: effect.id, item: { ...snapshot.document.metadata, body: snapshot.document.body }, target: String(effect.before.version), options: { author: engine.author, force: true, message: 'Swarm native dependent compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, history: effect.after.historyHead, onCommitted: (_before, after) => { restoredHash = closeDocumentHash(after); } }));
-            } catch (error) {
-              // A lost return can be reconciled only by this invocation's native commit observation.
-              if (restoredHash === undefined) throw error;
-            }
-            const restored = await closeSnapshot(engine.pmRoot, effect.id, snapshot.version + 1);
-            if (restored.hash !== effect.before.hash || restored.hash !== restoredHash) closeConflict('Native dependent restore did not restore its recorded preimage.');
-            await assertItemHistoryHead(engine.pmRoot, effect.id, restored.historyHead);
-            relatedSnapshots.set(effect.id, restored); related.set(effect.id, { item: { ...restored.document.metadata, body: restored.document.body }, history: restored.historyHead });
-          }
-        }
+        if (state.phase >= 2) await requirePrimaryOnlyCompensation(engine.pmRoot, canonicalId, transactionId, state.journal?.results.close, state.journal?.compensationData.close ?? state.journal?.compensationData.metadata, observedEffects);
         await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, generation: { token: current.document.metadata.swarm_token }, history: current.historyHead, beforeWrite: async () => { await trace(); } }));
         expectedHistory = (await closeSnapshot(engine.pmRoot, canonicalId, current.version + 1)).historyHead;
       },
@@ -156,7 +139,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
       warnings = closeWarnings(result.results.close); unavailable = closeWarningsUnavailable(result.results.close);
     } catch (error) {
       if (error instanceof AggregateError) {
-        const refusal = error.errors.find((failure: unknown) => failure instanceof SettingsRefusal);
+        const refusal = error.errors.find((failure: unknown) => failure instanceof CompensationPartialRefusal) ?? error.errors.find((failure: unknown) => failure instanceof SettingsRefusal);
         if (refusal !== undefined) throw refusal;
       }
       throw error;

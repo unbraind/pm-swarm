@@ -9,6 +9,7 @@ import { sharedFixture } from './shared-helpers.ts';
 import { withStartTransitionObserver } from '../src/swarm.ts';
 import { StaleFenceError, withSwarmLease, heartbeatPath } from '../src/lease.ts';
 import { SettingsRefusal } from '../src/settings.ts';
+import { peerBytes } from './history-aba-helpers.ts';
 
 for (const changed of ['worktree', 'dirty worktree', 'branch'] as const) test(`failed start preserves a peer-changed ${changed} while releasing its own native claim`, async t => {
   const f = await fixture(t); const id = await f.item(); f.save(); const branch = `swarm/${id}`; const path = join(f.root, '.pm-swarm', `repo-${id}`); let peer = '';
@@ -29,12 +30,14 @@ for (const changed of ['worktree', 'dirty worktree', 'branch'] as const) test(`f
 test('failed publication preserves peer lane metadata and reports why its Git resources remain', async t => {
   const f = await fixture(t); const id = await f.item(); f.save();
   /** Replace the published registration through a real peer SDK transition. */
+  let peer: string[] = [];
   const replaceRegistration = async (transition: string) => {
-    if (transition === 'published') { await f.client.update(id, { field: ['swarm_branch=peer/branch'] }); throw new Error('Fail after metadata peer transition'); }
+    if (transition === 'published') { await f.client.update(id, { field: ['swarm_branch=peer/branch'] }); peer = peerBytes(f.pmRoot, id); throw new Error('Fail after metadata peer transition'); }
   };
-  await assert.rejects(withStartTransitionObserver(replaceRegistration, () => f.swarm.start(id)), SettingsRefusal);
+  await assert.rejects(withStartTransitionObserver(replaceRegistration, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded');
+  assert.ok(peer.length > 0); assert.deepEqual(peerBytes(f.pmRoot, id), peer);
   const item = (await f.client.get(id)).item;
-  assert.equal(item.swarm_branch, 'peer/branch'); assert.equal(item.assignee, undefined);
+  assert.equal(item.swarm_branch, 'peer/branch'); assert.equal(item.assignee, 'swarm-test');
   assert.equal(git(f.repo, ['rev-parse', '--verify', `swarm/${id}`]), git(f.repo, ['rev-parse', 'HEAD']));
 });
 

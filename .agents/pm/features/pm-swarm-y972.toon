@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T17:41:09.846Z"
+updated_at: "2026-10-27T18:50:48.769Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[180]{created_at,author,text}:
+comments[186]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -193,7 +193,13 @@ comments[180]{created_at,author,text}:
   "2026-10-27T17:00:17.965Z",codex-agent,"CI follow-up classes: capture the native metadata commit hook before a lost return so close can compensate; carry only observed own successor versions through Git cleanup, refusing every unobserved history advance; read SDK history prefixes through readHistorySnapshot/resolveHistoryTarget without reconstructing legacy documents for forward admission. The existing lost-return fixture now runs its declared independent peer in an AsyncResource created before the request; SDK results are unchanged. Stale tests now assert swarm_superseded and preserve peer claims/history/Git resources, with stronger byte checks, rather than expecting cleanup through changed ownership or leases. No assertion was removed. The targeted correction passes 11/11, including both existing legacy positive tests unchanged."
   "2026-10-27T17:33:29.630Z",codex-agent,"Final focused follow-up passes 32/32 with zero failures/skips/cancellations (460965.837713 ms); it covers both review classes, the ten newly visible prior-CI failures, history ownership after peer updates, and the corrected cross-item test coordinate. The broader two-worker linked run timed out at 1200000 ms and is retained as missing evidence; its installed layout matrix passed all 22 interleavings, and its one failed assertion was the wrong history coordinate in the test migration, now corrected without removing its assertions. A small source-context linked command verifies the current source without repeating unrelated watch/cleanup cases. Source CI https://github.com/unbraind/pm-swarm/actions/runs/40551226794 is queued for Node 22/26; CodeQL https://github.com/unbraind/pm-swarm/actions/runs/40551226916 is queued. The original 30-minute wait cutoff has passed; no further CI wait is claimed as verification."
   "2026-10-27T17:41:00.386Z",codex-agent,"Final linked acceptance passes 6/6 with zero failures/skips/cancellations after all source fixes; pm test --run --only-last --progress executes the exact scoped command with schema context and source workspace. The final focused command passes 32/32; the earlier linked run passed 116/116, and the broader follow-up timeout is retained explicitly. The final installed-layout matrix passes all 22 real interleavings; five restored-source revert proofs yield 19 expected failures. Typecheck/lint/build/docstrings, zero duplication, strict tracker health, main history prefixes and identity/privacy checks pass. Source head 64effe3685525e97a788fdc24b5067b69d4e1387 has queued CI https://github.com/unbraind/pm-swarm/actions/runs/40551226794 (Node 22/26 release jobs) and queued CodeQL https://github.com/unbraind/pm-swarm/actions/runs/40551226916. Full npm/Bun/packed acceptance/coverage counts are unavailable. The original wait cutoff has passed; the final metadata-only evidence push requires fresh exact-head checks and is not certified by this prior source run. Fresh runs are listed at https://github.com/unbraind/pm-swarm/actions/workflows/ci.yml?query=branch%3Afeat%2Fsettings-and-quality-gates . The own claim is released; the item remains in_progress, never closed."
-files[97]{path,scope}:
+  "2026-10-27T18:06:04.491Z",codex-agent,"Hand-managed compensation round: taking the explicitly authorized smaller split. The two-step SDK journal does not checkpoint progress within compensate(data): Promise<void>; a competing writer would race the coordinator in-memory journal. This PR will perform no member restore when native close changed dependents, preserve the coherent native lifecycle state, and return swarm_compensation_partial with certified restored/pending members and a remedy. Primary-only rollback remains supported. A package follow-up and GitHub issue will own durable member progress and the complete SIGKILL matrix; no new upstream SDK gap is claimed."
+  "2026-10-27T18:14:11.026Z",codex-agent,"Scope split recorded: pm-swarm-durable-compensation and https://github.com/unbraind/pm-swarm/issues/32 own durable multi-item rollback, fsynced member progress and the complete after-each-restore SIGKILL matrix. This PR retains native successful close and primary-only SDK compensation. When native close changed dependents or membership cannot be certified, swarm_compensation_partial is returned before any restore, with restored/pending lists and the SDK transaction identity. No second writer touches the SDK-owned journal. Existing dependent scenarios now assert preservation/refusal; primary-only scenarios retain reverse-write and retry assertions."
+  "2026-10-27T18:40:32.564Z",codex-agent,"Main advanced during this round: merged Dependabot toolchain update 96783ab into merge commit 4332297, preserving its SDK pin 2026.10.24. Public latest CLI is 2026.10.27; no independent dependency bump. Prior exact-head CI 40553021004 failed 5/830 results on both Node lines: four result nodes represent stale cleanup assertions that expected a claim release despite peer native history advances, plus one stale publication assertion. These assertions now require superseded, preserved claims and byte-identical peer item/history; no safety assertion or test is removed. The main compensation change uses the owner-authorized smaller scope and follow-up issue 32."
+  "2026-10-27T18:44:33.644Z",codex-agent,"Behavioral revert proofs on the main-merged SDK 2026.10.24: disabling only requirePrimaryOnlyCompensation makes the real SIGKILL preservation tests fail 3/3 (1-3 dependents), and the peer-at-barrier SDK/CLI preservation test fail 1/1. Removing only CompensationPartialRefusal precedence makes the original-typed-failure regression fail 1/1. Each exits 1, zero skips/cancellations, with real native mutations; exact fixed source bytes were restored in finally. Full focused fixed run before the probes: 18/18 pass, zero failures/skips/cancellations, 127087.654007 ms. The new legacy-history test initially treated an empty missing stream as unreadable; its fixture now injects actually malformed history and checks the same conservative refusal. No source policy was relaxed. A linked passing command follows to verify all reverts restored and retain native close, primary-only rollback and peer-history preservation."
+  "2026-10-27T18:50:34.707Z",codex-agent,"Hand-managed round final local evidence: SDK 2026.10.24 focused compensation tests pass 18/18; pm test --run --only-last --progress passes the linked source/schema command 16/16 (108261.542069 ms), including all five restored revert regressions, native close lifecycle equivalence, primary-only compensation/lost returns, exact writer inventory and public peer-history preservation. Extraction of repeated assertions keeps every check: affected focused rerun 7/7, then final peer receipt helper rerun 4/4 (54826.113558 ms), all zero failures/skips/cancellations. Typecheck, lint, build, docstrings (38 files/176 declarations) and duplication (0 percent, 133 sources) pass. The first duplication attempt correctly rejected repeated test blocks; shared test helpers removed the clones without exemptions. Source writer inventory is 24 SDK/backend sites and 18 item-history admissions. Both main-history prefixes remain append-only. Full npm/Bun release, packed acceptance and unchanged 100/100/100/100 coverage thresholds are delegated to CI after the final push, not claimed from these focused runs. Live PR checks are the final-head gate reference."
+  "2026-10-27T18:50:42.555Z",codex-agent,"The authorized scope split is final: pm-swarm-durable-compensation and issue 32 own full durable multi-item restoration and the 0..N member-restore SIGKILL matrix. Current real-process SIGKILL checks cover the pre-restore barrier with 1-3 dependents and preserve the native result on every retry. A peer edit at that barrier is preserved by SDK, JSON and TOON refusals. Automatic compensation only restores a primary-only operation. No own message marker is treated as ownership, no dependent restore writer remains, and no alternate writer edits the SDK journal. The PR body states this limitation. Releasing only my own claim; item stays in_progress for orchestrator verification. No merge or release."
+files[101]{path,scope}:
   docs/native-close.md,project
   index.ts,project
   manifest.json,project
@@ -201,6 +207,7 @@ files[97]{path,scope}:
   scripts/coverage-gate.ts,project
   scripts/identity-gate.ts,project
   src/admission.ts,project
+  src/close-compensation.ts,project
   src/close-journal.ts,project
   src/close.ts,project
   src/commands.ts,project
@@ -224,6 +231,9 @@ files[97]{path,scope}:
   test/acquisition-receipts.test.ts,project
   test/claim-lifecycle.test.ts,project
   test/cleanup-boundaries.test.ts,project
+  test/close-compensation-kill.test.ts,project
+  test/close-compensation-worker.ts,project
+  test/close-compensation.test.ts,project
   test/close-compound-effects.test.ts,project
   test/close-effect-receipts.test.ts,project
   test/close-journal-adversarial.test.ts,project
@@ -291,7 +301,7 @@ files[97]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[33]:
+tests[34]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -595,6 +605,16 @@ tests[33]:
     provenance:
       author: codex-agent
       created_at: "2026-10-27T17:35:57.358Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: npm run build && node --test --test-concurrency=2 --test-reporter=tap '--test-name-pattern=SIGKILL before compensation|a peer edit at the compensation barrier|dependent compensation refusal takes precedence|swarm preserves native close and dependent lifecycle bytes|ordinary SDK close failure|SDK-journaled close compensates lost native returns|close recovery resumes a native compensation|every SDK and backend write site|a public peer edit after native claim|failed publication preserves' test/close-compensation-kill.test.ts test/close-compound-effects.test.ts test/close-native.test.ts test/close-transaction.test.ts test/acquisition-receipts.test.ts test/privacy-sinks.test.ts test/start-admission-race.test.ts test/cleanup-boundaries.test.ts
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: schema
+    workspace_context_mode: source
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T18:44:37.824Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[7]{path,scope}:

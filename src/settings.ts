@@ -8,7 +8,7 @@ import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded' | 'swarm_compensation_partial';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */

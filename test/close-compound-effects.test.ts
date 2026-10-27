@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { WorkspaceTransactionTransitionContext } from '@unbrained/pm-cli/sdk';
 import { WorkspaceTransactionInterruptedError, readHistoryEntries, getHistoryPath } from '@unbrained/pm-cli/sdk';
+import { SettingsRefusal } from '../src/settings.ts';
+import { CompensationPartialRefusal } from '../src/close-compensation.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { sharedFixture } from './shared-helpers.ts';
@@ -9,10 +11,12 @@ import { blockedDependent, closeClaim } from './close-native-helpers.ts';
 import { peerBytes, historyPeerProcess, observeSdkReturn } from './history-aba-helpers.ts';
 
 /** Native side effects, including each dependency representation, belong to the same compensation domain. */
-async function compound(f: Awaited<ReturnType<typeof sharedFixture>>) {
-  const { id, claim } = await closeClaim(f); const first = await blockedDependent(f, id); const second = await f.item();
-  await f.client.update(second, { status: 'blocked', blockedReason: 'Awaiting public work', dep: [`id=${id},kind=blocked_by`] });
-  const ids = [id, first, second]; const documents = ids.map(id => peerBytes(f.pmRoot, id)[0]);
+async function compound(f: Awaited<ReturnType<typeof sharedFixture>>, dependents = true) {
+  const { id, claim } = await closeClaim(f); const ids = [id];
+  if (dependents) {
+    ids.push(await blockedDependent(f, id)); const second = await f.item(); ids.push(second);
+    await f.client.update(second, { status: 'blocked', blockedReason: 'Awaiting public work', dep: [`id=${id},kind=blocked_by`] });
+  } const documents = ids.map(id => peerBytes(f.pmRoot, id)[0]);
   const versions = await Promise.all(ids.map(async id => (await readHistoryEntries(getHistoryPath(f.pmRoot, id), id)).length));
   return { id, claim, ids, documents, versions };
 }
@@ -20,7 +24,7 @@ async function compound(f: Awaited<ReturnType<typeof sharedFixture>>) {
 /** A completed recovery retains exactly one native update, compensation and successful retry. */
 async function assertCompensatedOnce(f: Awaited<ReturnType<typeof sharedFixture>>, state: Awaited<ReturnType<typeof compound>>, id: string) {
   const entries = await readHistoryEntries(getHistoryPath(f.pmRoot, id), id);
-  assert.deepEqual(entries.slice(state.versions[state.ids.indexOf(id)]).map(entry => entry.op), ['update', 'restore', 'update']);
+  assert.deepEqual(entries.slice(state.versions[state.ids.indexOf(id)]).map(entry => entry.op), id === state.id ? ['update', 'close', 'restore', 'restore', 'update', 'close'] : ['update', 'restore', 'update']);
 }
 
 /** Trigger an ordinary post-write coordinator failure, distinct from deliberate crash injection. */
@@ -28,20 +32,40 @@ function failCommit(context: WorkspaceTransactionTransitionContext): void {
   if (context.transition === 'committing') throw new Error('Ordinary committing failure');
 }
 
-/** The review's committing failure must restore blocker and all native dependents while retaining audit history. */
-test('ordinary committing failure compensates the complete native close domain', async t => {
-  const f = await sharedFixture(t); const state = await compound(f);
-  await assert.rejects(f.shared.close(state.id, 'Public completion', state.claim.token, { onTransition: failCommit }), /Ordinary committing failure/);
-  for (const [index, id] of state.ids.entries()) {
-    assert.equal(peerBytes(f.pmRoot, id)[0], state.documents[index]);
-    assert.ok((await readHistoryEntries(getHistoryPath(f.pmRoot, id), id)).length > state.versions[index]);
-  }
-  await new SharedTracker(f.shared.engine).close(state.id, 'Public completion', state.claim.token);
+/** Observe core's coherent close result while the conservative compensation refusal preserves it. */
+async function assertNativeLifecycle(f: Awaited<ReturnType<typeof sharedFixture>>, state: Awaited<ReturnType<typeof compound>>) {
+  assert.equal((await f.client.get(state.id)).item.status, 'closed');
   for (const id of state.ids.slice(1)) assert.equal((await f.client.get(id)).item.status, 'open');
+}
+/** A typed initiating fault must never hide the native dependent compensation outcome. */
+function failTypedCommit(context: WorkspaceTransactionTransitionContext): void {
+  if (context.transition === 'committing') throw new SettingsRefusal('swarm_document_changed', 'Injected typed failure after native close.', 'document');
+}
+
+/** Refuse before any restore rather than exposing an incomplete multi-item rollback. */
+test('ordinary committing failure refuses multi-item compensation before any restore', async t => {
+  const f = await sharedFixture(t); const state = await compound(f);
+  await assert.rejects(f.shared.close(state.id, 'Public completion', state.claim.token, { onTransition: failCommit }), error => error instanceof CompensationPartialRefusal && error.restored.length === 0 && state.ids.every(id => error.pending.includes(id)));
+  const after = state.ids.map(id => peerBytes(f.pmRoot, id));
+  await assertNativeLifecycle(f, state);
+  await assert.rejects(new SharedTracker(f.shared.engine).close(state.id, 'Public completion', state.claim.token), CompensationPartialRefusal);
+  assert.deepEqual(state.ids.map(id => peerBytes(f.pmRoot, id)), after);
+  for (const [index, id] of state.ids.entries()) {
+    assert.notEqual(after[index][0], state.documents[index]);
+    const entries = await readHistoryEntries(getHistoryPath(f.pmRoot, id), id);
+    assert.deepEqual(entries.slice(state.versions[index]).map(entry => entry.op), index === 0 ? ['update', 'close'] : ['update']);
+  }
 });
 
-for (const boundary of ['compensating', 'step_compensating', 'step_compensated', 'compensated']) test(`native dependent compensation resumes at ${boundary}`, async t => {
-  const f = await sharedFixture(t); const state = await compound(f); let interrupted = false;
+/** Once native dependents changed, the partial outcome takes precedence over the initiating typed failure. */
+test('dependent compensation refusal takes precedence over an original typed SDK error', async t => {
+  const f = await sharedFixture(t); const state = await compound(f);
+  await assert.rejects(f.shared.close(state.id, 'Public completion', state.claim.token, { onTransition: failTypedCommit }), error => error instanceof CompensationPartialRefusal && state.ids.every(id => error.pending.includes(id)));
+  await assertNativeLifecycle(f, state);
+});
+
+for (const boundary of ['compensating', 'step_compensating', 'step_compensated', 'compensated']) test(`primary-only compensation resumes at ${boundary}`, async t => {
+  const f = await sharedFixture(t); const state = await compound(f, false); let interrupted = false;
   await assert.rejects(f.shared.close(state.id, 'Public completion', state.claim.token, { onTransition(context) {
     failCommit(context);
     if (!interrupted && context.transition === boundary) { interrupted = true; throw new WorkspaceTransactionInterruptedError('Interrupt full compensation'); }
@@ -51,15 +75,12 @@ for (const boundary of ['compensating', 'step_compensating', 'step_compensated',
   const before = state.ids.map(id => peerBytes(f.pmRoot, id));
   await new SharedTracker(f.shared.engine).close(state.id, 'Public completion', state.claim.token);
   assert.deepEqual(state.ids.map(id => peerBytes(f.pmRoot, id)), before);
-  for (const id of state.ids.slice(1)) {
-    assert.equal((await f.client.get(id)).item.status, 'open');
-    await assertCompensatedOnce(f, state, id);
-  }
+  for (const id of state.ids) await assertCompensatedOnce(f, state, id);
 });
 
 /** Lost native restore returns cannot duplicate a dependent restore or erase another writer's work. */
-for (const lost of [0, 1]) test(`dependent compensation lost return ${lost} resumes once`, async t => {
-  const f = await sharedFixture(t); const state = await compound(f); let index = 0; let injected = false;
+for (const lost of [0, 1]) test(`primary-only compensation lost return ${lost} resumes once`, async t => {
+  const f = await sharedFixture(t); const state = await compound(f, false); let index = 0; let injected = false;
   const client = observeSdkReturn(f.client, 'restore', () => {
     if (!injected && index++ === lost) { injected = true; throw new WorkspaceTransactionInterruptedError('Lost dependent restore return'); }
   });
@@ -69,9 +90,7 @@ for (const lost of [0, 1]) test(`dependent compensation lost return ${lost} resu
   } }));
   assert.equal(injected, true);
   await new SharedTracker(f.shared.engine).close(state.id, 'Public completion', state.claim.token);
-  for (const id of state.ids.slice(1)) {
-    await assertCompensatedOnce(f, state, id);
-  }
+  for (const id of state.ids) await assertCompensatedOnce(f, state, id);
 });
 
 /** Secondary ownership is a locked history comparison, not equality of its restored content. */
@@ -98,7 +117,7 @@ test('a matching dependent preimage never substitutes for a compensation receipt
   assert.ok(peer); assert.deepEqual(peerBytes(f.pmRoot, dependent), peer);
   assert.equal((await f.client.get(state.id)).item.status, 'closed');
   assert.equal(attempt.status, 'rejected');
-  if (attempt.status === 'rejected') assert.equal(attempt.reason.code, 'swarm_superseded');
+  if (attempt.status === 'rejected') assert.equal(attempt.reason.code, 'swarm_compensation_partial');
 });
 
 /** Missing native result receipts never authorize secondary rollback from matching document values. */
@@ -110,6 +129,6 @@ test('unrecorded native effects refuse uncertain compensation without reopening 
   const before = state.ids.map(id => peerBytes(f.pmRoot, id));
   await assert.rejects(new SharedTracker(f.shared.engine).close(state.id, 'Public completion', state.claim.token, { onTransition(context) {
     failCommit(context);
-  } }), error => error instanceof Error && 'code' in error && error.code === 'swarm_superseded');
+  } }), error => error instanceof Error && 'code' in error && error.code === 'swarm_compensation_partial');
   assert.deepEqual(state.ids.map(id => peerBytes(f.pmRoot, id)), before);
 });
