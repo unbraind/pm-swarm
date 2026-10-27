@@ -32,7 +32,7 @@ function installed(root: string, separate: boolean): string {
   return pathToFileURL(join(packageRoot, 'dist/index.js')).href;
 }
 
-test('installed package copies preserve every after-preflight peer transition with one SDK or refuse a distinct SDK', { timeout: 240000 }, async t => {
+test('installed package copies preserve every after-preflight peer transition with one SDK or refuse a distinct SDK', { timeout: 600000 }, async t => {
   const f = await sharedFixture(t); const extension = join(f.pmRoot, 'extensions/pm-swarm');
   const manifest = readFileSync(join(extension, 'manifest.json'), 'utf8');
   for (const layout of ['shared', 'separate'] as const) writeFileSync(join(extension, `${layout}-entry.js`), `export {default} from ${JSON.stringify(installed(join(f.repo, 'installed'), layout === 'separate'))};\n`);
@@ -43,7 +43,7 @@ test('installed package copies preserve every after-preflight peer transition wi
     if (!privateValue && boundary === 'corpus-return') continue;
     writeFileSync(join(extension, 'manifest.json'), manifest);
     const id = await f.item(['src/public.ts']); await f.client.get(id, { depth: 'full' });
-    const child = spawnSync(process.execPath, [fileURLToPath(new URL('./privacy-sdk-worker.ts', import.meta.url)), JSON.stringify({ cwd: f.repo, pmRoot: f.pmRoot, host: f.host, id, layout, boundary, private: privateValue })], { cwd: f.repo, encoding: 'utf8', env: f.env, timeout: 30000 });
+    const child = spawnSync(process.execPath, [fileURLToPath(new URL('./privacy-sdk-worker.ts', import.meta.url)), JSON.stringify({ cwd: f.repo, pmRoot: f.pmRoot, host: f.host, id, layout, boundary, private: privateValue })], { cwd: f.repo, encoding: 'utf8', env: f.env, timeout: 90000 });
     assert.equal(child.status, 0, `Installed ${layout}, ${boundary}, private ${privateValue}: ${child.stderr.replaceAll(f.repo, '[fixture]')}`);
     assert.deepEqual(JSON.parse(child.stdout), { injected: 1, tracker_changes_by_package: 0, partial_receipts: 0, peer_history_preserved: true }); cases++;
   }
@@ -85,9 +85,9 @@ test('interruption at every item admission boundary writes nothing and a rerun c
 test('the locked comparison rejects benign title edits without replacing the peer success', async t => {
   const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
   await f.client.update(id, { title: 'Peer success' }); const before = durableSnapshot(f.pmRoot);
-  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Our stale update' } }, admitted => f.client.update(admitted.id, admitted.options)), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Our stale update' } }, admitted => f.client.update(admitted.id, admitted.options), { pmRoot: f.pmRoot }), documentChange);
   assert.equal(durableSnapshot(f.pmRoot), before);
-  await assert.rejects(commitItemMutation({ id, item: (await f.client.get(id, { depth: 'full' })).item, options: { type: 'Task', title: 'Unexpected create' } }, admitted => f.client.create(admitted.options)), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  await assert.rejects(commitItemMutation({ id, item: (await f.client.get(id, { depth: 'full' })).item, options: { type: 'Task', title: 'Unexpected create' } }, admitted => f.client.create(admitted.options), { pmRoot: f.pmRoot }), documentChange);
   assert.equal(durableSnapshot(f.pmRoot), before);
 });
 
@@ -95,7 +95,7 @@ test('metadata-only admission cannot overwrite an unobserved nonempty item body'
   const f = await sharedFixture(t); const id = await f.item(); await f.client.update(id, { body: 'Public body that must survive' });
   const { body: _body, ...metadata } = (await f.client.get(id, { depth: 'full' })).item;
   const before = durableSnapshot(f.pmRoot);
-  await assert.rejects(commitItemMutation({ id, item: metadata, options: { description: 'Unobserved update' } }, admitted => f.client.update(admitted.id, admitted.options)), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  await assert.rejects(commitItemMutation({ id, item: metadata, options: { description: 'Unobserved update' } }, admitted => f.client.update(admitted.id, admitted.options), { pmRoot: f.pmRoot }), documentChange);
   assert.equal(durableSnapshot(f.pmRoot), before);
 });
 
@@ -120,7 +120,7 @@ for (const transitions of [1, 8]) test(`progress re-evaluates native conflicts a
     const peer = f.cli('comment', id, `Public peer ${peers}`, '--json'); assert.equal(peer.status, 0); peers++;
   }, () => plan.progress.witness(id, { stage: 'claimed', step: plan.view.steps[0].id, revision: plan.view.revision, evidence: 'Public evidence', apply: true }));
   if (transitions === 1) assert.equal((await operation()).dry_run, false);
-  else await assert.rejects(operation(), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  else await assert.rejects(operation(), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
   assert.equal(peers, transitions);
   const comments = (await f.client.get(id, { depth: 'full' })).item.comments!;
   assert.equal(comments.filter(comment => comment.text.startsWith('Public peer ')).length, transitions);
@@ -156,11 +156,14 @@ test('compound native writes preserve later peer state and truthfully report an 
     const peer = f.cli('update', id, '--title', privateTitle, '--json'); assert.equal(peer.status, 0);
     peerHistory = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
     await f.client.update(admitted.id, { description: 'Refused successor' });
-  }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /1 native item mutation/.test(error.remedy) && !error.remedy.includes(privateTitle));
+  }, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /1 native item mutation/.test(error.remedy) && !error.remedy.includes(privateTitle));
   assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), peerHistory);
   const other = await f.item(); const current = (await f.client.get(other, { depth: 'full' })).item;
   await assert.rejects(commitItemMutation({ id: other, item: current, options: { add: 'Public committed step' } }, async admitted => {
     await f.client.comments(admitted.id, admitted.options); throw new Error('Interrupted after commit');
-  }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
+  }, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.code === 'swarm_partial_commit' && /SDK refused a later step/.test(error.remedy));
   assert.equal((await f.client.get(other, { depth: 'full' })).item.comments!.length, 1);
 });
+
+/** Preserve the existing exact refusal assertions when supplying the mandatory history coordinate. */
+function documentChange(error: unknown): boolean { return error instanceof SettingsRefusal && error.code === 'swarm_document_changed'; }

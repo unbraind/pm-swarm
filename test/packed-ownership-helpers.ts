@@ -10,7 +10,7 @@ export function assertPackedCloseOwnership(runtime: string, repo: string, pmRoot
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt } from '@unbrained/pm-cli/sdk';
+import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt, WorkspaceTransactionInterruptedError } from '@unbrained/pm-cli/sdk';
 import { SharedTracker, Swarm, ResourceReservations, trackerResourceBackend, withItemMutationObserver } from 'pm-swarm';
 const client = new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:'packed-worker'});
 const shared = new SharedTracker(new Swarm(process.cwd(),process.env.PM_PATH,client,'packed-worker'));
@@ -23,7 +23,7 @@ await assert.rejects(shared.close(id,'Packed journal proof',claim.token,{onTrans
     const result=spawnSync(process.execPath,[process.argv[2],'update',id,'--title','Packed peer survives','--message',row.message,'--author','packed-worker','--json'],{encoding:'utf8'});
     assert.equal(result.status,0,result.stdout+result.stderr);
   }
-}}),error=>error.code==='swarm_document_changed');
+}}),error=>error.code==='swarm_superseded');
 assert.equal(peer,true);const before=readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8');
 for(let retry=0;retry<3;retry++){
   await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_document_changed');
@@ -66,9 +66,33 @@ for(const resource of [false,true]){
     assert.equal(peer,true);assert.deepEqual(bytes(),peerBytes);assert.equal(attempt.status,'rejected');assert.equal(attempt.reason.code,'swarm_superseded');historyPreserved++;
   }finally{client.update=update;}
 }
-console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved}));
+const blocker=(await client.create({type:'Task',title:'Packed native lifecycle'})).item.id;
+const dependent=(await client.create({type:'Task',title:'Packed blocked dependent',status:'blocked',blockedBy:blocker,blockedReason:'Public dependency'})).item.id;
+const lifecycleClaim=await shared.start(blocker);await client.update(blocker,{blockedReason:'Public prior blocker'});
+let interrupted=false;
+await assert.rejects(shared.close(blocker,'Packed native completion',lifecycleClaim.token,{onTransition:context=>{
+  if(!interrupted&&context.transition==='step_applied'&&context.stepId==='close'){interrupted=true;throw new WorkspaceTransactionInterruptedError('Interrupt packed native close');}
+}}),WorkspaceTransactionInterruptedError);
+const recoveredClose=await shared.close(blocker,'Packed native completion',lifecycleClaim.token);assert.equal(recoveredClose.warnings_unavailable,true);assert.match(recoveredClose.required,/dependent items/);
+assert.equal((await client.get(blocker)).item.blocked_reason,undefined);assert.equal((await client.get(dependent)).item.status,'open');
+const lifecycleHistory=readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8');
+await shared.close(blocker,'Packed native completion',lifecycleClaim.token);assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8'),lifecycleHistory);
+const closing=(await client.create({type:'Task',title:'Packed forward close ABA'})).item.id;const closingClaim=await shared.start(closing);
+let closePeer=false;let closeBytes=[];
+const [closeAttempt]=await Promise.allSettled([withItemMutationObserver(async boundary=>{
+  if(closePeer||boundary!=='before_commit')return;closePeer=true;
+  const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,closing),closing);
+  const before=await getItemAt(closing,history.at(-1).ts,{pmRoot:process.env.PM_PATH});
+  for(const args of [['release',closing],['claim',closing,'--force'],['restore',closing,String(before.as_of_version),'--force']]){
+    const result=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);
+  }
+  closeBytes=[getItemPath(process.env.PM_PATH,'Task',closing),getHistoryPath(process.env.PM_PATH,closing)].map(path=>readFileSync(path,'utf8'));
+},()=>shared.close(closing,'Packed stale completion',closingClaim.token))]);
+assert.equal(closePeer,true);assert.equal(closeAttempt.status,'rejected');assert.equal(closeAttempt.reason.code,'swarm_superseded');
+assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',closing),getHistoryPath(process.env.PM_PATH,closing)].map(path=>readFileSync(path,'utf8')),closeBytes);
+console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_recovery:1,forward_close_aba_preserved:1}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2 });
+  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_recovery: 1, forward_close_aba_preserved: 1 });
 }

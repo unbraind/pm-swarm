@@ -1,9 +1,9 @@
 import type { ItemHistoryHead } from './settings.ts';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { getItemAt, readFileIfExists, readHistoryEntries, getHistoryPath, readSettings, resolveRuntimeStatusRegistry, shouldCompletePlanOnClose, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
+import { getItemAt, readFileIfExists, readHistoryEntries, getHistoryPath, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument, WorkspaceTransactionJsonValue } from '@unbrained/pm-cli/sdk';
-import { documentFingerprint, SettingsRefusal } from './settings.ts';
+import { documentFingerprint, SettingsRefusal, commitMutation } from './settings.ts';
 import { historySnapshot } from './inspection.ts';
 
 /** Fixed domain steps; the transaction id also binds actor, item, fence and note. */
@@ -65,15 +65,15 @@ function metadataSuccessor(before: ItemDocument, after: ItemDocument, intent: Cl
   delete metadata.assignee; delete metadata.swarm_handoff;
   return closeDocumentHash({ metadata, body: before.body }) === closeDocumentHash(after);
 }
-/** Check native closure fields while requiring every unrelated field and the body to remain identical. */
-function closeSuccessor(before: ItemDocument, after: ItemDocument, note: string, closeStatus: string): boolean {
-  const metadata = { ...before.metadata, status: closeStatus, closed_at: after.metadata.closed_at, completed_at: before.metadata.completed_at ?? after.metadata.closed_at, close_reason: note.trim(), updated_at: after.metadata.updated_at };
-  if (shouldCompletePlanOnClose(before.metadata)) metadata.plan_mode = 'completed';
-  return typeof after.metadata.closed_at === 'string' && closeDocumentHash({ metadata, body: before.body }) === closeDocumentHash(after);
+/** Bind native close read-back to its SDK preimage; completed compensation removes that step's receipt. */
+function nativeCloseCheckpoint(journal: CloseJournal, before: CloseSnapshot, count: number): boolean {
+  if (journal.compensationData.close === undefined) return journal.status === 'compensating' && count >= 3;
+  const checkpoint = closeCheckpoint(journal.compensationData.close);
+  return checkpoint.hash === before.hash && checkpoint.version === before.version;
 }
 
 /** Validate journal-bound native versions and complete snapshots; free-text history messages are never inspected. */
-export async function closeTrace(pmRoot: string, author: string, intent: CloseIdentity, note: string): Promise<CloseTrace> {
+export async function closeTrace(pmRoot: string, author: string, intent: CloseIdentity, _note: string): Promise<CloseTrace> {
   const journal = await closeJournal(pmRoot, author, intent);
   if (journal === undefined) { if (intent.resumed) closeConflict('The interrupted close has no SDK journal.'); return { phase: 0, snapshots: [] }; }
   if (journal.compensationData.metadata === undefined) {
@@ -87,7 +87,6 @@ export async function closeTrace(pmRoot: string, author: string, intent: CloseId
   if (before.hash !== checkpoint.hash || count < 0 || count > 4) closeConflict();
   const snapshots = [before];
   const history = await readHistoryEntries(getHistoryPath(pmRoot, intent.canonicalId), intent.canonicalId);
-  const closeStatus = resolveRuntimeStatusRegistry((await readSettings(pmRoot)).schema).close_status;
   let phase = 0;
   for (let offset = 1; offset <= count; offset++) {
     const current = offset === count ? latest : await closeSnapshot(pmRoot, intent.canonicalId, before.version + offset);
@@ -95,7 +94,7 @@ export async function closeTrace(pmRoot: string, author: string, intent: CloseId
     const entry = history[view.target.historyIndex];
     if (entry.author !== author) closeConflict();
     if (offset === 1 && entry.op === 'update' && metadataSuccessor(before.document, current.document, intent)) phase = 1;
-    else if (offset === 2 && entry.op === 'close' && (journal.startedStepIds.includes('close') || journal.status === 'compensating' && count >= 3) && closeSuccessor(snapshots[1].document, current.document, note, closeStatus)) phase = 2;
+    else if (offset === 2 && entry.op === 'close' && (journal.startedStepIds.includes('close') || journal.status === 'compensating' && count >= 3) && nativeCloseCheckpoint(journal, snapshots[1], count)) phase = 2;
     else if (offset === 2 && entry.op === 'restore' && current.hash === before.hash && journal.status === 'compensating') phase = 4;
     else if (offset === 3 && phase === 2 && entry.op === 'restore' && current.hash === snapshots[1].hash && journal.status === 'compensating') phase = 3;
     else if (offset === 4 && phase === 3 && entry.op === 'restore' && current.hash === before.hash && journal.status === 'compensating') phase = 4;
@@ -112,4 +111,14 @@ export async function closeTrace(pmRoot: string, author: string, intent: CloseId
 }
 
 /** Compact SDK-journal result proving the exact native version written by one step. */
-export function closeStepResult(snapshot: CloseSnapshot): WorkspaceTransactionJsonValue { return { version: snapshot.version, hash: snapshot.hash }; }
+export function closeStepResult(snapshot: CloseSnapshot, warnings?: string[], unavailable = false): WorkspaceTransactionJsonValue { return commitMutation({ version: snapshot.version, hash: snapshot.hash, ...(warnings === undefined ? {} : { warnings }), ...(unavailable ? { warnings_unavailable: true } : {}) }, admitted => admitted); }
+
+/** Retain the native lifecycle receipts without translating, rebuilding or silently dropping them. */
+export function closeWarnings(result: unknown): string[] {
+  if (!record(result) || result.warnings === undefined) return [];
+  if (!Array.isArray(result.warnings) || !result.warnings.every(value => typeof value === 'string')) closeConflict('The native close warning receipt is invalid.');
+  return result.warnings;
+}
+
+/** Native warnings cannot be inferred from item history when the SDK interrupted before saving its result. */
+export function closeWarningsUnavailable(result: unknown): boolean { return !record(result) || !Array.isArray(result.warnings) || result.warnings_unavailable === true; }

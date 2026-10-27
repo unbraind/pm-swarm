@@ -105,7 +105,7 @@ export class SharedTracker {
     });
     await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, async admitted => {
       const result = await this.engine.client.update(admitted.id, admitted.options); publication = result.item; return result;
-    }, { onCommitted: (_before, after) => { publication = after.metadata; } }));
+    }, { history: initial.historyHead, onCommitted: (_before, after) => { publication = after.metadata; } }));
     this.tokens.set(String(item.id), token);
     return receipt;
   }
@@ -198,7 +198,7 @@ export class SharedTracker {
       const item = (await readItem(this.engine.client, id)).item;
       const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
-        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options)));
+        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options), { pmRoot: this.engine.pmRoot }));
       }
       return { mode: 'shared-tracker', id, dry_run: !apply, add };
     };
@@ -314,7 +314,7 @@ export class SharedTracker {
       unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
       field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
-    }, item }, admitted => this.engine.client.update(admitted.id, admitted.options), { history }));
+    }, item }, admitted => this.engine.client.update(admitted.id, admitted.options), { history, pmRoot: this.engine.pmRoot }));
     if (lease !== undefined) this.tokens.delete(id);
     return { id, previous_owner: item.assignee, agent: to ?? null, token, context };
   }

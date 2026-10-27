@@ -1,0 +1,17 @@
+id: pm-swarm-close-warning-receipt
+title: Recover native dependency warnings after an interrupted close
+description: "Swarm now preserves all native close warnings when available and reports warnings_unavailable with an explicit inspect-dependent-items remedy when the SDK interrupted before its close result checkpoint. Native item and history recovery still converges without duplicate closes. The pinned public CommitWorkspaceTransactionOptions.onTransition contract defines step_applied after mutation and before journal recording; PmClient.close returns ephemeral warnings, and commitItemMutations delegates to the same coordinator lock. No public native-close result receipt API can recover those warnings at that boundary. Upstream issue search found no open matching warning-receipt issue. Follow up when the SDK durably records the native result before that interruption boundary; retain the conservative availability signal for legacy journals."
+type: Issue
+status: blocked
+priority: 2
+tags[2]: durability,sdk-gap
+created_at: "2026-10-27T14:32:22.495Z"
+updated_at: "2026-10-27T14:51:35.144Z"
+author: codex-agent
+parent: pm-swarm-y972
+blocked_reason: Pinned SDK exposes step_applied before persisting the native result and exports no durable native-close warning receipt; an upstream SDK change is needed.
+files[1]{path,scope}:
+  src/close-journal.ts,project
+docs[1]{path,scope}:
+  docs/native-close.md,project
+body: ""

@@ -189,9 +189,7 @@ export class Swarm {
         const result = await commitItemMutation({ id: item.id, options: { author: this.author }, item }, async admitted => {
           const value = await this.client.claim(admitted.id, admitted.options); receipt ??= value; return value;
         }, {
-          beforeWrite: async () => {
-            if ((await historySnapshot(this.pmRoot, String(item.id))).version !== initial.version) throw new SettingsRefusal('swarm_document_changed', 'The native claim history changed after admission; refresh the item and retry.', 'document');
-          },
+          history: initial.historyHead,
           onCommitted: (before, after) => {
             receipt = { item: after.metadata, previous_assignee: before.metadata.assignee ?? null, skipped: false };
             claimVersion = initial.version + 1; claimDocument = { ...after.metadata, body: after.body };
@@ -211,9 +209,9 @@ export class Swarm {
       await startTransition('worktree_created');
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]); configured = true;
       await startTransition('configured');
-      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed! }, async admitted => {
+      await lease.write(async () => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed! }, async admitted => {
         const published = await this.client.update(admitted.id, admitted.options); publication = published.item; return published;
-      }, { onCommitted: (_before, after) => { publication = after.metadata; } }));
+      }, { history: (await historySnapshot(this.pmRoot, String(item.id), claimVersion)).historyHead, onCommitted: (_before, after) => { publication = after.metadata; } }));
       await startTransition('published');
       const result = { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
       await startTransition('receipt');
@@ -315,7 +313,7 @@ export class Swarm {
         if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(id);
         const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
         if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
-        if (add.length > 0) await lease!.write(() => commitItemMutation({ id, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options)));
+        if (add.length > 0) await lease!.write(() => commitItemMutation({ id, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { pmRoot: this.pmRoot }));
       }
       return { id, dry_run: !apply, add };
     };

@@ -92,7 +92,7 @@ mutation, and configuration removal compares the exact value atomically.
 Cleanup also compares the captured native history length and SDK stream hash
 inside that same lock. Release/claim/restore cycles cannot regain an older
 acquisition by recreating identical item content or tokens. See
-[native-history compare-and-set](docs/native-history-cas.md) for the recovery
+[native-history compare-and-set](docs/native-history-cas.md) Native close and dependent warnings follow the [core lifecycle contract](docs/native-close.md). for the recovery
 paths, SDK contract and adversarial matrix.
 
 Tracker locations are invocation inputs: absolute and relative `--path`, `PM_PATH`

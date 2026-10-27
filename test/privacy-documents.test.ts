@@ -94,9 +94,9 @@ test('the native SDK guard rechecks peer-modified documents across writers on on
         case 'claim': await f.client.claim(admitted.id, admitted.options); break;
         case 'release': await f.client.release(admitted.id, admitted.options); break;
       }
-    }), (error: unknown) => {
+    }, { pmRoot: f.pmRoot }), (error: unknown) => {
       assert.ok(error instanceof SettingsRefusal);
-      assert.equal(error.code, 'swarm_private_path'); assert.ok(error.field?.includes(field)); return true;
+      assert.equal(error.code, 'swarm_superseded'); assert.equal(error.field, 'history'); return true;
     });
     assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), peerHistory, 'The guard must preserve the peer success without a second mutation');
     const after = (await f.client.get(id, { depth: 'full' })).item;
@@ -120,7 +120,7 @@ for (const target of ['swarm', 'foreign', 'output'] as const) test(`settings adm
 
 test('native whole-document scope allows deletion and explicit core repairs without leaking into later requests', async t => {
   const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
-  await commitItemMutation({ id, item, options: { force: true } }, admitted => f.client.delete(admitted.id, admitted.options));
+  await commitItemMutation({ id, item, options: { force: true } }, admitted => f.client.delete(admitted.id, admitted.options), { pmRoot: f.pmRoot });
   const other = await f.item(); const value = encodeURIComponent(['', 'home', 'private', 'core-only'].join('/'));
   await f.client.update(other, { title: value }); await f.client.update(other, { title: 'Explicitly repaired' });
   assert.equal((await f.client.get(other)).item.title, 'Explicitly repaired');
@@ -129,9 +129,9 @@ test('native whole-document scope allows deletion and explicit core repairs with
 
 test('item sinks refuse missing snapshots and opaque private keys without echoing them', async t => {
   const f = await sharedFixture(t); const id = await f.item(); const value = ['$HOME', 'private'].join('/');
-  assert.throws(() => commitItemMutation({ id, item: null as unknown as Record<string, unknown>, options: {} }, async () => undefined), error => error instanceof SettingsRefusal && error.code === 'swarm_input_invalid');
-  assert.throws(() => commitItemMutation({ id, item: { [value]: 'Public' }, options: {} }, async () => undefined), error => error instanceof SettingsRefusal && error.field === 'document.[foreign-key]' && !String(error).includes(value));
-  for (const missing of [undefined, 'partial', []]) assert.throws(() => commitItemMutation({ id, item: missing as unknown as Record<string, unknown>, options: {} }, async () => undefined), error => error instanceof SettingsRefusal && error.code === 'swarm_input_invalid');
+  assert.throws(() => commitItemMutation({ id, item: null as unknown as Record<string, unknown>, options: {} }, async () => undefined, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.code === 'swarm_input_invalid');
+  assert.throws(() => commitItemMutation({ id, item: { [value]: 'Public' }, options: {} }, async () => undefined, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.field === 'document.[foreign-key]' && !String(error).includes(value));
+  for (const missing of [undefined, 'partial', []]) assert.throws(() => commitItemMutation({ id, item: missing as unknown as Record<string, unknown>, options: {} }, async () => undefined, { pmRoot: f.pmRoot }), error => error instanceof SettingsRefusal && error.code === 'swarm_input_invalid');
   const item = (await f.client.get(id)).item;
-  await assert.rejects(commitItemMutation({ id, item, options: {} }, async () => { throw new Error('Refused backend'); }), /Refused backend/);
+  await assert.rejects(commitItemMutation({ id, item, options: {} }, async () => { throw new Error('Refused backend'); }, { pmRoot: f.pmRoot }), /Refused backend/);
 });

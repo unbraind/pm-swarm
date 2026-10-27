@@ -1,8 +1,8 @@
-# Native-history compare-and-set for cleanup
+# Native-history compare-and-set for mutations
 
 A release, re-claim and restore can recreate precisely the same item bytes,
 assignee and `swarm_token`. Equality of those fields proves neither ownership
-lineage nor that a checked snapshot is current. Cleanup therefore carries two
+lineage nor that a checked snapshot is current. Every item mutation therefore carries two
 independent preconditions: the existing complete-document/generation checks and
 an append-only native-history revision.
 
@@ -31,9 +31,11 @@ writer, alternate lock or free-text ownership proof is introduced.
 | Stale-claim recovery transfer | Fresh verified recovery snapshot; native update hook |
 | Journal close compensation | Journal-verified native snapshot; native restore hook |
 
-The source inventory requires a history precondition at all eight SDK call sites
-implementing these roles, among the existing 24 SDK/backend writer sites. New
-cleanup writers must join the inventory. The journal remains SDK-owned and its
+The original cleanup audit covered eight SDK sites. The source inventory now
+requires a history precondition at all 18 item writer sites among the unchanged
+24 SDK/backend writer sites. Every new item writer must join the inventory.
+[Native close admission](native-close.md) documents the added forward writes and
+core dependent lifecycle updates. The journal remains SDK-owned and its
 persisted checkpoint format remains version/hash, retaining interrupted-close
 compatibility. Native heads are ephemeral preconditions rather than new markers.
 Foreign missing, divergent or unreadable state is preserved with a skip reason.
@@ -68,6 +70,9 @@ worktrees and configuration must also remain equal before checking the refusal.
 | Git/shared terminal cleanup × three boundaries | 6 |
 | Git/shared stale recovery × three boundaries | 6 |
 | Two journal compensation phases × three boundaries | 6 |
+| Forward close: transaction/metadata/native close × three admission boundaries | 9 |
+| Native dependent close updates × three admission boundaries | 3 |
+| All seven native item mutation kinds × three admission boundaries | 21 |
 | Independent-process writer attempts during Git rollback/reaping, then successful retries | 2 |
 
 The final row probes the actual Git command while the SDK lock is held. A real

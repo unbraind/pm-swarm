@@ -28,8 +28,8 @@ const WRITE_SITES = [
   'test-runner.ts:runLinkedTests',
 ].sort();
 
-/** Native item recovery paths must carry an SDK history precondition, including no-op Git cleanup. */
-const HISTORY_SITES = ['swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'close.ts:restore'].sort();
+/** Every native item mutation must carry an SDK history precondition, including no-op Git cleanup. */
+const HISTORY_SITES = ['close.ts:commitWorkspaceTransaction', 'close.ts:update', 'close.ts:close', 'close.ts:restore', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
 
 /** Minimal parser shape keeps inventory traversal independent of compiler internals. */
 interface AstNode { type: string; name?: string; property?: AstNode; object?: AstNode; callee?: AstNode; id?: AstNode; key?: AstNode; arguments?: AstNode[]; params?: AstNode[]; start?: number; end?: number }
@@ -60,10 +60,9 @@ function writeInventory(): string[] {
           const itemWriter = ['commitItemMutations', 'commitItemCompletion', 'commitWorkspaceTransaction', 'mutateItem'].includes(method) || /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run'].includes(method);
           assert.ok(wrapper.type === 'CallExpression' && wrapper.callee?.name === (itemWriter ? 'commitItemMutation' : 'commitMutation'), `${file}:${method}: unguarded SDK writer`);
           if (itemWriter) assert.match(text(wrapper.arguments?.[0]), /\bitem(?:\s*[:,}])/, `${file}:${method}: missing full snapshot`);
-          const cleanup = ['release', 'restore', 'mutateItem'].includes(method) || parents.some(parent => parent.type === 'VariableDeclarator' && parent.id?.name === 'cleanup' || parent.type === 'CallExpression' && parent.callee?.property?.name === 'onFailure' || parent.type === 'ClassMethod' && parent.key?.name === 'transfer');
-          if (itemWriter && cleanup) {
+          if (itemWriter) {
             recovery.push(`${file}:${method}`);
-            assert.match(text(wrapper.arguments?.[2]), /\bhistory\b/, `${file}:${method}: missing native history precondition`);
+            assert.match(text(wrapper.arguments?.[2]), /\b(?:history|pmRoot)\b/, `${file}:${method}: missing native history precondition`);
             if (method === 'mutateItem') {
               const code = text(node); assert.ok(code.indexOf('await assertItemHistoryHead') >= 0 && code.indexOf('await assertItemHistoryHead') < code.indexOf('await cleanup()'), 'Git cleanup must check native history inside its locked SDK callback');
             }

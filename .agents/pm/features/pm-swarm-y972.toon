@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T12:32:13.243Z"
+updated_at: "2026-10-27T14:56:57.310Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[145]{created_at,author,text}:
+comments[162]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -158,7 +158,25 @@ comments[145]{created_at,author,text}:
   "2026-10-27T11:43:00.780Z",codex-agent,"Auto round 4 behavioral revert proof lineage-category: changed only the relevant production function/check, ran node --test --test-concurrency=2 --test-name-pattern=\"^Git start preserves.*acquisition transition$|claimed$\" test/history-aba-git.test.ts. Exit 1: 8 expected failures, 0 passing controls, 8 reported results; zero skips/cancellations. Restored exact original source bytes in finally. Native-history bypass clears a peer claim/replaces its durable bytes despite identical restored content; Git-only bypass deletes the peer branch/resources while native item admission still protects its claim. Reclaim handoff bypass applies stale recovery over the peer; lineage category revert loses required superseded transport. Combined four probes: 77 results, 68 expected failures and nine controls. Every peer transition uses real SDK release/claim/restore, including separate processes for journal/native-lock cases; byte and Git-resource comparisons precede error assertions. Positive restored-source PM integration follows."
   "2026-10-27T11:56:01.610Z",codex-agent,"Auto round 4 final positive evidence: the restored-source pinned PM linked integration passes 70/70 in 351524.236546 ms, no failures/skips/cancellations/todo. It includes shared and reservation acquisition, Git cleanup/transition ABA, terminal and stale recovery, two journal compensation phases, separate-process lock exclusion/retry, wrong-record-hash and foreign-state cases, the 24/eight source inventories, and retained peer-content/native claim regressions. Additional isolated revert: replace only recoveryItem with its previous implementation; node --test --test-concurrency=1 --test-name-pattern=\"recovery preserves foreign\" test/history-aba.test.ts => exit 1, 3/3 fail; exact source restore then 3/3 pass. Total five probes: 80 reported results, 71 expected failures and nine controls; zero skips/cancellations. Typecheck, lint, docstrings and zero duplication (0/12804 lines, 123 sources) pass. Source remains native SDK readers/hooks/mutateItem; no SDK gap blocks locked history CAS, while 1576 tracks a built-in precondition API. Origin/main is included (47 ahead, zero behind); no non-blocking findings were supplied. Native settings/journal follow-ups and closed atomic-close remain unchanged. Freeze source and release this claim while final-head npm Node22, npm Node26, Bun Node26 and CodeQL run in CI; stop waiting at the explicit 30-minute queue cutoff if still pending and record that receipt. No merge, release or thread reply."
   "2026-10-27T12:32:04.516Z",codex-agent,"Auto round 4 CI deadline receipt: source commit 1da19f1d7ac747c2d51f19198883ff97374f8103 is pushed in ready PR https://github.com/unbraind/pm-swarm/pull/24. At the explicit 30-minute queue cutoff, https://github.com/unbraind/pm-swarm/actions/runs/40500530626 reports test (22) queued, test (26) queued; https://github.com/unbraind/pm-swarm/actions/runs/40500530631 CodeQL is queued. Current-source full release, packed acceptance and coverage counts are unavailable. Local pinned PM integration passed 70/70 and restored foreign checks passed 3/3, with zero failures/skips/cancellations/todo. Five isolated behavioral revert probes produced 71 expected failures and nine controls across 80 results; exact production bytes were restored after every probe. Types, lint, documentation, zero duplication, changelog, source-head identity and isolated strict health pass. All eight cleanup/recovery SDK sites carry a native-history precondition, and Git deletion checks the same head inside its native callback. The SDK supports this locked-reader composition; no capability gap blocks it, while upstream 1576 requests a built-in precondition API. This receipt changes only PM evidence; source and tests remain identical. Keep the item in_progress and unclaimed, leave PR ready/unmerged, and let the orchestrator continue watching final-head checks. No full gate is claimed from previous heads; no thresholds or existing state assertions were weakened."
-files[90]{path,scope}:
+  "2026-10-27T13:09:42.057Z",codex-agent,"Round 5: branch is current with main. Three general rules: native lifecycle side effects and warnings must survive extension admission; journal successors must come from SDK read-back rather than a second lifecycle implementation; every admitted item write needs a locked native-history precondition, including forward close. Auditing all SDK mutation sites, native dependent updates, replay and interrupted recovery; adding real non-git and installed-consumer regressions plus behavioral revert proofs. No additional actionable review findings were supplied."
+  "2026-10-27T13:30:59.411Z",codex-agent,"Mutation inventory expanded from eight cleanup sites to every one of 18 item writer sites (24 total SDK/backend writers unchanged). Guard list: progress.comments captures admission history and revalidates on retry; resource.update reserve/renew/publish/release and reservation rollback use initial/verified history; shared.update claim uses initial history, shared.files captures admission history, shared.release terminal uses recovery history, shared.update handoff/reclaim uses admission/recovery history; close workspace transaction retains admission history, metadata update retains that head, native close admits per-item heads including dependents, compensation restore uses journal-verified history; Git claim uses initial history, metadata publication uses the exact claim prefix, metadata rollback and failed release use acquisition history, Git cleanup callback checks history inside its native lock before deletion, file links capture admission history, terminal release uses recovery history. The helper now requires history or tracker root in its typed signature. Native close warnings are returned unchanged; close read-back replaces the handwritten lifecycle successor. Existing state-preservation assertions are retained; active-admission peer races now require exact swarm_superseded/history, while fresh forged-journal retries still require swarm_document_changed."
+  "2026-10-27T13:55:47.427Z",codex-agent,"Broader native lifecycle/recovery/SDK checks measured 88 passing, zero failing assertions and one installed-layout timeout; that timed-out case is missing evidence, not a pass. Rebuilding the actual installed distribution before rerunning all 22 layout interleavings. The worker now requires the exact expected refusal per boundary (including swarm_superseded/history after admission), rather than a broad accepted-code set. Preserved every byte/receipt and separate-SDK assertion. Only CPU-time budgets increased: installed matrix 240 to 600 seconds and independent workers 20/30 to 90 seconds. No case or state assertion was removed. Also moved dependency-corpus admission before the first item/journal write and added a real lost-read/no-change property."
+  "2026-10-27T14:47:59.735Z",codex-agent,"Round-5 behavioral revert proof native-dependent-admission: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=lifecycle bytes\" test/close-native.test.ts exits 1; 2 reported results, 2 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:48:20.604Z",codex-agent,"Round-5 behavioral revert proof native-warning-transport: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=refusal warnings\" test/close-native.test.ts exits 1; 1 reported results, 1 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:48:39.899Z",codex-agent,"Round-5 behavioral revert proof native-close-readback: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=blocker fields\" test/close-native.test.ts exits 1; 9 reported results, 9 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:48:55.045Z",codex-agent,"Round-5 behavioral revert proof close-history-baseline: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=admission stage 0\" test/close-native.test.ts exits 1; 4 reported results, 4 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:49:15.230Z",codex-agent,"Round-5 behavioral revert proof common-admission-history: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=all native mutation kinds\" test/history-all-mutations.test.ts exits 1; 22 reported results, 22 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:49:34.805Z",codex-agent,"Round-5 behavioral revert proof corpus-prewrite: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=dependency corpus before\" test/close-native.test.ts exits 1; 1 reported results, 1 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:49:46.112Z",codex-agent,"Round-5 behavioral revert proof historical-prefix: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=historical read-back\" test/close-native.test.ts exits 1; 1 reported results, 1 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:49:58.245Z",codex-agent,"Round-5 behavioral revert proof readback-superseded-transport: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=history admission and journal\" test/close-native.test.ts exits 1; 1 reported results, 1 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:50:08.057Z",codex-agent,"Round-5 behavioral revert proof native-preimage-controls: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=preimage receipts|unreadable foreign|altered SDK result\" test/close-native.test.ts exits 1; 3 reported results, 1 expected failures, 2 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:50:18.661Z",codex-agent,"Round-5 behavioral revert proof git-native-head: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=claim ownership refuses\" test/start-admission-race.test.ts exits 1; 1 reported results, 1 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:50:26.604Z",codex-agent,"Round-5 behavioral revert proof progress-native-head-retry: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=progress re-evaluates\" test/privacy-sdk-instance.test.ts exits 1; 2 reported results, 2 expected failures, 0 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:50:37.125Z",codex-agent,"Round-5 behavioral revert proof native-warning-availability: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=unavailable dependency warning|lifecycle bytes\" test/close-native.test.ts exits 1; 3 reported results, 1 expected failures, 2 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:50:49.150Z",codex-agent,"Round-5 behavioral revert proof native-warning-sink: node --test --test-concurrency=1 --test-reporter=tap \"--test-name-pattern=native warning sink|lifecycle bytes\" test/close-native.test.ts exits 1; 3 reported results, 1 expected failures, 2 passing controls, 0 skips and 0 cancellations. Only the named production guard/transport was disabled or its prior native successor function restored; real SDK calls and native tracker bytes were retained. Source bytes restored exactly in finally."
+  "2026-10-27T14:56:47.267Z",codex-agent,"Round-5 final local evidence: pinned pm test --run --only-last --progress passes 12/12, zero skips/cancellations, 122929.283936 ms. It verifies all 24 writer sites and 18 mandatory item-history guards, whole native documents, foreign history, corrupt SDK preimages, peer history read races, compensation, historical prefixes, and warning receipts. Native warning sink refuses all 85 fixed private encodings and admits all 34 benign cases without tracker changes. Rebuilt installed-copy matrix passes all 22 interleavings, two layouts/six boundaries, zero lost peers or partial receipts (420197.443007 ms). Native-writer grid passes 22/22; forward SDK close/warning recovery passes 10/10 across seven crash boundaries with zero duplicate item mutations or lost fields. Thirteen individual behavioral revert comments record 53 results: 47 expected failures and six passing controls; zero skips/cancellations and exact source restoration. Typecheck, lint, build, documented declarations and zero duplication pass. The older version-only Git check is replaced by the stronger full native-history precondition, with its exact Superseded regression and revert proof retained. Native warnings are unchanged when available; interrupted/legacy missing warning receipts now report warnings_unavailable plus an inspect-dependent-items remedy. Blocked follow-up pm-swarm-close-warning-receipt names the exact SDK durability boundary; no upstream repository changes or issues were made."
+files[94]{path,scope}:
+  docs/native-close.md,project
   index.ts,project
   manifest.json,project
   package.json,project
@@ -190,6 +208,8 @@ files[90]{path,scope}:
   test/cleanup-boundaries.test.ts,project
   test/close-journal-adversarial.test.ts,project
   test/close-journal-ownership.test.ts,project
+  test/close-native-helpers.ts,project
+  test/close-native.test.ts,project
   test/close-transaction.test.ts,project
   test/commands.test.ts,project
   test/edges.test.ts,project
@@ -201,6 +221,7 @@ files[90]{path,scope}:
   test/history-aba-helpers.ts,project
   test/history-aba-transaction.test.ts,project
   test/history-aba.test.ts,project
+  test/history-all-mutations.test.ts,project
   test/install-prerequisites.test.ts,project
   test/install.acceptance.ts,project
   test/invocation-helpers.ts,project
@@ -249,7 +270,7 @@ files[90]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[28]:
+tests[30]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -505,8 +526,29 @@ tests[28]:
       created_at: "2026-10-27T11:39:16.868Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
-docs[6]{path,scope}:
+  - command: node --test --test-concurrency=2 test/close-native.test.ts test/history-all-mutations.test.ts
+    scope: project
+    timeout_seconds: 1800
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T14:50:59.944Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=2 --test-reporter=tap '--test-name-pattern=historical read-back|dependency corpus before|unreadable foreign|preimage receipts|history admission and journal|altered SDK result|compound compensating|native close warning receipts|every SDK and backend write site|claim ownership refuses|native warning sink|unavailable dependency warning' test/close-native.test.ts test/privacy-sinks.test.ts test/start-admission-race.test.ts
+    scope: project
+    timeout_seconds: 1200
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T14:50:59.944Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+docs[7]{path,scope}:
   docs/journal-and-acquisition-verification.md,project
+  docs/native-close.md,project
   docs/native-history-cas.md,project
   docs/privacy-admission.md,project
   docs/receipt-and-generation-verification.md,project

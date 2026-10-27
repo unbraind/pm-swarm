@@ -49,7 +49,7 @@ test('claim ownership refuses a restored identical document with a different nat
     if (boundary !== 'before_commit' || injected) return;
     injected = true; peerCommand(f, 'update', id, '--title', 'Independent public update');
     peerCommand(f, 'restore', id, String(original.version), '--force'); peer = peerBytes(f, id);
-  }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded' && error.field === 'history');
   assert.equal(injected, true); assert.deepEqual(peerBytes(f, id), peer);
   assert.equal((await f.client.get(id)).item.assignee, undefined);
   assert.equal(snapshot(root), before);

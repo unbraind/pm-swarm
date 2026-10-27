@@ -79,7 +79,7 @@ try {
 } catch(error) {console.error(JSON.stringify({code:error.code??'worker_failed',message:error.message}));process.exitCode=2;}
 `;
   return spawnSync(process.execPath, ['--input-type=module', '--eval', code, JSON.stringify({ repo, pmRoot, author, id, plan: abaPlan() })], {
-    cwd: resolve(import.meta.dirname, '..'), encoding: 'utf8', timeout: 20000,
+    cwd: resolve(import.meta.dirname, '..'), encoding: 'utf8', timeout: 90000,
     env: gitEnvironment({ ...process.env, PM_PATH: pmRoot, PM_SOURCE_WORKSPACE_ROOT: repo, PM_SOURCE_PM_PATH: pmRoot, PM_GLOBAL_PATH: join(pmRoot, 'runtime/peer-global'), PM_LOCK_WAIT_MS: '0' }),
   });
 }

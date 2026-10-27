@@ -174,7 +174,7 @@ export class PlanProgress {
   private async witnessRetried(id: string, options: ProgressDeclaration, attempt = 0): ReturnType<PlanProgress['witness']> {
     try { return await this.witnessAttempt(id, options); }
     catch (error) {
-      if (error instanceof SettingsRefusal && error.code === 'swarm_document_changed' && attempt < 7) return this.witnessRetried(id, options, attempt + 1);
+      if (error instanceof SettingsRefusal && ['swarm_document_changed', 'swarm_superseded'].includes(error.code) && attempt < 7) return this.witnessRetried(id, options, attempt + 1);
       throw error;
     }
   }
@@ -196,7 +196,7 @@ export class PlanProgress {
       if (step.owner === actor || (witness.stage === 'accepted' && (view.orchestrator !== actor || selected.reviewers.includes(actor)))) throw new ProgressRefusal('progress_role', 'Use an independent reviewer and the tracker-configured orchestrator for acceptance.');
       if (!selected.produced || (witness.stage === 'accepted' && !selected.reviewed)) throw new ProgressRefusal('progress_prerequisite', 'Production evidence and then an independent review are required before acceptance.');
     }
-    if (options.apply === true) await commitItemMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options));
+    if (options.apply === true) await commitItemMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options), { pmRoot: this.pmRoot });
     return { id: item.id, revision: view.revision, dry_run: options.apply !== true, actor, witness };
   }
 }

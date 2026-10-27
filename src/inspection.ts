@@ -40,6 +40,6 @@ export async function historySnapshot(pmRoot: string, id: string, version?: numb
     if (target === undefined) throw new Error('Empty history');
     const view = await getItemAt(id, target, { pmRoot });
     if (view.as_of_version === null || (view.history_length !== history.length || version === undefined && view.target.historyIndex !== history.length - 1)) throw new Error('Unstable history version');
-    return { ...view, version: view.as_of_version, historyHead: { length: history.length, hash: hashHistoryStream(history) } };
+    return { ...view, version: view.as_of_version, historyHead: { length: view.target.historyIndex + 1, hash: hashHistoryStream(history.slice(0, view.target.historyIndex + 1)) } };
   } catch { throw new SettingsRefusal('swarm_document_changed', 'The item history could not be verified; preserve its document and inspect its native history before retrying.', 'document'); }
 }

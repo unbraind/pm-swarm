@@ -19,7 +19,7 @@ for (const field of ['title', 'body', 'description', 'acceptance_criteria']) tes
       const result = f.cli('update', id, flag, 'Public peer result', '--message', row.message ?? 'Copied transaction message', '--json');
       assert.equal(result.status, 0, result.stdout + result.stderr);
     }
-  } }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  } }), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded');
   assert.equal(edited, true);
   const before = durableSnapshot(f.pmRoot);
   for (let retry = 0; retry < 3; retry++) {

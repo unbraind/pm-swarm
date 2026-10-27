@@ -52,7 +52,7 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
           ...(next.owner === null ? { unset: ['assignee', 'swarm_resource_expires_at'] } : { assignee: next.owner }),
           field: [`swarm_token=${next.token}`, ...(next.expires_at === null ? [] : [`swarm_resource_expires_at=${next.expires_at}`])],
           comment: [next.note === undefined ? `Swarm resource generation ${next.token}: ${next.owner === null ? 'released' : 'reserved until ' + next.expires_at}` : `Swarm resource generation ${next.token}: ${next.note}`],
-        }, item }, async admitted => { const result = await engine.client.update(admitted.id, admitted.options); publication = result.item; return result; }, { onCommitted: (_before, after) => { publication = after.metadata; } });
+        }, item }, async admitted => { const result = await engine.client.update(admitted.id, admitted.options); publication = result.item; return result; }, { history: initial.historyHead, onCommitted: (_before, after) => { publication = after.metadata; } });
         const { note: _note, ...record } = next; return record;
       }));
     },

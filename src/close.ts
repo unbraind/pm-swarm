@@ -2,9 +2,10 @@ import { commitWorkspaceTransaction, deriveMutationTransactionId, runWithActiveE
 import type { CommitWorkspaceTransactionOptions, WorkspaceTransactionStep } from '@unbrained/pm-cli/sdk';
 import { inspectItem, readItem } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, assertClaimGeneration } from './settings.ts';
-import { CLOSE_STEPS, closeCheckpoint, closeConflict, closeSnapshot, closeStepResult, closeTrace } from './close-journal.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, assertClaimGeneration, assertItemHistoryHead } from './settings.ts';
+import { CLOSE_STEPS, closeCheckpoint, closeConflict, closeSnapshot, closeStepResult, closeTrace, closeWarnings, closeWarningsUnavailable } from './close-journal.ts';
 import { RESOURCE_TAG } from './resources.ts';
+import type { ItemHistoryHead } from './settings.ts';
 import type { Swarm } from './swarm.ts';
 
 /** Trusted diagnostics observe the SDK's durable boundaries without replacing its mutation steps. */
@@ -27,7 +28,7 @@ function closeIntent(engine: Swarm, note: string, token: string | undefined, tok
 }
 
 /** Finish a fenced claim through the SDK journal, including recovery after ownership was cleared. */
-export async function completeClaim(engine: Swarm, id: string, note: string, token: string | undefined, tokens: Map<string, string>, options: CloseOptions): Promise<{ id: string; closed: true }> {
+export async function completeClaim(engine: Swarm, id: string, note: string, token: string | undefined, tokens: Map<string, string>, options: CloseOptions): Promise<{ id: string; closed: true; warnings?: string[]; warnings_unavailable?: true; required?: string }> {
   assertPrivatePathSafe({ id, note, token, author: engine.author });
   if (!note.trim()) throw new Error('close requires a nonempty --note');
   return withSwarmLease(engine.pmRoot, engine.author, async lease => {
@@ -35,17 +36,31 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
     if (local !== null) await closeTrace(engine.pmRoot, engine.author, closeIntent(engine, note, token, tokens, { ...local.item, body: local.body }), note);
     const item = (await readItem(engine.client, id)).item;
     const intent = closeIntent(engine, note, token, tokens, item);
+    const admission = await closeSnapshot(engine.pmRoot, String(item.id));
     const entryTrace = await closeTrace(engine.pmRoot, engine.author, intent, note);
     const initialExpected = entryTrace.snapshots[0] === undefined ? item : { ...entryTrace.snapshots[0].document.metadata, body: entryTrace.snapshots[0].document.body };
     const { canonicalId, next, transactionId } = intent;
+    // Core alone selects dependents; capture their admission domain before the first journal/item write.
+    const related = new Map<string, { item: Record<string, unknown>; history: ItemHistoryHead }>();
+    if (entryTrace.phase !== 2 || entryTrace.journal?.status === 'compensating') for (const row of (await engine.corpus()).items) if (row.id !== canonicalId) {
+      try {
+        const snapshot = await closeSnapshot(engine.pmRoot, row.id);
+        related.set(row.id, { item: { ...snapshot.document.metadata, body: snapshot.document.body }, history: snapshot.historyHead });
+      } catch { /* Foreign unreadable rows stay unadmitted; native close reports any affected dependent. */ }
+    }
+    let expectedHistory = admission.historyHead;
     /** Read only the exact plan and native versions owned by the SDK journal. */
-    const trace = () => closeTrace(engine.pmRoot, engine.author, { ...intent, resumed: false }, note);
+    const trace = async () => {
+      await assertItemHistoryHead(engine.pmRoot, canonicalId, expectedHistory);
+      try { return await closeTrace(engine.pmRoot, engine.author, { ...intent, resumed: false }, note); }
+      catch (error) { await assertItemHistoryHead(engine.pmRoot, canonicalId, expectedHistory); throw error; }
+    };
     const steps: WorkspaceTransactionStep[] = CLOSE_STEPS.map((step, index) => ({
       id: step,
       async inspect() {
         const state = await trace();
         const applied = index === 0 ? state.phase > 0 && state.phase < 4 : state.phase === 2;
-        return { state: applied ? 'applied' : 'pending', ...(applied ? { result: closeStepResult(state.snapshots[index + 1]) } : {}) };
+        return { state: applied ? 'applied' : 'pending', ...(applied ? { result: index === 0 ? closeStepResult(state.snapshots[1]) : closeStepResult(state.snapshots[2], closeWarnings(state.journal?.results.close), closeWarningsUnavailable(state.journal?.results.close)) } : {}) };
       },
       async prepareCompensation() {
         const state = await trace(); const snapshot = await closeSnapshot(engine.pmRoot, canonicalId);
@@ -59,10 +74,15 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         const checkpoint = closeCheckpoint(state.journal?.compensationData[step]);
         const before = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version);
         const document = { ...before.document.metadata, body: before.document.body };
-        if (index === 0) await lease.write(() => commitItemMutation({ id: canonicalId, item: document, options: { author: engine.author, message: 'Swarm close metadata', field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } }, admitted => engine.client.update(admitted.id, admitted.options), { transaction: true, beforeWrite: async () => { await trace(); } }));
-        else await lease.write(() => commitItemMutation({ id: canonicalId, item: document, note, options: { author: engine.author, message: 'Swarm close completion' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { transaction: true, beforeWrite: async () => { await trace(); } }));
+        let warnings: string[] = [];
+        if (index === 0) await lease.write(() => commitItemMutation({ id: canonicalId, item: document, options: { author: engine.author, message: 'Swarm close metadata', field: [`swarm_token=${next}`, `swarm_close_transaction=${transactionId}`], unset: ['assignee', 'swarm_handoff'] } }, admitted => engine.client.update(admitted.id, admitted.options), { transaction: true, history: expectedHistory, beforeWrite: async () => { await trace(); } }));
+        else {
+          const result = await lease.write(() => commitItemMutation({ id: canonicalId, item: document, note, options: { author: engine.author, message: 'Swarm close completion' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { transaction: true, history: expectedHistory, related, beforeWrite: async () => { await trace(); } }));
+          warnings = result.warnings;
+        }
         const after = await closeSnapshot(engine.pmRoot, canonicalId, checkpoint.version + 1);
-        return closeStepResult(after);
+        expectedHistory = after.historyHead;
+        return index === 0 ? closeStepResult(after) : closeStepResult(after, warnings);
       },
       async compensate(data) {
         const checkpoint = closeCheckpoint(data); const latest = await closeSnapshot(engine.pmRoot, canonicalId);
@@ -71,10 +91,13 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         const state = await trace();
         const current = state.snapshots.at(-1)!;
         await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, generation: { token: current.document.metadata.swarm_token }, history: current.historyHead, beforeWrite: async () => { await trace(); } }));
+        expectedHistory = (await closeSnapshot(engine.pmRoot, canonicalId, current.version + 1)).historyHead;
       },
     }));
+    let warnings: string[] = []; let unavailable = false;
     try {
-      await runWithActiveExtensions({ cwd: engine.repo, path: engine.pmRoot }, () => commitItemMutation({ id: canonicalId, item, options: { transactionId, author: engine.author, steps } }, admitted => commitWorkspaceTransaction({ ...admitted.options, pmRoot: engine.pmRoot, onTransition: options.onTransition }), { transaction: true }));
+      const result = await runWithActiveExtensions({ cwd: engine.repo, path: engine.pmRoot }, () => commitItemMutation({ id: canonicalId, item, options: { transactionId, author: engine.author, steps } }, admitted => commitWorkspaceTransaction({ ...admitted.options, pmRoot: engine.pmRoot, onTransition: options.onTransition }), { transaction: true, history: admission.historyHead }));
+      warnings = closeWarnings(result.results.close); unavailable = closeWarningsUnavailable(result.results.close);
     } catch (error) {
       if (error instanceof AggregateError) {
         const refusal = error.errors.find((failure: unknown) => failure instanceof SettingsRefusal);
@@ -85,6 +108,6 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
     const current = (await readItem(engine.client, canonicalId)).item;
     if (current.closed_at === undefined || current.swarm_close_transaction !== transactionId || current.swarm_token !== next || current.assignee !== undefined || current.swarm_handoff !== undefined) throw new SettingsRefusal('swarm_document_changed', 'A peer changed the completed claim; inspect its current document before retrying.', 'document');
     tokens.delete(canonicalId);
-    return { id: canonicalId, closed: true };
+    return { id: canonicalId, closed: true, ...(warnings.length > 0 ? { warnings } : {}), ...(unavailable ? { warnings_unavailable: true as const, required: 'Inspect dependent items: close completed before its dependency warnings were saved.' } : {}) };
   });
 }

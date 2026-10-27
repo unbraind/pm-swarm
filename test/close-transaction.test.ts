@@ -62,13 +62,14 @@ test('SDK close journal resumes every forward boundary without duplicate item mu
     assert.equal(interrupted.swarm_token, boundary === 0 ? '1' : '2');
     // A fresh CLI process has no embedded token map or in-memory transaction state.
     const result = f.run('swarm', 'close', id, '--token', receipt.token, '--note', 'Public completion');
-    assert.deepEqual(result, { id, closed: true });
+    if (boundary === 3) { assert.equal(result.id, id); assert.equal(result.closed, true); assert.equal(result.warnings_unavailable, true); assert.match(String(result.required), /dependent items/); }
+    else assert.deepEqual(result, { id, closed: true });
     const after = (await f.client.get(id, { depth: 'full' })).item;
     assert.equal(after.status, 'closed'); assert.equal(after.assignee, undefined); assert.equal(after.swarm_token, '2');
     assert.equal(typeof after.swarm_close_transaction, 'string');
     assert.deepEqual(operations(f.pmRoot, id).slice(baseline), ['update', 'close']);
     const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
-    assert.deepEqual(await new SharedTracker(f.shared.engine).close(id, 'Public completion', receipt.token), { id, closed: true });
+    assert.deepEqual(await new SharedTracker(f.shared.engine).close(id, 'Public completion', receipt.token), result);
     assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), history);
   });
   console.log(JSON.stringify({ crash_boundaries: trace.length, cross_process_resumes: trace.length, duplicate_item_mutations: 0, lost_fields: 0 }));
@@ -119,7 +120,7 @@ test('a fresh retry never compensates over a peer edit left by a refused rollbac
           : ['update', id, `--${kind}`, 'Public peer receipt', '--message', 'Public peer change', ...(kind === 'body' ? ['--author', 'peer'] : [])];
         assert.equal(f.cli(...args, '--json').status, 0);
       }
-    } }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+    } }), error => error instanceof SettingsRefusal && error.code === 'swarm_superseded');
     assert.equal(edited, true);
     const before = durableSnapshot(f.pmRoot); const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
     await assert.rejects(new SharedTracker(f.shared.engine).close(id, 'Public completion', receipt.token), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
@@ -158,7 +159,7 @@ test('unreadable recovery history refuses safely without rewriting original hist
 test('native item admission invokes its final ownership check before persistence', async t => {
   const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
   const before = durableSnapshot(f.pmRoot); let checked = 0;
-  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Refused write' } }, admitted => f.client.update(admitted.id, admitted.options), {
+  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Refused write' } }, admitted => f.client.update(admitted.id, admitted.options), { pmRoot: f.pmRoot,
     beforeWrite: async () => { checked++; throw new SettingsRefusal('swarm_document_changed', 'Ownership changed before persistence.', 'document'); },
   }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
   assert.equal(checked, 1); assert.equal(durableSnapshot(f.pmRoot), before);
@@ -201,7 +202,7 @@ test('every SDK transaction boundary preserves a private peer edit without a par
       const peer = f.cli('--no-extensions', 'update', id, '--title', title, '--json'); assert.equal(peer.status, 0);
       peerHistory = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
     } });
-    if (boundary < 3) await assert.rejects(result, error => error instanceof SettingsRefusal && ['swarm_private_path', 'swarm_document_changed'].includes(error.code));
+    if (boundary < 3) await assert.rejects(result, error => error instanceof SettingsRefusal && error.code === 'swarm_superseded');
     else assert.deepEqual(await result, { id, closed: true });
     assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), peerHistory);
     assert.equal((await f.client.get(id)).item.title, title);
