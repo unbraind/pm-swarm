@@ -2,7 +2,7 @@
 
 Coordinate dozens of agents on one pm tracker, with renewed heartbeats, fenced ownership, dead-agent recovery and context handoff. pm-swarm uses SDK readiness, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
-Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. This new package stays unreleased until maintainer approval. After publication:
+Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. Automated GitHub releases require the repository variable `PM_RELEASE_APPROVED=true`. After publication:
 
 ```sh
 pm install pm-swarm --project
@@ -390,5 +390,9 @@ receiver), and `schedule_backend_refused` (use supported tracker-wide coordinati
 The CLI exits 2 with the code and remedy. An empty eligible set is a successful
 receipt with `selected: null`, not an ownership transfer.
 
-Release jobs with write permissions are restricted to `unbraind/pm-swarm` at job
-level, so a fork cannot run publication with its own approval variable.
+Every workflow job granted write permissions, including CodeQL, Dependabot and
+reusable workflow calls, requires the exact repository `unbraind/pm-swarm`.
+The approval variable controls GitHub releases; it does not impose a local npm
+publishing hold. Maintainers run the prepublish checks and authenticate with npm
+for local publication. The first local publish uses `--provenance=false`; daily
+GitHub OIDC releases keep provenance enabled.
