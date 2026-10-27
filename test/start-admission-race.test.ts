@@ -3,13 +3,15 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { getHistoryPath, getItemPath } from '@unbrained/pm-cli/sdk';
+import { getHistoryPath, getItemPath, PmClient } from '@unbrained/pm-cli/sdk';
 import { fixture } from './helpers.ts';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { heartbeatPath } from '../src/lease.ts';
 import { withItemMutationObserver, SettingsRefusal } from '../src/settings.ts';
-import { snapshot } from './privacy-snapshot.ts';
+import { snapshot, durableSnapshot } from './privacy-snapshot.ts';
 import { historySnapshot } from '../src/inspection.ts';
+import { Swarm } from '../src/swarm.ts';
+import { branchExists } from '../src/git.ts';
 
 /** Make independent native peer mutations without inheriting this request's admission scope. */
 function peerCommand(f: Awaited<ReturnType<typeof fixture>>, ...args: string[]): void {
@@ -51,4 +53,17 @@ test('claim ownership refuses a restored identical document with a different nat
   assert.equal(injected, true); assert.deepEqual(peerBytes(f, id), peer);
   assert.equal((await f.client.get(id)).item.assignee, undefined);
   assert.equal(snapshot(root), before);
+});
+
+test('every Git acquisition path refuses an SDK client without active hooks before native ownership changes', async t => {
+  for (const command of ['start', 'next', 'schedule'] as const) for (const owned of command === 'start' ? [false, true] : [false]) await t.test(`${command} owned=${owned}`, async child => {
+    const f = await fixture(child); const id = await f.item(); if (owned) await f.client.claim(id); f.save();
+    const client = new PmClient({ cwd: f.repo, pmRoot: f.pmRoot, author: 'swarm-test', noExtensions: true });
+    writeFileSync(heartbeatPath(f.pmRoot, 'swarm-test'), '{"heartbeat":"2000-01-01T00:00:00.000Z"}');
+    const engine = new Swarm(f.repo, f.pmRoot, client, 'swarm-test'); const before = durableSnapshot(f.pmRoot);
+    await assert.rejects(command === 'start' ? engine.start(id) : command === 'next' ? engine.next() : engine.schedule({ skills: [] }), error => error instanceof SettingsRefusal && error.code === 'swarm_sdk_mismatch');
+    assert.equal(durableSnapshot(f.pmRoot), before, 'inactive SDK changed durable tracker, history or liveness');
+    assert.equal(branchExists(f.repo, `swarm/${id}`), false);
+    assert.equal((await f.client.get(id)).item.assignee, owned ? 'swarm-test' : undefined);
+  });
 });

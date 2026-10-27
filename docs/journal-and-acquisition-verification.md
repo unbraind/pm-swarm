@@ -36,6 +36,14 @@ lease bytes. Final receipts recheck their generation. Dirty peer worktrees keep
 their attached branches, and successful acquisition performs no fallible
 empty-directory removal after releasing its cleanup scope.
 
+A core SDK claim requires the bound client's package hooks to be active. The
+existing preclaim read carries a request-local probe marked by the SDK `onRead`
+hook; it neither changes the result nor adds a read. A client that disables
+extensions receives `swarm_sdk_mismatch` before ownership changes. Tests cover
+Git `start`, `next` and `schedule`, plus an existing native claim, preserving the
+complete durable tracker and its old heartbeat. This also retains the original
+inactive-extension cleanup regression unchanged.
+
 Runtime temporary files retain ownership immediately on exclusive open; failed publication removes only
 an owned temporary. Request cleanup is inside the pin cleanup scope. Verification
 worktree cleanup also encloses worktree creation, and temporary directory cleanup
@@ -43,8 +51,8 @@ runs even if worktree removal fails.
 
 ## Behavioral revert proofs
 
-All 25 negative probes exited 1; production sources were restored immediately.
-The probes produced 45 expected failures and six passing controls across 51 results.
+All 26 negative probes exited 1; production sources were restored immediately.
+The probes produced 51 expected failures and six passing controls across 57 results.
 
 | Reverted behavior | Exact probe | Result |
 | --- | --- | --- |
@@ -88,6 +96,7 @@ Final native and completion boundaries use the same test runner prefix:
 | Fresh no-op admission before liveness | `--test-name-pattern='peer-owned native claim no-op' test/start-admission-race.test.ts` | 0/4 pass |
 | Locked native history head | `--test-name-pattern='different native history head' test/start-admission-race.test.ts` | 0/1 pass |
 | Complete large-patch identity audit | `--test-name-pattern='complete large patches' test/tooling.test.ts` | 0/1 pass; default subprocess buffer rejects a valid public patch |
+| Active hooks before native acquisition | `--test-name-pattern='without active hooks\|start refuses terminal' test/start-admission-race.test.ts test/edges.test.ts` | 0/6 pass; inactive clients acquire ownership without a usable native receipt |
 
 Positive source checks exercise real SDK trackers and Git, including seven start
 boundaries for each of `start`, `next` and `schedule`, three heartbeat boundaries
@@ -98,12 +107,17 @@ item/history changes. Existing seven forward and four compensation crash
 boundaries remain covered. Packed npm and Bun consumers independently repeat the
 copied-message ownership proof in their installed module graph.
 
-The final pinned-pm linked integration command passes **127/127** with zero
+The broad pinned-pm linked integration command passes **127/127** with zero
 failures, skips, cancellations or todo results (203597 ms in the native test
 runner), including the release-approval tests merged from main. The earlier
 journal and acquisition run passed **126/126**. Typecheck, lint, zero duplication and all declarations across 36
 authored files pass. Source coverage of the new journal verifier is 100 in all
 four dimensions; complete package coverage remains a separate CI gate.
+
+The final activation-admission linked run passes **12/12**, including the
+unchanged inactive-extension edge test, post-claim read cleanup, private peer
+no-ops, native history-head ABA and all four inactive-client cases. Typecheck,
+lint, zero duplication, identity and all 164 declarations pass after this change.
 
 The identity gate audits the complete synthetic PR merge, whose accumulated
 tracker changes can exceed the default subprocess pipe buffer. Owned temporary

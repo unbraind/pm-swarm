@@ -47,15 +47,25 @@ export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] 
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
 type ItemMutationObserver = (boundary: typeof ITEM_MUTATION_BOUNDARIES[number]) => void | Promise<void>;
 /** A process-wide registry shares request scope between source, distribution and installed package copies. */
-interface AdmissionRuntime { scopes: AsyncLocalStorage<ItemAdmissionScope>; observers: AsyncLocalStorage<ItemMutationObserver>; identities: Set<unknown> }
+interface AdmissionRuntime { scopes: AsyncLocalStorage<ItemAdmissionScope>; observers: AsyncLocalStorage<ItemMutationObserver>; reads: AsyncLocalStorage<{ active: boolean }>; identities: Set<unknown> }
 /** Public module identity, rather than a version string, distinguishes physically separate SDK runtimes. */
 const ADMISSION_KEY = Symbol.for('pm-swarm.item-admission/v1');
-const ADMISSION = (Reflect.get(globalThis, ADMISSION_KEY) as AdmissionRuntime | undefined) ?? { scopes: new AsyncLocalStorage<ItemAdmissionScope>(), observers: new AsyncLocalStorage<ItemMutationObserver>(), identities: new Set<unknown>() };
+const ADMISSION = (Reflect.get(globalThis, ADMISSION_KEY) as AdmissionRuntime | undefined) ?? { scopes: new AsyncLocalStorage<ItemAdmissionScope>(), observers: new AsyncLocalStorage<ItemMutationObserver>(), reads: new AsyncLocalStorage<{ active: boolean }>(), identities: new Set<unknown>() };
 Object.defineProperty(globalThis, ADMISSION_KEY, { value: ADMISSION });
 ADMISSION.identities.add(PmClient);
 /** Instrument one operation without a process-global callback or substitution of SDK reads/writes. */
 export function withItemMutationObserver<Result>(observer: ItemMutationObserver, operation: () => Result): Result {
   return ADMISSION.observers.run(observer, operation);
+}
+/** Confirm the bound client's active package hooks before acquiring a native core claim. */
+export async function requireActiveExtensionRead<Result>(operation: () => Promise<Result>): Promise<Result> {
+  const probe = { active: false }; const result = await ADMISSION.reads.run(probe, operation);
+  if (!probe.active) throw new SettingsRefusal('swarm_sdk_mismatch', 'Use the host SDK client with the active extension enabled; activate pm-swarm and retry before acquiring a claim.');
+  return result;
+}
+/** A request-local SDK read proves activation without changing its result or storing a receipt. */
+export function recordActiveExtensionRead(): void {
+  const probe = ADMISSION.reads.getStore(); if (probe !== undefined) probe.active = true;
 }
 /** Refuse split SDK runtimes before reads can select a writer or acquire a package lease. */
 export function assertSdkInstance(client?: unknown): void {

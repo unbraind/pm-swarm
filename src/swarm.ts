@@ -15,7 +15,7 @@ import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts'
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal } from './settings.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal, requireActiveExtensionRead } from './settings.ts';
 import { inspectItem, readItem, historySnapshot } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
@@ -129,7 +129,7 @@ export class Swarm {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
-    const item = (await readItem(this.client, id)).item;
+    const item = (await requireActiveExtensionRead(() => readItem(this.client, id))).item;
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
