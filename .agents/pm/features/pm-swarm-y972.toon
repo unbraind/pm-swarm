@@ -7,12 +7,14 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T00:31:26.685Z"
+updated_at: "2026-10-27T00:57:04.591Z"
+assignee: codex-agent
+claim_principal: codex-agent
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[98]{created_at,author,text}:
+comments[100]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -111,6 +113,8 @@ comments[98]{created_at,author,text}:
   "2026-10-26T23:36:31.529Z",codex-agent,"Final close changes are ready for CI: canonical identity and token handling are inside the operation lease; 26 recovery tests and 11 fencing tests pass, with four behavioral revert probes producing 17 expected failures. Native registration remains solely in the blocked #1580 follow-up. The PR will be marked ready with current-head gates pending, then the explicitly authorized atomic-close item will be closed after full CI evidence."
   "2026-10-26T23:52:19.464Z",codex-agent,CI run 40420946048 identified two retained refusal regressions in the close refactor; both are corrected and the restored targeted suite passes 33/33. Pure local SDK inspection precedes usage-producing reads and the fresh host snapshot is still checked under the lease and native item lock. Malformed stored fences retain the repair diagnostic. Six behavioral revert probes now produce 19 expected failures. No thresholds or SDK pins changed. Current-head full CI must be rerun.
   "2026-10-27T00:31:20.943Z",codex-agent,"Current source-head full gates passed: https://github.com/unbraind/pm-swarm/actions/runs/40424027439 at e1286a3056eb8ac17d0551c052bb46e6c6cdae85. npm Node 22, npm Node 26 and Bun Node 26 each pass 414 suite and four packed-acceptance results; 100/100/100/100 coverage across 35 sources; zero failures/skips/cancellations/todo. Runners use at most two workers. Isolated strict health, identity, types, lint, zero duplication, docstrings, audit, packing, changelog and attestation pass. Atomic-close is implemented and explicitly closed; native settings registration is outside this acceptance scope in pm-swarm-native-settings, blocked on #1580 with sdk-gap and upstream tags. origin/main is merged, PR 24 is ready. Releasing this claim while retaining in_progress. The final tracking-only commit will receive exact-head CI."
+  "2026-10-27T00:53:14.938Z",codex-agent,"Final audit found and corrected a cross-attempt peer-loss path in resumed compensation. The atomic-close item was reopened and reclaimed, rather than leaving a known defect marked delivered. Latest SDK history ownership now gates recovery, including under the native item lock; the 36-test close suite passes and four additional revert probes fail as expected. Full current-head gates will run again before the item is reclosed."
+  "2026-10-27T00:57:04.557Z",codex-agent,"Restored ownership checks pass 8/8 focused regressions after the four new reversions, and the complete installed SDK-copy suite passes 10/10 after rebuilding. Expanded close recovery is 36/36; types, lint, 150 documented declarations across 35 files and zero duplication pass. Cross-request rollback adoption now requires latest SDK history ownership both before journal entry and inside the native item lock. Superseded tracking-only CI was canceled, not used as positive evidence. The next source-head npm/Bun gates must pass before atomic-close is reclosed."
 files[66]{path,scope}:
   index.ts,project
   manifest.json,project

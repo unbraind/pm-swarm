@@ -293,7 +293,17 @@ bound client. The SDK owns journal inspection, step idempotency, native mutation
 and reverse-order compensation.
 The complete document guard remains active for forward and compensation writes;
 a peer edit is preserved rather than overwritten by rollback. A replay checks
-current completion before returning a receipt.
+current completion before returning a receipt. An owned item receipt alone is
+insufficient across requests: recovery verifies the latest entry through public
+SDK history reads. It requires the transaction's reserved bulk marker, its actor
+and a native update/close/restore operation. The check runs during pure preflight,
+after the fresh host read, and inside the native item-lock admission hook before
+each write. A foreign latest writer or unreadable history refuses with a typed
+conflict; it never becomes a new compensation baseline. This preserves peer
+comments, titles and bodies even after a previous rollback was refused. Copying
+a transaction marker onto a comment does not make that comment package-owned.
+Unknown SDK receipt formats fail closed. A changed item needs explicit owner
+coordination rather than automatic compensation over the peer's work.
 
 Non-Git tests interrupt all seven forward coordinator boundaries, including
 between each native mutation and its journal record. A fresh CLI process resumes

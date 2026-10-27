@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { getHistoryPath, WorkspaceTransactionInterruptedError } from '@unbrained/pm-cli/sdk';
 import type { WorkspaceTransactionTransitionContext } from '@unbrained/pm-cli/sdk';
 import { sharedFixture } from './shared-helpers.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
-import { SettingsRefusal } from '../src/settings.ts';
+import { commitItemMutation, SettingsRefusal } from '../src/settings.ts';
 import { StaleFenceError } from '../src/lease.ts';
 import { durableSnapshot } from './privacy-snapshot.ts';
 import { inspectItem } from '../src/inspection.ts';
@@ -103,6 +103,65 @@ test('SDK compensation interruptions resume without duplicate rollback or lost c
     assert.deepEqual(operations(f.pmRoot, id).slice(baseline), ['update', 'restore', 'update', 'close']);
     assert.equal((await f.client.get(id)).item.swarm_token, '2');
   });
+});
+
+test('a fresh retry never compensates over a peer edit left by a refused rollback', async t => {
+  const f = await sharedFixture(t);
+  for (const kind of ['comment', 'title', 'body', 'copied-marker'] as const) await t.test(kind, async () => {
+    const id = await f.item(); const receipt = await f.shared.start(id); let failed = false; let edited = false;
+    await assert.rejects(f.shared.close(id, 'Public completion', receipt.token, { onTransition: context => {
+      if (!failed && context.transition === 'step_recorded') { failed = true; throw new Error('Ordinary close failure'); }
+      if (!edited && context.transition === 'step_compensating') {
+        edited = true;
+        const marker = (JSON.parse(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8').trim().split('\n').at(-1)!) as { message: string }).message;
+        const args = kind === 'comment' || kind === 'copied-marker'
+          ? ['comment', id, 'Public peer receipt', ...(kind === 'copied-marker' ? ['--message', marker] : [])]
+          : ['update', id, `--${kind}`, 'Public peer receipt', '--message', 'Public peer change', ...(kind === 'body' ? ['--author', 'peer'] : [])];
+        assert.equal(f.cli(...args, '--json').status, 0);
+      }
+    } }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+    assert.equal(edited, true);
+    const before = durableSnapshot(f.pmRoot); const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
+    await assert.rejects(new SharedTracker(f.shared.engine).close(id, 'Public completion', receipt.token), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+    assert.equal(durableSnapshot(f.pmRoot), before);
+    assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), history);
+    const item = (await f.client.get(id, { depth: 'full' })).item;
+    if (kind === 'comment' || kind === 'copied-marker') assert.ok(item.comments!.some(row => row.text === 'Public peer receipt'));
+    else assert.equal(item[kind], 'Public peer receipt');
+  });
+});
+
+test('owned close compensation receipts resume after the close step was restored', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); const receipt = await f.shared.start(id);
+  const baseline = operations(f.pmRoot, id).length; let failed = false;
+  await assert.rejects(f.shared.close(id, 'Public completion', receipt.token, { onTransition: context => {
+    if (!failed && context.transition === 'committing') { failed = true; throw new Error('Fail after both mutations'); }
+    if (context.transition === 'step_compensated') throw new WorkspaceTransactionInterruptedError('Interrupted close compensation');
+  } }));
+  assert.deepEqual(await new SharedTracker(f.shared.engine).close(id, 'Public completion', receipt.token), { id, closed: true });
+  assert.deepEqual(operations(f.pmRoot, id).slice(baseline), ['update', 'close', 'restore', 'restore', 'update', 'close']);
+});
+
+test('unreadable recovery history refuses safely without rewriting original history', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); const receipt = await f.shared.start(id);
+  await assert.rejects(f.shared.close(id, 'Public completion', receipt.token, { onTransition: context => {
+    if (context.transition === 'step_recorded') throw new WorkspaceTransactionInterruptedError('Interrupt close');
+  } }));
+  const path = getHistoryPath(f.pmRoot, id); const saved = path + '.saved';
+  renameSync(path, saved); mkdirSync(path);
+  try {
+    await assert.rejects(f.shared.close(id, 'Public completion', receipt.token), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed' && /history/.test(error.remedy));
+  } finally { rmdirSync(path); renameSync(saved, path); }
+  assert.deepEqual(await f.shared.close(id, 'Public completion', receipt.token), { id, closed: true });
+});
+
+test('native item admission invokes its final ownership check before persistence', async t => {
+  const f = await sharedFixture(t); const id = await f.item(); const item = (await f.client.get(id, { depth: 'full' })).item;
+  const before = durableSnapshot(f.pmRoot); let checked = 0;
+  await assert.rejects(commitItemMutation({ id, item, options: { description: 'Refused write' } }, admitted => f.client.update(admitted.id, admitted.options), {
+    beforeWrite: async () => { checked++; throw new SettingsRefusal('swarm_document_changed', 'Ownership changed before persistence.', 'document'); },
+  }), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');
+  assert.equal(checked, 1); assert.equal(durableSnapshot(f.pmRoot), before);
 });
 
 test('close transaction admission refuses stale foreign and private state before its journal', async t => {

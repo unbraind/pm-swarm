@@ -40,7 +40,7 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
 /** One admitted document and its verified native successors travel through the host commit. */
-interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal }
+interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; beforeWrite?: () => Promise<void> }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -68,11 +68,11 @@ function documentFingerprint(item: Record<string, unknown>): string {
   return JSON.stringify({ metadata, body: item.body ?? '' }, (_key, value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
 }
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean } = {}): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; beforeWrite?: () => Promise<void> } = {}): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   assertSdkInstance();
-  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0 };
+  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0, beforeWrite: options.beforeWrite };
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
     await checkpoint?.('admitted');
@@ -88,13 +88,14 @@ export function commitItemMutation<Payload extends { id: string; options: unknow
   });
 }
 /** Admit the SDK's complete proposed document under its native writer lock before item/history persistence. */
-export const guardItemDocument: BeforeMutationHook = context => {
+export const guardItemDocument: BeforeMutationHook = async context => {
   const scope = ADMISSION.scopes.getStore();
   if (scope === undefined) return { allow: true };
   try {
     assertSdkInstance();
     assertPrivatePathSafe(context.after, 'document');
     if (context.before === null || documentFingerprint({ ...context.before.metadata, body: context.before.body }) !== scope.expected) throw new SettingsRefusal('swarm_document_changed', 'The item changed after admission; refresh its complete document, re-evaluate ownership and retry with the current receipt.', 'document');
+    await scope.beforeWrite?.();
     scope.pending = context.after === null ? undefined : documentFingerprint({ ...context.after.metadata, body: context.after.body });
     return { allow: true };
   }
