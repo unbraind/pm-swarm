@@ -145,7 +145,7 @@ if(['update','close'].includes(context.op)) globalThis[Symbol.for('pm-swarm.test
   await f.shared.close(id, 'Public completion', receipt.token);
   assert.deepEqual(events, ['close'], 'Swarm delegates exactly one primary native close');
   const item = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(item.status, 'closed'); assert.equal(item.assignee, 'shared-test'); assert.equal(item.swarm_token, receipt.token);
+  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, receipt.token);
 });
 
 test('compound native writes preserve later peer state and truthfully report an already committed prefix', async t => {

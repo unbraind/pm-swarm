@@ -31,7 +31,7 @@ for (const typed of [false, true]) test(`lost ${typed ? 'typed' : 'ordinary'} na
   assert.equal((await f.client.get(id)).item.status, 'closed'); assert.equal((await f.client.get(dependent)).item.status, 'open');
   const stable = durableSnapshot(f.pmRoot);
   for (const method of ['sdk', 'json', 'toon'] as const) {
-    if (method === 'sdk') await assert.rejects(f.shared.close(id, 'Different retry note', claim.token), error => error instanceof CloseRecoveryUnsupported && error.item_id === id && error.journal_entry.startsWith(`history/${id}.jsonl#entry=`));
+    if (method === 'sdk') await assert.rejects(f.shared.close(id, 'Different retry note', claim.token), error => error instanceof CloseRecoveryUnsupported && error.item_id === id && error.journal_entry === `history/${id}.jsonl`);
     else { const result = f.cli('swarm', 'close', id, '--note', 'Public retry', '--token', claim.token, ...(method === 'json' ? ['--json'] : [])); assert.equal(result.status, 2); assert.match(result.stdout + result.stderr, /swarm_close_recovery_unsupported/); assert.ok((result.stdout + result.stderr).includes(id)); assert.ok((result.stdout + result.stderr).includes(`history/${id}.jsonl`)); }
     assert.equal(durableSnapshot(f.pmRoot), stable);
   }
@@ -56,6 +56,7 @@ test('native close validates every local refusal before any tracker or lease cha
   await assert.rejects(f.shared.close(id, 'Public', 'bad'), /malformed swarm_token/); assert.equal(durableSnapshot(f.pmRoot), broken);
   await f.client.update(id, { unset: ['swarm_token'], assignee: 'peer' }); const peer = durableSnapshot(f.pmRoot);
   await assert.rejects(f.shared.close(id, 'Public'), /stale.*fencing token/); assert.equal(durableSnapshot(f.pmRoot), peer);
+  await f.client.update(id, { assignee: 'shared-test' });
   const disabled = new PmClient({ cwd: f.repo, pmRoot: f.pmRoot, author: 'shared-test', noExtensions: true });
   const inactive = durableSnapshot(f.pmRoot);
   await assert.rejects(new SharedTracker(new Swarm(f.repo, f.pmRoot, disabled, 'shared-test')).close(id, 'Public'), error => error instanceof SettingsRefusal && error.code === 'swarm_sdk_mismatch');

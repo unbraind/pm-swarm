@@ -55,10 +55,15 @@ export async function mutationSnapshot<Item extends Record<string, unknown>>(pmR
   return { item, historyHead, version: historyHead.length };
 }
 
+/** Resolve immutable native identity from the first version without current-read usage bookkeeping. */
+export async function readItemIdentity(client: Pick<PmClient, 'get'>, id: string): Promise<GetResult> {
+  return requireActiveExtensionRead(async () => requireItemRead(await client.get(id, { fields: 'id', at: '1', ...COMPLETE_READ_OUTPUT })));
+}
+
 /** Resolve aliases through the bound native client before choosing any history stream. */
 export async function clientMutationSnapshot(pmRoot: string, client: Pick<PmClient, 'get'>, id: string, read?: (canonicalId: string) => Promise<GetResult['item']>): Promise<{ item: GetResult['item']; historyHead: ItemHistoryHead; version: number }> {
   assertSdkInstance();
-  const identity = (await requireActiveExtensionRead(() => readItem(client, id, 'id'))).item;
+  const identity = (await readItemIdentity(client, id)).item;
   const canonicalId = String(identity.id);
   return mutationSnapshot(pmRoot, canonicalId, () => read === undefined ? readItem(client, canonicalId).then(view => view.item) : read(canonicalId));
 }

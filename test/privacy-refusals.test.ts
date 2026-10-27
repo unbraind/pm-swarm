@@ -89,6 +89,8 @@ test('registered mutators preserve a prepared tracker across state and backend r
   const invalidResource = (await f.client.create({ type: 'Task', title: 'Invalid resource', tags: 'swarm-resource' })).item.id;
   await f.client.update(invalidResource, { field: ['swarm_token=malformed'] });
   const reservation = await reserveResource(f, resource);
+  await refuse('heartbeat', resource, { token: reservation.token });
+  await refuse('handoff', resource, { token: reservation.token, to: 'receiver', note: 'Public' });
   // The source SDK currently persists a complete-list cache; establish it as fixture state.
   await f.shared.engine.corpus();
   for (const id of [resource, terminal, foreign, malformed, unsafe]) {

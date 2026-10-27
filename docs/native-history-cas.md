@@ -9,7 +9,8 @@ A changed head produces `swarm_superseded` and preserves the peer's claim.
 
 IDs are resolved through the exact host-bound native `get()` before selecting a
 history stream, including short IDs and service-capable contexts. Identity-only
-resolution is separate from the authoritative decision read after the baseline.
+resolution uses the SDK mutation-free first-version identity projection, separate
+from the authoritative decision read after the baseline.
 It never refreshes a baseline after reading a decision document.
 
 | Mutation | Guard |

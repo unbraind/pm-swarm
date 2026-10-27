@@ -125,7 +125,8 @@ close (including reopened items), terminal state, legacy markers and interrupted
 native returns produce
 `swarm_close_recovery_unsupported`, naming the canonical item and native/legacy
 journal entry for explicit inspection. Native lifecycle fields and dependent
-warnings remain core-owned. See [native close](docs/native-close.md).
+warnings remain core-owned. Local refusals precede native read bookkeeping; the
+authoritative admission repeats those same checks after capturing its history head. See [native close](docs/native-close.md).
 [Issue 34](https://github.com/unbraind/pm-swarm/issues/34) owns durable multi-item
 recovery; it is outside this PR's implementation.
 

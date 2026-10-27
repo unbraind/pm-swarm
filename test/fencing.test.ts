@@ -46,7 +46,7 @@ test('handoff atomically publishes owner, higher fence, note and receiver contex
   await f.shared.next(); await assert.rejects(f.shared.close(id, ''), /requires/);
   assert.deepEqual(await f.shared.close(id, 'Verified'), { id, closed: true });
   const final = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(final.status, 'closed'); assert.equal(final.assignee, 'shared-test'); assert.equal(final.swarm_token, back.token);
+  assert.equal(final.status, 'closed'); assert.equal(final.assignee, undefined); assert.equal(final.swarm_token, back.token);
   assert.equal((await f.shared.next()).selected, null);
 });
 
@@ -128,7 +128,7 @@ test('new registered commands parse tokens and report actionable native errors w
   assert.equal(refused.status, 2); assert.match(refused.stdout + refused.stderr, /swarm_stale_fence/);
   f.run('swarm', 'heartbeat', id, '--agent', 'receiver', '--token', '2');
   f.run('swarm', 'close', id, '--agent', 'receiver', '--token', '2', '--note', 'Complete');
-  await assert.rejects(run('close', [id], { note: 'Stale', token: '2' }), /swarm_stale_fence/);
+  await assert.rejects(run('close', [id], { note: 'Stale', token: '2' }), /swarm_close_recovery_unsupported/);
 });
 
 

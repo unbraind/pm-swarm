@@ -18,7 +18,7 @@ import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, assertMutationReceipt, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
-import { inspectItem, readItem, historySnapshot, clientMutationSnapshot } from './inspection.ts';
+import { inspectItem, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -253,7 +253,7 @@ export class Swarm {
 
   /** Verify the acquired native receipt and every later ownership transition without trusting messages. */
   async acquisitionSnapshot(id: string, version: number, expected: Record<string, unknown>, ownSuccessors: ReadonlyMap<number, Record<string, unknown>> = new Map()) {
-    const canonicalId = String((await readItem(this.client, id, 'id')).item.id);
+    const canonicalId = String((await readItemIdentity(this.client, id)).item.id);
     const acquired = await historySnapshot(this.pmRoot, canonicalId, version);
     const current = await historySnapshot(this.pmRoot, canonicalId);
     assertClaimGeneration(current.document.metadata.swarm_token, acquired.document.metadata.swarm_token);

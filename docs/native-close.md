@@ -3,7 +3,12 @@
 `swarm close` resolves the selected ID through the host-bound native `get()` before
 reading history. It captures a native history head, reads the complete decision
 document, validates ownership, token and privacy, then delegates directly to native
-`PmClient.close`. The same head is checked under the native item writer lock.
+`PmClient.close`. Identity uses the SDK mutation-free first-version projection;
+only its immutable ID is consumed. The same head is checked under the native item writer lock.
+
+Pure local refusal checks run before native read bookkeeping. The authoritative
+head-before-document admission repeats exactly the same checks; local preflight
+never supplies a decision baseline or write document.
 
 Swarm adds no metadata mutation before close. It does not advance the token,
 clear the assignee, predict a successor, create a workspace transaction or restore
@@ -31,8 +36,8 @@ This conservative rule never tries to decide who owned an earlier close.
 Repeated calls leave native items, histories and legacy journals unchanged.
 Swarm never resumes close, compensates the primary, restores dependents or repairs
 its own missing receipt automatically. Inspect the native item, dependency state
-and journal with core commands and reconcile explicitly. Core can leave the
-assignee and swarm token on a closed item; terminal reap follows its separate,
+and journal with core commands and reconcile explicitly. Core owns the
+assignee and custom-token lifecycle on a closed item; terminal reap follows its separate,
 reviewed ownership and history policy.
 
 The current contract deliberately permits only a fresh native operation. Native
