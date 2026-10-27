@@ -22,6 +22,24 @@ inside it. Lease completion admits its shared result before announcing liveness;
 local Git worktree coordinates receive the same relative projection as CLI
 rendering. A refused receiver cannot extend stale-claim recovery.
 
+Every command shares `projectReceipt`/`assertReceiptSafe`, including live Git
+scheduling. `FairPolicy` admits the complete prospective decision rows before it
+invokes the existing claim path. The lane path is projected and admitted before
+the native claim as well, so a later renderer cannot discover a new home-path
+refusal after ownership changes. Embedded SDK lane receipts retain their local
+filesystem coordinate; shared receipts project it through the known workspace.
+
+Only a relative top-level `worktree` has operator-path semantics. Its literal
+folder names may contain home-root-looking text; nested worktree fields, notes,
+keys and arbitrary content still pass the full privacy oracle. Ambiguous literal
+folder prefixes receive an explicit relative anchor without changing their
+filesystem target. Absolute or encoded home roots presented without a workspace
+remain refused. `test/fixtures/legacy-receipts.json` contains two actual receipts
+from published `pm-swarm@2026.10.15`, verified against its registry integrity; only
+the disposable operator-home prefix is replaced by a portable placeholder.
+Tests reconstruct that coordinate, preserve every domain field and render both
+formats, alongside the existing must-refuse corpus.
+
 `test/privacy-invocation.test.ts` keeps all 85 must-refuse content spellings and
 moves only the tracker-location slot to the must-allow corpus: 21 registry
 variants produce 1,785 location admissions and 1,785 content refusals. Real source
@@ -72,9 +90,11 @@ is searched in the normalized candidate views, including URI authorities, paths,
 queries, fragments, Markdown, JSON, shell and relative text. No URL component
 receives a privacy exemption. Route parentheses and brackets
 inside a path remain intact; the classifier does not turn relative path suffixes
-into generic absolute-path refusals. Relative text containing a literal home-root
+into generic absolute-path refusals. Relative content containing a literal home-root
 spelling is deliberately classified as private by this lexical rule; the real
 fleet inventory reports no such relative paths.
+The typed top-level operator worktree coordinate described above is admitted
+separately from content.
 Normalization classifies input and never rewrites persisted notes or file paths.
 
 Ordinary prose, money, approximate times, regex backslashes, remote authorities,

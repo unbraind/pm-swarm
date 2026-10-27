@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T07:20:02.688Z"
+updated_at: "2026-10-27T10:08:48.912Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[127]{created_at,author,text}:
+comments[135]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -140,7 +140,15 @@ comments[127]{created_at,author,text}:
   "2026-10-27T07:06:45.509Z",codex-agent,"Final activation correction: linked command 23 passes 12/12 with zero failures, skips, cancellations or todo results. It includes the unchanged failing edges regression, post-claim read cleanup, all three private peer no-op fields, restored-document history ABA, and four inactive-SDK cases across Git start/next/schedule and an existing claim. Existing old heartbeat and durable item/history bytes remain identical on refusal; SDK ignored read caches remain the previously documented SDK limitation. Revert proof: remove only requireActiveExtensionRead around the existing preclaim read, then node --test --test-concurrency=1 --test-name-pattern=\"without active hooks|start refuses terminal\" test/start-admission-race.test.ts test/edges.test.ts exits 1 with 0/6 passing; restore exact fixed bytes and the positive run passes. Aggregate: 26 isolated revert probes, 51 expected failures across 57 results, six passing controls. Types, lint, zero duplication (0/11988 lines, 115 sources), identity and docstrings (164 declarations, 36 files) pass. No existing assertion or threshold was changed. Main stays in_progress; release the claim and freeze tracked evidence before replacement CI. PR body and final report will hold final exact-head run URLs and measured release counts; earlier failed runs do not count as acceptance."
   "2026-10-27T07:18:09.305Z",codex-agent,"CI 40465172572 passes every source test (560/560, no skips/cancellations/todo) and all lines/statements/functions, but correctly refuses 99.95 percent aggregate branch coverage: the post-claim document-change refusal was no longer exercised after inactive SDK admission moved earlier. No production change is needed. Added real peer title/body/file-link edits after native claim without an injected throw: the existing full-document comparison refuses before heartbeat, preserves each peer value and releases only our claim. New targeted cases pass 4/4. Revert only that comparison and run node --test --test-concurrency=1 --test-name-pattern=\"public peer edit after native claim\" test/start-admission-race.test.ts: exit 1, 0/4 pass; exact source restored. Aggregate review proofs: 27 isolated probes, 55 expected failures across 61 results, six passing controls. Every original assertion and the 100 percent branch threshold remain unchanged."
   "2026-10-27T07:19:58.897Z",codex-agent,"Expanded linked command 24 passes 16/16 with zero failures, skips, cancellations or todo results, including every new public post-claim title/body/file-link race. Production code is byte-identical to the prior head; the only product verification change is adversarial test coverage of its complete-document refusal branch. Types, lint, zero duplication (0/12005 lines, 115 sources), identity and all 164 declarations across 36 files pass. Freeze this evidence and release the claim before replacement exact-head CI. Final npm/Bun results, unchanged full coverage and packed acceptance counts will be read from the completed CI logs and recorded in the PR body and final report. Failed coverage run 40465172572 is not acceptance evidence."
-files[81]{path,scope}:
+  "2026-10-27T08:00:18.360Z",codex-agent,"Auto-round-3 review resumed. General rules: every command must admit the complete prospective shared receipt before mutation, and operator worktree coordinates must use the same relative projection across start, next, schedule, SDK/CLI and both renderers. Every rollback must compare the exact acquired swarm_token generation under the native SDK commit; an advanced generation belongs to a peer and must survive with a typed superseded report. Audit covers all receipt producers and all cleanup/compensation calls, lost native returns and every acquisition boundary, shared non-Git trackers, legacy allowed paths, and packed npm/Bun consumers. Reuse this item; preserve all existing assertions and thresholds. Origin/main is included (zero behind). Focused tests, behavioral revert proofs, types/lint, then final-head CI npm/Bun gates with at most two workers; freeze tracked evidence and release the claim before final CI."
+  "2026-10-27T09:34:33.412Z",codex-agent,"Round-3 implementation evidence: common receipt admission now covers every dispatch branch, renderers and lease completion; the full scheduling decision projection is checked before claiming. Local SDK filesystem coordinates are preserved for compatibility and shared views are relative. Two real receipts were generated with registry-authenticated pm-swarm 2026.10.15 and host 2026.10.23; the committed fixture replaces only its disposable operator-home prefix. Current registry pm-cli is 2026.10.27; the pinned SDK remains 2026.10.23. No GitHub reviews or review comments supply additional non-blocking findings. The audit also replaced Git configuration check-then-delete with native fixed-value CAS. Native SDK mutateItem with skipNoop holds its item writer lock during Git cleanup without an extra item/history mutation. All acquisition cleanup compares exact swarm_token, including history ABA and inside the SDK commit; typed swarm_superseded preserves peer state. Real independent-process probes confirm a writer is excluded during Git cleanup and succeeds on retry; peer advances before both close compensations are preserved. New matrices pass 62/62; broader focused regressions pass 84/84; SDK/legacy compatibility and compensation subset passes 17/17; native-lock/configuration-CAS subset passes 5/5. Seed 0xf37c9a21 covers 21 Git transition cases, 16 cases on one non-Git tracker, and six cleanup-CAS boundaries, plus fixed lost-return, token ABA and peer-content cases. The SDK/backend sink inventory now covers 24 sites and 120 source-admission refusals. Packed consumers additionally exercise live schedule/next in both formats and peer generation advances after lost returns."
+  "2026-10-27T09:52:57.440Z",codex-agent,"Round-3 behavioral revert proof — Receipt admission/projection. Reverted only each relevant production function/check in isolation, ran the exact command, restored exact source bytes in finally. projection: node --test --test-concurrency=1 --test-name-pattern=\"beneath a real home\" test/receipt-projection.test.ts => exit 1, 1 failures / 2 passing controls. schedule-preflight: node --test --test-concurrency=1 --test-name-pattern=\"schedule admits every decision row\" test/receipt-projection.test.ts => exit 1, 1 failures / 0 passing controls. operator-coordinate: node --test --test-concurrency=1 --test-name-pattern=\"relative operator paths from older receipts|receipts written by\" test/receipt-projection.test.ts => exit 1, 1 failures / 1 passing controls. No skipped or cancelled results. Combined ten probes: 40 results, 35 expected failures and five controls. Positive restored-source integration is the new linked test; prior positive focused runs passed 84/84, 17/17, 5/5 and latest 14/14. No existing test assertions or thresholds weakened."
+  "2026-10-27T09:53:08.081Z",codex-agent,"Round-3 behavioral revert proof — Exact fencing generation and SDK-locked cleanup. Reverted only each relevant production function/check in isolation, ran the exact command, restored exact source bytes in finally. generation: node --test --test-concurrency=1 --test-name-pattern=\"lost return preserves|independent process advances|token ABA|SDK close compensation\" test/acquisition-generations.test.ts => exit 1, 9 failures / 0 passing controls. native-git-lock: node --test --test-concurrency=1 --test-name-pattern=\"native item lock excludes\" test/acquisition-generations.test.ts => exit 1, 1 failures / 0 passing controls. noop-history: node --test --test-concurrency=1 --test-name-pattern=\"SDK-locked Git cleanup records no extra\" test/acquisition-generations.test.ts => exit 1, 3 failures / 0 passing controls. config-cas: node --test --test-concurrency=1 --test-name-pattern=\"configuration cleanup compares\" test/acquisition-generations.test.ts => exit 1, 1 failures / 0 passing controls. locked-generation: node --test --test-concurrency=1 --test-name-pattern=\"one non-git tracker preserves random\" test/acquisition-generations.test.ts => exit 1, 15 failures / 2 passing controls. native-generation-proof: node --test --test-concurrency=1 --test-name-pattern=\"nested native writer\" test/acquisition-generations.test.ts => exit 1, 2 failures / 0 passing controls. preexisting-generation: node --test --test-concurrency=1 --test-name-pattern=\"pre-existing Git claim\" test/acquisition-generations.test.ts => exit 1, 1 failures / 0 passing controls. No skipped or cancelled results. Combined ten probes: 40 results, 35 expected failures and five controls. Positive restored-source integration is the new linked test; prior positive focused runs passed 84/84, 17/17, 5/5 and latest 14/14. No existing test assertions or thresholds weakened."
+  "2026-10-27T09:54:19.728Z",codex-agent,"Round-3 static checks pass after restoring all ten negative probes: npm run typecheck; npm run lint; npm run duplication (zero clones, 0/12441 lines across 119 sources); npm run docstring (37 authored files, 169 documented declarations). The new pinned PM linked command uses at most two workers and is running. All existing privacy corpora, generated fuzz and coverage thresholds remain unchanged; packed acceptance will use final-head CI. Origin/main is included (45 ahead, zero behind on the final fetch). GitHub currently supplies no inline or submitted review findings beyond the orchestrator report; the audit additionally fixes atomic Git configuration removal. No new SDK gap."
+  "2026-10-27T10:00:01.733Z",codex-agent,"Round-3 restored-source pinned PM integration passes 96/96 (329135.681442 ms), with no failures/skips/cancellations/todo. Further whole-package cleanup audit found terminal Git reaping used the same read-then-delete pattern. Route reaping through the shared SDK item-lock cleanup gate, add exact-token admission to terminal releases in both Git and non-Git modes, and use fixed-value Git configuration CAS for terminal cleanup too. Added every native admission-boundary interleaving and retained the earlier reaping regressions. Focused validation is running before the final static/freeze pass."
+  "2026-10-27T10:05:30.797Z",codex-agent,"Round-3 terminal cleanup class revert proofs: node --test --test-concurrency=1 --test-name-pattern=\"native item lock excludes\" test/acquisition-generations.test.ts with only common guardItemCleanup reverted => exit 1, 0/2 pass (both independent peer processes expose unsafe cleanup). Revert only shared terminal release generation admission: same command with pattern \"terminal cleanup rechecks\" => exit 1, 4/8 pass, Git controls preserved and all four shared reported results fail. Revert only terminal Git fixed-value CAS: pattern \"configuration cleanup compares\" => exit 1, 1/2 pass, acquisition control passes and terminal replacement is lost. Exact production bytes restored in finally after each. Combined round-3: 13 probes, 52 results, 42 expected failures and ten passing controls; no skips/cancellations. Restored terminal checks passed 12/12. Final linked run adds sink inventory and no-op history checks. Initial new terminal fixtures required an explicit SDK close reason; corrected setup, with no assertion weakened. PM linked-test command text is immutable (metadata patch refused), so a corrected combined command is appended rather than editing provenance."
+  "2026-10-27T10:08:44.509Z",codex-agent,"Round-3 final local evidence: pinned PM broad integration 96/96 (329135.681442 ms); restored terminal checks 12/12; final pinned PM linked cleanup/sink integration 20/20 (66488.283977 ms), all with zero failures/skips/cancellations/todo. Sink inventory remains 24 public SDK/backend sites and its five-source property preserves tracker bytes. Final npm run typecheck, npm run lint, npm run duplication (zero clones, 0/12468 lines, 119 sources), npm run docstring (37 authored files, 169 declarations) pass. Thirteen isolated behavioral reverts produced 42 expected failures and ten passing controls; exact bytes restored and positive runs completed. Native lock and token checks now cover acquisition rollback, Git/shared terminal cleanup, resource rollback and journal compensation. Actual published-version fixtures retain domain fields and both renderers. No existing tests or coverage thresholds weakened. Main item stays in_progress; release claim at this source freeze. Atomic-close remains closed/released and the native-settings/journal follow-ups remain blocked/unclaimed. Final-head CI npm Node22, npm Node26 and Bun Node26 plus CodeQL will be linked with exact counts in PR 24 and the final report; no further tracker writes after the freeze to preserve the tested head. No merge, release or review-thread reply."
+files[86]{path,scope}:
   index.ts,project
   manifest.json,project
   package.json,project
@@ -157,6 +165,7 @@ files[81]{path,scope}:
   src/lease.ts,project
   src/privacy.ts,project
   src/progress.ts,project
+  src/receipts.ts,project
   src/recovery.ts,project
   src/resource-tracker.ts,project
   src/resources.ts,project
@@ -165,6 +174,7 @@ files[81]{path,scope}:
   src/swarm.ts,project
   src/test-runner.ts,project
   src/watch.ts,project
+  test/acquisition-generations.test.ts,project
   test/acquisition-receipts.test.ts,project
   test/claim-lifecycle.test.ts,project
   test/cleanup-boundaries.test.ts,project
@@ -174,12 +184,14 @@ files[81]{path,scope}:
   test/commands.test.ts,project
   test/edges.test.ts,project
   test/fencing.test.ts,project
+  test/fixtures/legacy-receipts.json,project
   test/git-helpers.ts,project
   test/helpers.ts,project
   test/install-prerequisites.test.ts,project
   test/install.acceptance.ts,project
   test/invocation-helpers.ts,project
   test/legacy-claim-cleanup.test.ts,project
+  test/native-return-faults.ts,project
   test/next-watch.test.ts,project
   test/packed-ownership-helpers.ts,project
   test/prepare-merge-driver.test.ts,project
@@ -206,6 +218,7 @@ files[81]{path,scope}:
   test/privacy-snapshot.ts,project
   test/progress.test.ts,project
   test/public-corpus-helpers.ts,project
+  test/receipt-projection.test.ts,project
   test/rename-faults.ts,project
   test/reservation-cleanup.test.ts,project
   test/review-r12.test.ts,project
@@ -222,7 +235,7 @@ files[81]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[24]:
+tests[27]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -438,9 +451,40 @@ tests[24]:
       created_at: "2026-10-27T07:18:12.929Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
-docs[4]{path,scope}:
+  - command: node --test --test-concurrency=2 test/acquisition-generations.test.ts test/receipt-projection.test.ts test/acquisition-receipts.test.ts test/start-peer-cleanup.test.ts test/privacy-sinks.test.ts
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T09:51:17.964Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: "node --test --test-concurrency=2 --test-name-pattern=\"terminal cleanup rechecks|configuration cleanup compares|native item lock excludes|SDK-locked Git cleanup|every production writer|source\" test/acquisition-generations.test.ts test/privacy-sinks.test.ts"
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T10:03:28.536Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: "node --test --test-concurrency=2 --test-name-pattern=\"terminal cleanup rechecks|configuration cleanup compares|native item lock excludes|SDK-locked Git cleanup|write site|sink|locked full settings|lossless percent\" test/acquisition-generations.test.ts test/privacy-sinks.test.ts"
+    scope: project
+    timeout_seconds: 600
+    pm_context_mode: none
+    workspace_context_mode: snapshot
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-27T10:04:54.274Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+docs[5]{path,scope}:
   docs/journal-and-acquisition-verification.md,project
   docs/privacy-admission.md,project
+  docs/receipt-and-generation-verification.md,project
   docs/settings-and-quality-gates.md,project
   README.md,project
 body: ""

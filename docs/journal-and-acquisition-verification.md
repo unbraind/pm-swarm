@@ -51,7 +51,7 @@ runs even if worktree removal fails.
 
 ## Behavioral revert proofs
 
-All 27 negative probes exited 1; production sources were restored immediately.
+The previous continuation’s 27 negative probes exited 1; production sources were restored immediately.
 The probes produced 55 expected failures and six passing controls across 61 results.
 
 | Reverted behavior | Exact probe | Result |
@@ -136,3 +136,7 @@ zero violations.
 Full release evidence comes from CI at the final pushed head, with at most two
 test workers and unchanged 100/100/100/100 source coverage thresholds. The PR and
 pm item retain exact run URLs and counts; focused local checks precede each gate.
+
+The subsequent portable-receipt and fencing-generation audit is documented in
+[receipt-and-generation-verification.md](receipt-and-generation-verification.md),
+including same-author successors and the SDK-locked Git cleanup gate.

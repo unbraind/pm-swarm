@@ -2,7 +2,7 @@ import { commitWorkspaceTransaction, deriveMutationTransactionId, runWithActiveE
 import type { CommitWorkspaceTransactionOptions, WorkspaceTransactionStep } from '@unbrained/pm-cli/sdk';
 import { inspectItem, readItem } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, documentFingerprint, SettingsRefusal } from './settings.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, assertClaimGeneration } from './settings.ts';
 import { CLOSE_STEPS, closeCheckpoint, closeConflict, closeSnapshot, closeStepResult, closeTrace } from './close-journal.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import type { Swarm } from './swarm.ts';
@@ -65,9 +65,12 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
         return closeStepResult(after);
       },
       async compensate(data) {
-        const checkpoint = closeCheckpoint(data); const state = await trace();
+        const checkpoint = closeCheckpoint(data); const latest = await closeSnapshot(engine.pmRoot, canonicalId);
+        // Both the forward generation and an already restored original can belong to this SDK journal.
+        if (latest.document.metadata.swarm_token !== initialExpected.swarm_token) assertClaimGeneration(latest.document.metadata.swarm_token, next);
+        const state = await trace();
         const current = state.snapshots.at(-1)!;
-        await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, beforeWrite: async () => { await trace(); } }));
+        await lease.write(() => commitItemMutation({ id: canonicalId, item: { ...current.document.metadata, body: current.document.body }, target: String(checkpoint.version), options: { author: engine.author, force: true, message: 'Swarm close compensation' } }, admitted => engine.client.restore(admitted.id, admitted.target, admitted.options), { transaction: true, generation: { token: current.document.metadata.swarm_token }, beforeWrite: async () => { await trace(); } }));
       },
     }));
     try {

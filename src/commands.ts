@@ -1,6 +1,6 @@
 import { validateCommandInputs } from './admission.ts';
 import { SchedulingRefusal } from './fair-scheduling.ts';
-import { relative } from 'node:path';
+import { admitReceipt, assertReceiptSafe } from './receipts.ts';
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
 import { createPmCliExpectedError, isPmCliExpectedError, readSettings, resolveAuthor } from '@unbrained/pm-cli/sdk';
 import { defineCommand } from '@unbrained/pm-cli/sdk/authoring';
@@ -27,8 +27,7 @@ class GitCommandFailure extends Error {
 /** Await a lane result without changing the established Git error transport. */
 async function laneOperation(operation: Promise<Record<string, unknown>>, repo: string | undefined): Promise<Record<string, unknown>> {
   try {
-    const result = await operation;
-    return repo !== undefined && typeof result.worktree === 'string' ? { ...result, worktree: relative(repo, result.worktree) } : result;
+    return await operation;
   }
   catch (error) { if (repo === undefined || error instanceof SettingsRefusal) throw error; throw new GitCommandFailure(error); }
 }
@@ -59,17 +58,19 @@ async function dispatchResource(resources: ResourceReservations, action: Resourc
 /** Dispatch native host context to the shared SDK engine; leave rendering to pm. */
 async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
   if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
-  assertSdkInstance(ctx.sdk.client);
+  const sdk = ctx.sdk; assertSdkInstance(sdk.client);
   const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
   const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress'].includes(command) ? undefined : repositoryRoot(workspace);
-  const client = ctx.sdk.client;
+  const client = sdk.client;
   const opts = overrides(ctx.options);
   const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
   const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
   const id = ctx.args[0];
+  // Every command shares one projection; adding another lane producer cannot bypass it.
+  return admitReceipt(await (async (): Promise<Record<string, unknown>> => {
   switch (command) {
     case 'progress': {
-      const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, ctx.sdk.client);
+      const progress = new PlanProgress({ cwd: workspace, pmRoot: ctx.pm_root, author: ctx.global.author }, sdk.client);
       const options = { agent: textOption(ctx.options.agent), orchestrator: textOption(ctx.options.orchestrator), revision: textOption(ctx.options.revision), offset: ctx.options.offset === undefined ? undefined : Number(textOption(ctx.options.offset)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)) };
       const stage = textOption(ctx.options.stage);
       if (stage === undefined) {
@@ -122,9 +123,10 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       const operation = swarm.reap(ctx.options.dryRun === true);
       return laneOperation(operation, repo);
     }
-    case 'settings': return { ...await updateSettings(ctx.sdk, ctx.pm_root, opts, { apply: ctx.options.apply === true, operationId: textOption(ctx.options.operationId) }) };
+    case 'settings': return { ...await updateSettings(sdk, ctx.pm_root, opts, { apply: ctx.options.apply === true, operationId: textOption(ctx.options.operationId) }) };
     default: throw new Error('Unknown swarm command');
   }
+  })(), repo);
 }
 /** Dispatch and validate the complete host result before any renderer can emit it. */
 export async function runCommand(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
@@ -133,7 +135,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     ctx = { ...ctx, args: [...ctx.args], options: { ...ctx.options }, global: { ...ctx.global } };
     validateCommandInputs(command, ctx);
     const result = await dispatch(command, ctx);
-    assertPrivatePathSafe(result);
+    assertReceiptSafe(result);
     return result;
   } catch (error) {
     try { assertPrivatePathSafe(String(error)); } catch (refusal) { error = refusal; }
@@ -166,7 +168,7 @@ export const swarmCommandDefinitions = {
 export const swarmCommandNames = Object.keys(swarmCommandDefinitions);
 /** Return a typed refusal instead of throwing into the host's native-renderer fallback. */
 function safeRendererResult(result: unknown): unknown {
-  try { assertPrivatePathSafe(result); return result; }
+  try { assertReceiptSafe(result); return result; }
   catch { return { code: 'swarm_private_path', required: 'Replace private user-home paths with project-relative references.' }; }
 }
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
@@ -181,7 +183,7 @@ export function register(api: ExtensionApi): void {
   }, {
     commands: swarmCommandNames.map(name => `swarm ${name}`),
     resultDiscriminator: result => {
-      try { assertPrivatePathSafe(result); } catch { return true; }
+      try { assertReceiptSafe(result); } catch { return true; }
       return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
     },
   });

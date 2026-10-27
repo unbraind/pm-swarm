@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { PmClient } from '@unbrained/pm-cli/sdk';
+import { loseReturn } from './native-return-faults.ts';
 import { historySnapshot } from '../src/inspection.ts';
 import { StaleFenceError } from '../src/lease.ts';
 import { durableSnapshot } from './privacy-snapshot.ts';
@@ -8,16 +8,6 @@ import { fixture } from './helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { branchExists } from '../src/git.ts';
 import { ResourceReservations, trackerResourceBackend } from '../index.ts';
-
-/** Lose only the return after the real SDK and its native onWrite hook completed. */
-function loseReturn(client: PmClient, method: 'claim' | 'update' | 'close' | 'restore', returnNumber = 1) {
-  const original = client[method].bind(client); let injected = false; let returns = 0;
-  Reflect.set(client, method, new Proxy(original, { async apply(target, receiver, args: unknown[]) {
-    const result: unknown = await Reflect.apply(target, receiver, args);
-    if (++returns === returnNumber) { injected = true; throw new Error('Lost native SDK return'); } return result;
-  } }));
-  return { restore: () => { Reflect.set(client, method, original); }, injected: () => injected };
-}
 
 for (const writer of ['claim', 'update'] as const) test(`Git acquisition retains its native onWrite receipt when ${writer} loses its return value`, async t => {
   const f = await fixture(t); const id = await f.item(); f.save(); const fault = loseReturn(f.client, writer); t.after(fault.restore);

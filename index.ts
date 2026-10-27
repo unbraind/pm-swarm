@@ -41,3 +41,5 @@ export default defineExtension({ name: 'pm-swarm', version: '2026.10.15', descri
 
 /** Typed settings mutation, refusal and verification contracts. */
 export type { SettingsReceipt, SettingsMutationOptions, SettingsBoundary, SettingsRefusalCode } from './src/settings.ts';
+/** Project local operator coordinates and admit compact shared receipts through the same host boundary. */
+export { projectReceipt, admitReceipt, assertReceiptSafe } from './src/receipts.ts';

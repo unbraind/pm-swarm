@@ -2,7 +2,8 @@ import { commitMutation, SettingsRefusal } from './settings.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join } from 'node:path';
+import { admitReceipt } from './receipts.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
 
@@ -214,9 +215,8 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
         if (error instanceof StaleFenceError && result === undefined && rollbacks.length === 0) return result;
         throw error;
       }
-      const content = options.receiptWorkspace !== undefined && typeof result === 'object' && result !== null && 'worktree' in result && typeof result.worktree === 'string'
-        ? { ...result, worktree: relative(options.receiptWorkspace, result.worktree) } : result;
-      outcome = commitMutation(content, () => { announce(); return result; });
+      admitReceipt(result, options.receiptWorkspace);
+      announce(); outcome = result;
     } catch (error) {
       const failures: unknown[] = [];
       for (const rollback of rollbacks.reverse()) { try { await rollback(); } catch (failure) { failures.push(failure); } }

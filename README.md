@@ -2,7 +2,7 @@
 
 Coordinate dozens of agents on one pm tracker, with renewed heartbeats, fenced ownership, dead-agent recovery and context handoff. pm-swarm uses SDK readiness, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
-Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. Automated GitHub releases require the repository variable `PM_RELEASE_APPROVED=true`. After publication:
+Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. Automated GitHub releases require the repository variable `PM_RELEASE_APPROVED=true`. Install the published package:
 
 ```sh
 pm install pm-swarm --project
@@ -74,6 +74,22 @@ paths in nested result values, keys, watch events or errors trigger a typed
 `swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
 worktree locations are relative to the project root.
 
+All commands use the same receipt projection, including live `schedule`. A
+relative top-level `worktree` is an operator filesystem reference; its folder
+names are retained even when they resemble home-root text. Notes, nested
+context and persisted content keep their privacy checks. The scheduler validates
+its complete decision receipt before acquiring a claim or creating a worktree.
+Embedded SDK lane methods retain their local filesystem coordinates; call
+`admitReceipt(result, workspace)` before sharing them. `projectReceipt` and
+`assertReceiptSafe` expose the same separate projection and admission steps.
+
+Failed acquisition cleanup compares the exact `swarm_token` generation at every
+native write. `swarm_superseded` means a peer owns a newer or otherwise different
+generation: preserve its claim and Git resources, refresh its receipt and retry.
+Terminal Git reaping holds the same native item lock and compares its fencing generation before local cleanup.
+Git cleanup runs inside the SDK item writer lock without adding an item/history
+mutation, and configuration removal compares the exact value atomically.
+
 Tracker locations are invocation inputs: absolute and relative `--path`, `PM_PATH`
 and cwd discovery work inside home directories and with spaces or Unicode.
 These locations stay local; private paths in stored notes, settings or shared
@@ -126,8 +142,7 @@ field to repair. See [privacy admission](docs/privacy-admission.md).
 
 ## Install and release approval
 
-The first npm release is pending the maintainer's interactive bootstrap. After
-that first publish, the maintainer configures npm trusted publishing for
+For automated releases, the maintainer configures npm trusted publishing for
 `release.yml` and sets the repository variable `PM_RELEASE_APPROVED` to `true`.
 The daily workflow and manual dispatch both require this variable and `main`.
 Publishing uses OIDC with provenance; no stored npm token is needed.
@@ -488,3 +503,6 @@ The approval variable controls GitHub releases; it does not impose a local npm
 publishing hold. Maintainers run the prepublish checks and authenticate with npm
 for local publication. The first local publish uses `--provenance=false`; daily
 GitHub OIDC releases keep provenance enabled.
+
+See [portable receipts and generation-owned recovery](docs/receipt-and-generation-verification.md)
+for compatibility fixtures, interleaving matrices and native lock evidence.

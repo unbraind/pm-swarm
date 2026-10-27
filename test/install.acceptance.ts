@@ -119,6 +119,14 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     run(cwd, 'git', ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record lane']);
     assert.equal((JSON.parse(pm('swarm', 'land', '--execute', '--json')) as { executed: boolean }).executed, true);
     assert.equal((JSON.parse(pm('swarm', 'reap', '--dry-run', '--json')) as { removed: string[] }).removed.length, 0);
+    for (const command of ['schedule', 'next']) for (const format of ['json', 'toon']) {
+      const candidate = JSON.parse(pm('create', 'Task', `Packed live ${command} ${format}`, '--json')).id as string;
+      pm('files', candidate, '--add', `src/${command}-${format}.ts`);
+      const output = pm('swarm', command, ...(format === 'json' ? ['--json'] : []));
+      const receipt = (format === 'json' ? JSON.parse(output) : decodeToon(output)) as { selected: string; worktree: string };
+      assert.equal(receipt.selected, candidate); assert.equal(receipt.worktree, join('lanes', `${runtime}-${candidate}`));
+      assert.equal(output.includes(scratch), false);
+    }
     for (const file of run(cwd, 'git', ['ls-files', '-z', '.agents/pm']).split('\0').filter(Boolean)) assert.equal(readFileSync(join(cwd, file), 'utf8').includes(scratch), false, file);
   }
   assert.deepEqual(fixtureSnapshot(decoy), before, 'Decoy repository changed');

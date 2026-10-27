@@ -8,7 +8,7 @@ import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */
@@ -41,7 +41,7 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
 /** One admitted document and its verified native successors travel through the host commit. */
-interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
+interface ItemAdmissionScope { expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -78,12 +78,16 @@ export function documentFingerprint(item: Record<string, unknown>): string {
     && !(collections.includes(key) && Array.isArray(value) && value.length === 0)));
   return JSON.stringify({ metadata, body: item.body ?? '' }, (_key, value: unknown) => typeof value === 'object' && value !== null && !Array.isArray(value) ? Object.fromEntries(Object.entries(value).sort(([left], [right]) => left.localeCompare(right))) : value);
 }
+/** A changed fencing generation belongs to a peer, including a same-author replacement. */
+export function assertClaimGeneration(current: unknown, expected: unknown): void {
+  if (current !== expected) throw new SettingsRefusal('swarm_superseded', 'A peer owns a different claim generation. Preserve its item and Git resources; refresh the current token before retrying.', 'swarm_token');
+}
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void } = {}): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { transaction?: boolean; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void } = {}): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   assertSdkInstance();
-  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
+  const scope: ItemAdmissionScope = { expected: documentFingerprint(payload.item), committed: 0, generation: options.generation, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
     await checkpoint?.('admitted');
@@ -104,6 +108,7 @@ export const guardItemDocument: BeforeMutationHook = async context => {
   if (scope === undefined) return { allow: true };
   try {
     assertSdkInstance();
+    if (scope.generation !== undefined) assertClaimGeneration(context.before?.metadata.swarm_token, scope.generation.token);
     assertPrivatePathSafe(context.after, 'document');
     if (context.before === null || documentFingerprint({ ...context.before.metadata, body: context.before.body }) !== scope.expected) throw new SettingsRefusal('swarm_document_changed', 'The item changed after admission; refresh its complete document, re-evaluate ownership and retry with the current receipt.', 'document');
     await scope.beforeWrite?.();

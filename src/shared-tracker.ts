@@ -231,7 +231,7 @@ export class SharedTracker {
         if (lane.agent !== this.engine.author) { refused.push({ id: lane.id, reason: 'Terminal claim belongs to another agent; use reap --agent with its principal' }); continue; }
         const current = await recoveryItem(this.engine.client, snapshots.get(lane.id)!, refused);
         if (current === undefined) continue;
-        if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.engine.author }, item: current }, admitted => this.engine.client.release(admitted.id, admitted.options)));
+        if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.engine.author }, item: current }, admitted => this.engine.client.release(admitted.id, admitted.options), { generation: { token: current.swarm_token } }));
         released.push(lane.id);
       }
       return { mode: 'shared-tracker', dry_run: dryRun, released, removed: [], cleanup: [], refused };

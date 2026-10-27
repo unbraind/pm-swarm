@@ -1,4 +1,5 @@
 import { assertPrivatePathSafe } from './settings.ts';
+import { admitReceipt } from './receipts.ts';
 import { discoverExtensions, readSettings } from '@unbrained/pm-cli/sdk';
 import { selectNext } from './selection.ts';
 import type { ActiveFootprint, RankedCandidate } from './selection.ts';
@@ -155,12 +156,15 @@ export class FairPolicy {
     this.counts = { ready: rows.length, qualified: qualified.length, conflicts: rows.filter(row => row.state === 'conflict').length, starved: rows.filter(row => row.starved && row.missing_skills.length === 0).length };
     const chosen = result.chosen === undefined ? undefined : scores.get(result.chosen.item.id)!;
     const reason = chosen === undefined ? 'No qualified ready candidate can start safely' : `${result.unknown ? 'Unknown footprint scheduled alone; ' : ''}${chosen.starved ? 'Starvation promotion: oldest qualified work' : 'Qualified work: priority, handoff cost, creation time, id'}; age ${chosen.age_seconds}s; handoff cost ${chosen.handoff_cost}`;
-    return { ...result, reason, warnings: result.unknown ? ['Unknown footprint: scheduled with no active lanes; inspect before editing.'] : result.warnings };
+    const selected = { ...result, reason, warnings: result.unknown ? ['Unknown footprint: scheduled with no active lanes; inspect before editing.'] : result.warnings };
+    this.receipt({ selected: selected.chosen?.item.id ?? null, reason, warnings: selected.warnings }, true);
+    return selected;
   }
 
   /** Bound explanations while preserving exact totals and the existing assignment context. */
-  receipt(result: NextReceipt, dryRun: boolean): ScheduleReceipt {
-    return { selected: result.selected, agent: this.author, dry_run: dryRun, reason: result.reason, now: this.now, max_wait_seconds: this.maxWait, counts: this.counts, decisions: this.decisions.slice(0, this.limit), omitted: Math.max(0, this.decisions.length - this.limit), warnings: result.warnings, ...(result.token === undefined ? {} : { token: result.token }), ...(result.context === undefined ? {} : { context: result.context }), ...(result.mode === undefined ? {} : { mode: result.mode }), ...(result.worktree === undefined ? {} : { worktree: result.worktree }), ...(result.branch === undefined ? {} : { branch: result.branch }) };
+  receipt(result: NextReceipt, dryRun: boolean, workspace?: string): ScheduleReceipt {
+    const receipt = { selected: result.selected, agent: this.author, dry_run: dryRun, reason: result.reason, now: this.now, max_wait_seconds: this.maxWait, counts: this.counts, decisions: this.decisions.slice(0, this.limit), omitted: Math.max(0, this.decisions.length - this.limit), warnings: result.warnings, ...(result.token === undefined ? {} : { token: result.token }), ...(result.context === undefined ? {} : { context: result.context }), ...(result.mode === undefined ? {} : { mode: result.mode }), ...(result.worktree === undefined ? {} : { worktree: result.worktree }), ...(result.branch === undefined ? {} : { branch: result.branch }) };
+    admitReceipt(receipt, workspace); return receipt;
   }
 }
 
@@ -168,9 +172,10 @@ export class FairPolicy {
 export async function scheduleNext(engine: { author: string; repo: string; pmRoot: string }, options: ScheduleOptions, invoke: (policy: FairPolicy) => Promise<NextReceipt>): Promise<ScheduleReceipt> {
   assertPrivatePathSafe({ author: engine.author, options });
   const policy = new FairPolicy(engine.author, options);
+  policy.receipt({ selected: null, reason: '', warnings: [] }, options.dryRun === true);
   const discovered = await discoverExtensions({ pmRoot: engine.pmRoot, cwd: engine.repo, settings: await readSettings(engine.pmRoot) });
   if (!discovered.effective.every(extension => extension.capabilities !== undefined && extension.capabilities.length > 0 && !extension.capabilities.includes('services'))) {
     throw new SchedulingRefusal('schedule_backend_refused', 'Use a local tracker with shared swarm coordination; service-backed storage needs a tracker-wide scheduler adapter. No local fallback was attempted.');
   }
-  return policy.receipt(await invoke(policy), options.dryRun === true);
+  return policy.receipt(await invoke(policy), options.dryRun === true, engine.repo);
 }
