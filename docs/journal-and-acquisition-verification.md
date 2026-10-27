@@ -51,8 +51,8 @@ runs even if worktree removal fails.
 
 ## Behavioral revert proofs
 
-All 26 negative probes exited 1; production sources were restored immediately.
-The probes produced 51 expected failures and six passing controls across 57 results.
+All 27 negative probes exited 1; production sources were restored immediately.
+The probes produced 55 expected failures and six passing controls across 61 results.
 
 | Reverted behavior | Exact probe | Result |
 | --- | --- | --- |
@@ -97,6 +97,7 @@ Final native and completion boundaries use the same test runner prefix:
 | Locked native history head | `--test-name-pattern='different native history head' test/start-admission-race.test.ts` | 0/1 pass |
 | Complete large-patch identity audit | `--test-name-pattern='complete large patches' test/tooling.test.ts` | 0/1 pass; default subprocess buffer rejects a valid public patch |
 | Active hooks before native acquisition | `--test-name-pattern='without active hooks\|start refuses terminal' test/start-admission-race.test.ts test/edges.test.ts` | 0/6 pass; inactive clients acquire ownership without a usable native receipt |
+| Complete document after native claim | `--test-name-pattern='public peer edit after native claim' test/start-admission-race.test.ts` | 0/4 pass; removing the comparison accepts a changed claim document |
 
 Positive source checks exercise real SDK trackers and Git, including seven start
 boundaries for each of `start`, `next` and `schedule`, three heartbeat boundaries
@@ -114,10 +115,14 @@ journal and acquisition run passed **126/126**. Typecheck, lint, zero duplicatio
 authored files pass. Source coverage of the new journal verifier is 100 in all
 four dimensions; complete package coverage remains a separate CI gate.
 
-The final activation-admission linked run passes **12/12**, including the
+The final activation-admission linked run passes **16/16**, including the
 unchanged inactive-extension edge test, post-claim read cleanup, private peer
 no-ops, native history-head ABA and all four inactive-client cases. Typecheck,
 lint, zero duplication, identity and all 164 declarations pass after this change.
+Public peer title, body and linked-file edits between native claim and the next
+read are also refused before heartbeat publication; their content survives the
+owned claim release. These cases cover the complete-document comparison itself,
+in addition to read failures, private content and changed native history heads.
 
 The identity gate audits the complete synthetic PR merge, whose accumulated
 tracker changes can exceed the default subprocess pipe buffer. Owned temporary
