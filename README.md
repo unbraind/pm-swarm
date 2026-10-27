@@ -389,3 +389,6 @@ metadata), `schedule_skills` (declare the required skills or hand off to a quali
 receiver), and `schedule_backend_refused` (use supported tracker-wide coordination).
 The CLI exits 2 with the code and remedy. An empty eligible set is a successful
 receipt with `selected: null`, not an ownership transfer.
+
+Release jobs with write permissions are restricted to `unbraind/pm-swarm` at job
+level, so a fork cannot run publication with its own approval variable.

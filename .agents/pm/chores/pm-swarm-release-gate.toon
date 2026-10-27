@@ -6,12 +6,15 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-25T23:23:59.983Z"
-updated_at: "2026-10-26T02:25:18.144Z"
+updated_at: "2026-10-27T00:18:14.364Z"
 author: codex-agent
-comments[3]{created_at,author,text}:
+comments[6]{created_at,author,text}:
   "2026-10-25T23:24:04.782Z",codex-agent,"Normalize daily scheduling and PM_RELEASE_APPROVED job gates while preserving release decisions, generated changelogs and release notes. Verify OIDC publishing without a stored npm token, manifest metadata, packed allowlists and private-data scans. No open homepage/author PR was found during orientation. No publishing, trust setup, approval variable changes or merges are authorized."
   "2026-10-26T01:03:40.334Z",codex-agent,"Opening the release-readiness PR after package allowlist/privacy verification and focused regression proofs so complete npm and Bun CI can run in parallel with local full-gate verification. Pending checks are explicitly not treated as passing evidence. No timeout, threshold, dependency pin or test case is being relaxed."
   "2026-10-26T02:25:12.444Z",codex-agent,"Required complete npm run release:check and bun run release:check both PASS in isolated GitHub CI at 983eaf20602065527192709f464796023e243c4f. Main suite counts: npm 279/279, Bun 279/279; every required matrix job succeeded. Evidence: https://github.com/unbraind/pm-swarm/actions/runs/40252359966. The complete gates were verified in isolated CI; they were not duplicated on the already contended local host after that success. No timeout, case, threshold or dependency pin was changed. Packed artifact allowlist/privacy checks and linked regressions passed. Final tracker evidence is being committed and CI will recheck that final head. Keep the item in progress for orchestrator verification."
+  "2026-10-27T00:17:03.601Z",codex-agent,"Review follow-up: preserve existing release-readiness work and merged main changes. Remove automatic release-workflow enablement; the orchestrator enables disabled schedules after merge. Require the canonical repository at job level for every write-permission or publishing job in the affected workflows, alongside the existing approval and branch conditions. Prove guard, approval, provenance and token regressions independently, then wait for complete npm and Bun CI on the pushed head."
+  "2026-10-27T00:18:01.784Z",codex-agent,"Packed-artifact verification: 93 allowlisted files; dry-run and actual archive agree, and every packed member has zero private-data findings. Local project health passes with extensions disabled; globally installed extension version skew is outside this package."
+  "2026-10-27T00:18:09.196Z",codex-agent,"Fork-exclusion revert proof: node --test --test-concurrency=2 test/release-approval.test.ts passes 6/6. Independently reverting each job repository guard, reverting all repository guards, allowing an OR bypass, removing approval or provenance, injecting a synthetic npm token environment, adding an unguarded CI write job, inheriting CI write permissions, adding a read-permission CI publisher, and restoring automatic setup all fail (each command exits nonzero; 12 independent mutations rejected). Restoring the workflows passes 6/6. Linked pm tests, test typecheck where present and lint pass. Canonical-repository checks include inherited permissions. Disabled release workflows remain for the orchestrator to enable after merge; no live settings or publishing were changed."
 files[4]{path,scope}:
   .github/workflows/ci.yml,project
   .github/workflows/release.yml,project
