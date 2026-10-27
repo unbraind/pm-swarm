@@ -108,7 +108,8 @@ test('provider-capable incoming preflight uses the bound host corpus and never a
 
 test('native non-Git next and schedule refusals have no partial JSON or TOON receipt or heartbeat effect', async t => {
   const f = await sharedFixture(t); const id = await f.item(['src/public.ts']); const claim = await f.shared.start(id);
-  assert.equal(assertIncomingHandoffRefusals({ runtime: process.execPath, host: f.host, project: f.repo, pmRoot: f.pmRoot, environment: f.env }, id, claim.token), 16);
+  await f.client.update(id, { tags: 'skill:typescript' });
+  assert.equal(assertIncomingHandoffRefusals({ runtime: process.execPath, host: f.host, project: f.repo, pmRoot: f.pmRoot, environment: f.env }, id, claim.token, ['typescript']), 16);
 });
 
 test('handoff validates existing document and prospective context before entering its lease', async t => {

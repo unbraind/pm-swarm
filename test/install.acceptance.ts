@@ -178,7 +178,7 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
     invoke(runtime, ['swarm', 'plan']);
     const selected = invoke(runtime, ['swarm', 'next', '--agent', 'packed-worker']);
     assert.equal(selected.selected, id); assert.equal(selected.mode, 'shared-tracker'); assert.equal('branch' in selected, false);
-    assert.equal(assertIncomingHandoffRefusals({ runtime, host, project: repo, pmRoot, environment: env }, id, String(selected.token)), 16);
+    assert.equal(assertIncomingHandoffRefusals({ runtime, host, project: repo, pmRoot, environment: env }, id, String(selected.token), ['typescript']), 16);
     invoke(runtime, ['swarm', 'heartbeat', id, '--token', String(selected.token)]);
     const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply', '--token', String(selected.token)]);
     assert.deepEqual(synced.add, ['test/work.test.ts']);

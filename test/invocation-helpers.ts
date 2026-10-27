@@ -41,7 +41,7 @@ export function assertTrackerInvocations(input: TrackerInvocation): number {
 }
 
 /** Verify installed/source CLI refusal ordering in both renderers without changing heartbeat or lease bytes. */
-export function assertIncomingHandoffRefusals(input: TrackerInvocation, id: string, token: string): number {
+export function assertIncomingHandoffRefusals(input: TrackerInvocation, id: string, token: string, skills: readonly string[] = []): number {
   const { runtime, host, project, pmRoot, environment } = input;
   /** Preserve real core SDK writes for fixture setup, never replacing a read or mutation result. */
   const invoke = (args: string[]) => spawnSync(runtime, [host, '--path', pmRoot, ...args], { cwd: project, env: environment, encoding: 'utf8', timeout: 300000 });
@@ -53,7 +53,7 @@ export function assertIncomingHandoffRefusals(input: TrackerInvocation, id: stri
     const warmed = invoke(['swarm', 'plan', '--json']); assert.equal(warmed.status, 0, warmed.stdout + warmed.stderr);
     for (const command of ['next', 'schedule']) for (const dryRun of [false, true]) for (const json of [false, true]) {
       const before = durableSnapshot(pmRoot);
-      const result = invoke(['swarm', command, ...(dryRun ? ['--dry-run'] : []), ...(json ? ['--json'] : [])]);
+      const result = invoke(['swarm', command, ...(command === 'schedule' && skills.length > 0 ? ['--skills', skills.join(',')] : []), ...(dryRun ? ['--dry-run'] : []), ...(json ? ['--json'] : [])]);
       assert.equal(result.status, 2, result.stdout + result.stderr);
       assert.match(result.stdout + result.stderr, /swarm_private_path/);
       assert.doesNotMatch(result.stdout + result.stderr, /(?:"selected"|selected:)/, 'partial receipt');
