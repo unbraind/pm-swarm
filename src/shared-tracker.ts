@@ -10,7 +10,7 @@ import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem, recoverySnapshotMatches } from './recovery.ts';
-import { inspectItem, inspectItems, readItem } from './inspection.ts';
+import { historySnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
 import { completeClaim } from './close.ts';
 import type { CloseOptions } from './close.ts';
 
@@ -94,7 +94,17 @@ export class SharedTracker {
     const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
     const receipt = { mode: 'shared-tracker', id, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings };
     assertPrivatePathSafe(receipt);
-    await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, admitted => this.engine.client.update(admitted.id, admitted.options)));
+    const initial = await historySnapshot(this.engine.pmRoot, String(item.id));
+    let publication: Record<string, unknown> | undefined;
+    lease.onFailure(async () => {
+      if (publication !== undefined && !item.assignee) {
+        await this.engine.releaseAcquiredClaim(String(item.id), initial.version + 1, publication, lease);
+        this.tokens.delete(String(item.id));
+      }
+    });
+    await lease.write(() => commitItemMutation({ id, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`], unset: ['swarm_handoff'], comment: [`Swarm claim token ${token}`] }, item }, async admitted => {
+      const result = await this.engine.client.update(admitted.id, admitted.options); publication = result.item; return result;
+    }));
     this.tokens.set(String(item.id), token);
     return receipt;
   }

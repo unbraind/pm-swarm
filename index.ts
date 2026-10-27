@@ -10,6 +10,8 @@ import { defineExtension } from '@unbrained/pm-cli/sdk/authoring';
 import { register } from './src/commands.ts';
 /** Expose the same tracker-bound engine used by host commands. */
 export { Swarm } from './src/swarm.ts';
+/** Request-local acquisition boundaries for trusted fault and interleaving diagnostics. */
+export { START_TRANSITIONS, withStartTransitionObserver } from './src/swarm.ts';
 /** Expose claim coordination for trackers without Git worktree lanes. */
 export { SharedTracker } from './src/shared-tracker.ts';
 /** Compact shared selection and incoming-handoff result contract. */

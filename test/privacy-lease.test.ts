@@ -89,3 +89,45 @@ for (const scenario of ['peer removed empty root', 'cleanup I/O failure'] as con
     }
   });
 }
+
+test('a failure removing the request after pin acquisition still removes every owned lease generation', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm');
+  const before = snapshot(f.pmRoot); let injected = false; const original = fs.unlinkSync;
+  const observation = t.mock.method(fs, 'unlinkSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    if (!injected && String(args[0]).startsWith(join(root, 'request-')) && existsSync(join(root, 'operation-pin.json'))) { injected = true; throw new Error('Injected post-pin request cleanup failure'); }
+    return Reflect.apply(target, receiver, args);
+  } }));
+  syncBuiltinESMExports();
+  try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => 'unreachable'), /Injected post-pin/); }
+  finally { observation.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(injected, true); assert.equal(snapshot(f.pmRoot), before);
+  assert.equal(await withSwarmLease(f.pmRoot, 'shared-test', async () => 'Recovered'), 'Recovered');
+});
+
+test('a failed atomic runtime rename removes its owned temporary without announcing liveness', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm');
+  const before = snapshot(f.pmRoot); let injected = false; const original = fs.renameSync;
+  const observation = t.mock.method(fs, 'renameSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    if (!injected && String(args[0]).startsWith(join(root, 'request-'))) { injected = true; throw new Error('Injected publication rename failure'); }
+    return Reflect.apply(target, receiver, args);
+  } }));
+  syncBuiltinESMExports();
+  try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => 'unreachable'), /Injected publication/); }
+  finally { observation.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(injected, true); assert.equal(snapshot(f.pmRoot), before);
+});
+
+test('runtime publication refuses a foreign temporary collision without truncating or deleting it', async t => {
+  const f = await sharedFixture(t); const root = join(f.pmRoot, 'runtime/swarm'); let foreign = '';
+  const original = fs.writeFileSync;
+  const observation = t.mock.method(fs, 'writeFileSync', new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    if (foreign === '' && String(args[0]).startsWith(join(root, 'request-'))) { foreign = String(args[0]); original(foreign, 'Foreign receipt'); }
+    return Reflect.apply(target, receiver, args);
+  } }));
+  syncBuiltinESMExports();
+  try { await assert.rejects(withSwarmLease(f.pmRoot, 'shared-test', async () => 'unreachable'), /EEXIST/); }
+  finally { observation.mock.restore(); syncBuiltinESMExports(); }
+  assert.equal(readFileSync(foreign, 'utf8'), 'Foreign receipt');
+  assert.deepEqual(readdirSync(root), [foreign.slice(root.length + 1)]);
+  assert.equal(await withSwarmLease(f.pmRoot, 'shared-test', async () => 'Recovered'), 'Recovered');
+});

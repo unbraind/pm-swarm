@@ -1,0 +1,114 @@
+import { createHash } from 'node:crypto';
+import { join } from 'node:path';
+import { getItemAt, readFileIfExists, readHistoryEntries, getHistoryPath, readSettings, resolveRuntimeStatusRegistry, shouldCompletePlanOnClose, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
+import type { ItemDocument, WorkspaceTransactionJsonValue } from '@unbrained/pm-cli/sdk';
+import { documentFingerprint, SettingsRefusal } from './settings.ts';
+import { historySnapshot } from './inspection.ts';
+
+/** Fixed domain steps; the transaction id also binds actor, item, fence and note. */
+export const CLOSE_STEPS = ['metadata', 'close'] as const;
+/** One native history version bound to its complete canonical document. */
+export interface CloseSnapshot { version: number; hash: string; document: ItemDocument }
+/** Journal-safe compensation receipt owned and persisted by the SDK coordinator. */
+export interface CloseCheckpoint { version: number; hash: string }
+/** Validated identity and semantic intent shared by preflight and locked checks. */
+export interface CloseIdentity { canonicalId: string; transactionId: string; next: string; resumed: boolean }
+/** The journal is SDK-owned; this adapter only reads its documented location and our own step data. */
+interface CloseJournal {
+  status: string;
+  startedStepIds: string[];
+  compensationData: Record<string, unknown>;
+  results: Record<string, unknown>;
+}
+/** Current position of the two forward writes and their reverse-order compensations. */
+export interface CloseTrace { phase: number; snapshots: CloseSnapshot[]; journal?: CloseJournal }
+
+/** Refuse uncertain recovery without exposing storage coordinates or caller-controlled messages. */
+export function closeConflict(detail = 'The item changed outside the recorded close transaction.'): never {
+  throw new SettingsRefusal('swarm_document_changed', `${detail} Preserve its current document and inspect the SDK journal and history before retrying.`, 'document');
+}
+/** Distinguish journal objects from arrays and scalars without accepting prototypes as schema evidence. */
+function record(value: unknown): value is Record<string, unknown> { return typeof value === 'object' && value !== null && !Array.isArray(value); }
+/** Hash only durable item content, using the same normalization as native item admission. */
+export function closeDocumentHash(document: ItemDocument): string {
+  return createHash('sha256').update(documentFingerprint({ ...document.metadata, body: document.body })).digest('hex');
+}
+/** Validate package step data; journal contents never become an alternate mutation plan. */
+export function closeCheckpoint(value: unknown): CloseCheckpoint {
+  if (!record(value) || !Number.isSafeInteger(value.version) || Number(value.version) < 1 || typeof value.hash !== 'string' || !/^[a-f0-9]{64}$/.test(value.hash)) closeConflict('The close journal checkpoint is invalid.');
+  return { version: Number(value.version), hash: value.hash };
+}
+/** Reconstruct a stable SDK history version; no timestamp is used as an ownership key. */
+export async function closeSnapshot(pmRoot: string, id: string, version?: number): Promise<CloseSnapshot> {
+  const view = await historySnapshot(pmRoot, id, version);
+  return { version: view.version, hash: closeDocumentHash(view.document), document: view.document };
+}
+/** Read only the coordinator's journal, after validating the exact deterministic identity. */
+async function closeJournal(pmRoot: string, author: string, intent: CloseIdentity): Promise<CloseJournal | undefined> {
+  const identity = validateWorkspaceTransactionIdentity({ pmRoot, author, transactionId: intent.transactionId });
+  try {
+    const raw = await readFileIfExists(join(identity.pmRoot, 'transactions/sdk', `${identity.transactionId}.json`));
+    if (raw === null) return undefined;
+    const value: unknown = JSON.parse(raw);
+    if (!record(value) || value.schemaVersion !== 1 || value.transactionId !== identity.transactionId || value.author !== identity.author
+      || !Array.isArray(value.stepIds) || JSON.stringify(value.stepIds) !== JSON.stringify(CLOSE_STEPS)
+      || !['applying', 'compensating', 'compensated', 'committed'].includes(String(value.status))
+      || !Array.isArray(value.startedStepIds) || !value.startedStepIds.every(id => CLOSE_STEPS.includes(id))
+      || !record(value.compensationData) || !record(value.results)) closeConflict('The close journal identity or plan is invalid.');
+    return { status: String(value.status), startedStepIds: value.startedStepIds, compensationData: value.compensationData, results: value.results };
+  } catch { return closeConflict('The close journal could not be verified.'); }
+}
+/** Verify one forward metadata mutation against the journal's immutable preimage. */
+function metadataSuccessor(before: ItemDocument, after: ItemDocument, intent: CloseIdentity): boolean {
+  const metadata: ItemDocument['metadata'] = { ...before.metadata, swarm_token: intent.next, swarm_close_transaction: intent.transactionId, updated_at: after.metadata.updated_at };
+  delete metadata.assignee; delete metadata.swarm_handoff;
+  return closeDocumentHash({ metadata, body: before.body }) === closeDocumentHash(after);
+}
+/** Check native closure fields while requiring every unrelated field and the body to remain identical. */
+function closeSuccessor(before: ItemDocument, after: ItemDocument, note: string, closeStatus: string): boolean {
+  const metadata = { ...before.metadata, status: closeStatus, closed_at: after.metadata.closed_at, completed_at: before.metadata.completed_at ?? after.metadata.closed_at, close_reason: note.trim(), updated_at: after.metadata.updated_at };
+  if (shouldCompletePlanOnClose(before.metadata)) metadata.plan_mode = 'completed';
+  return typeof after.metadata.closed_at === 'string' && closeDocumentHash({ metadata, body: before.body }) === closeDocumentHash(after);
+}
+
+/** Validate journal-bound native versions and complete snapshots; free-text history messages are never inspected. */
+export async function closeTrace(pmRoot: string, author: string, intent: CloseIdentity, note: string): Promise<CloseTrace> {
+  const journal = await closeJournal(pmRoot, author, intent);
+  if (journal === undefined) { if (intent.resumed) closeConflict('The interrupted close has no SDK journal.'); return { phase: 0, snapshots: [] }; }
+  if (journal.compensationData.metadata === undefined) {
+    if (intent.resumed || journal.status === 'committed') closeConflict('The close journal has no ownership checkpoint.');
+    return { phase: 0, snapshots: [], journal };
+  }
+  const checkpoint = closeCheckpoint(journal.compensationData.metadata);
+  const before = await closeSnapshot(pmRoot, intent.canonicalId, checkpoint.version);
+  const latest = await closeSnapshot(pmRoot, intent.canonicalId);
+  const count = latest.version - before.version;
+  if (before.hash !== checkpoint.hash || count < 0 || count > 4) closeConflict();
+  const snapshots = [before];
+  const history = await readHistoryEntries(getHistoryPath(pmRoot, intent.canonicalId), intent.canonicalId);
+  const closeStatus = resolveRuntimeStatusRegistry((await readSettings(pmRoot)).schema).close_status;
+  let phase = 0;
+  for (let offset = 1; offset <= count; offset++) {
+    const current = offset === count ? latest : await closeSnapshot(pmRoot, intent.canonicalId, before.version + offset);
+    const view = await getItemAt(intent.canonicalId, String(current.version), { pmRoot });
+    const entry = history[view.target.historyIndex];
+    if (entry.author !== author) closeConflict();
+    if (offset === 1 && entry.op === 'update' && metadataSuccessor(before.document, current.document, intent)) phase = 1;
+    else if (offset === 2 && entry.op === 'close' && (journal.startedStepIds.includes('close') || journal.status === 'compensating' && count >= 3) && closeSuccessor(snapshots[1].document, current.document, note, closeStatus)) phase = 2;
+    else if (offset === 2 && entry.op === 'restore' && current.hash === before.hash && journal.status === 'compensating') phase = 4;
+    else if (offset === 3 && phase === 2 && entry.op === 'restore' && current.hash === snapshots[1].hash && journal.status === 'compensating') phase = 3;
+    else if (offset === 4 && phase === 3 && entry.op === 'restore' && current.hash === before.hash && journal.status === 'compensating') phase = 4;
+    else closeConflict();
+    snapshots.push(current);
+  }
+  for (const [step, value] of Object.entries(journal.results)) {
+    const index = CLOSE_STEPS.indexOf(step as typeof CLOSE_STEPS[number]);
+    const receipt = closeCheckpoint(value);
+    if (index < 0 || snapshots[index + 1]?.version !== receipt.version || snapshots[index + 1]?.hash !== receipt.hash) closeConflict('The close journal result does not match its native version.');
+  }
+  if (journal.status === 'committed' && phase !== 2) closeConflict();
+  return { phase, snapshots, journal };
+}
+
+/** Compact SDK-journal result proving the exact native version written by one step. */
+export function closeStepResult(snapshot: CloseSnapshot): WorkspaceTransactionJsonValue { return { version: snapshot.version, hash: snapshot.hash }; }

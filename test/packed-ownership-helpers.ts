@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+/** Verify journal ownership in the actual packed module graph and a real independent peer process. */
+export function assertPackedCloseOwnership(runtime: string, repo: string, pmRoot: string, host: string, env: NodeJS.ProcessEnv): void {
+  const script = join(repo, 'verify-close-ownership.mjs');
+  writeFileSync(script, `
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { PmClient, getHistoryPath } from '@unbrained/pm-cli/sdk';
+import { SharedTracker, Swarm } from 'pm-swarm';
+const client = new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:'packed-worker'});
+const shared = new SharedTracker(new Swarm(process.cwd(),process.env.PM_PATH,client,'packed-worker'));
+const id=(await client.create({type:'Task',title:'Packed ownership fixture'})).item.id;
+const claim=await shared.start(id);let failed=false;let peer=false;
+await assert.rejects(shared.close(id,'Packed journal proof',claim.token,{onTransition:context=>{
+  if(!failed&&context.transition==='step_recorded'){failed=true;throw new Error('Force compensation');}
+  if(!peer&&context.transition==='step_compensating'){
+    peer=true;const row=JSON.parse(readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8').trim().split('\\n').at(-1));
+    const result=spawnSync(process.execPath,[process.argv[2],'update',id,'--title','Packed peer survives','--message',row.message,'--author','packed-worker','--json'],{encoding:'utf8'});
+    assert.equal(result.status,0,result.stdout+result.stderr);
+  }
+}}),error=>error.code==='swarm_document_changed');
+assert.equal(peer,true);const before=readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8');
+for(let retry=0;retry<3;retry++){
+  await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_document_changed');
+  assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,id),'utf8'),before);
+  assert.equal((await client.get(id)).item.title,'Packed peer survives');
+}
+console.log(JSON.stringify({copied_message_retries:3,peer_edits_lost:0}));
+`);
+  const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(JSON.parse(result.stdout), { copied_message_retries: 3, peer_edits_lost: 0 });
+}

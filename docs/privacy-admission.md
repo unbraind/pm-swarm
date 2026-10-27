@@ -261,7 +261,7 @@ mutation, portable backend transaction and imported linked-test writer; an added
 or unguarded site fails the test until it joins the inventory and admission path.
 The inventory requires the item-specific helper and snapshot at all twelve item
 writers; the remaining six writers use the generic helper.
-The current inventory has **18 sites**: twelve item mutations (claim, update,
+The current inventory has **23 sites**: seventeen item mutations (claim, update,
 release, file links and comments), audited settings, linked-test acknowledgement,
 linked-test execution, the shared portable resource transaction and two SDK
 coordination lock acquisitions. All four resource actions share that transaction, whose freshly decided change is also
@@ -307,29 +307,36 @@ notifications and peer documents cannot advance it. For compound close, the scop
 native operations; journaled close propagates SDK interruption/compensation
 semantics instead.
 
-`commitItemMutations` builds the ordered metadata patch/unset and native close
-steps on `commitWorkspaceTransaction`. `deriveMutationTransactionId` binds the
-plan to the SDK-resolved canonical item, actor, original token and note. The update persists the next fence
-and `swarm_close_transaction`, while clearing ownership and handoff state. That
-receipt permits recovery with the original token after the update has committed.
-An unrelated or stale request cannot adopt the receipt. Pure local SDK inspection refuses invalid state before usage-producing host
-reads; a fresh host snapshot is re-evaluated before committing. Malformed stored
-generations retain their repair diagnostic. Service-backed reads stay with the
-bound client. The SDK owns journal inspection, step idempotency, native mutations
-and reverse-order compensation.
-The complete document guard remains active for forward and compensation writes;
-a peer edit is preserved rather than overwritten by rollback. A replay checks
-current completion before returning a receipt. An owned item receipt alone is
-insufficient across requests: recovery verifies the latest entry through public
-SDK history reads. It requires the transaction's reserved bulk marker, its actor
-and a native update/close/restore operation. The check runs during pure preflight,
-after the fresh host read, and inside the native item-lock admission hook before
-each write. A foreign latest writer or unreadable history refuses with a typed
-conflict; it never becomes a new compensation baseline. This preserves peer
-comments, titles and bodies even after a previous rollback was refused. Copying
-a transaction marker onto a comment does not make that comment package-owned.
-Unknown SDK receipt formats fail closed. A changed item needs explicit owner
-coordination rather than automatic compensation over the peer's work.
+`commitWorkspaceTransaction` owns the ordered native metadata update and close
+steps. `deriveMutationTransactionId` binds the exact canonical item, actor,
+original token and note; `validateWorkspaceTransactionIdentity` validates that
+identity before reading the SDK-owned journal. The mutable
+`swarm_close_transaction` field is only a lookup hint, never ownership proof.
+The package reads the documented SDK journal location through `readFileIfExists`
+because the pinned SDK has no typed journal-inspection export (tracked in
+[pm-cli#1597](https://github.com/unbraind/pm-cli/issues/1597)). The SDK remains
+the sole journal writer, lock owner, resume coordinator and compensation runner.
+
+Package step data binds a stable native SDK version to the SHA-256 of its whole
+document. Public `readHistoryEntries` and `getItemAt` reconstruct the exact
+ordered native update, close and reverse restore versions. Every unrelated field
+and the body must match; extra mutations, changed results, invalid journal plans
+and unreadable history refuse with `swarm_document_changed`. Free-text history
+messages are never read as ownership evidence. The check runs in preflight,
+after the bound-client read, and inside each native item lock before persistence.
+A peer edit cannot become a fresh rollback baseline, including a same-author
+update that copies an earlier message. Every later retry preserves that edit.
+
+All start acquisitions retain their actual SDK receipt before post-write
+heartbeat publication. Git `start`, `next` and `schedule` keep one cleanup scope
+across the following read, ref creation, worktree creation, configuration,
+metadata publication and final receipt. Registered rollback remains active through
+outer receipt admission and liveness publication. Nested SDK locks release after
+rollback; the tracker pin releases last. Native version checks reject ownership
+ABA and cleanup uses complete fresh documents, preserving peer edits. Pre-existing
+claims are retained. Shared-tracker selection follows the same acquisition rule.
+Runtime publication uses exclusive temporary creation and removes only its own
+temporary, even when rename or post-pin request cleanup fails.
 
 Non-Git tests interrupt all seven forward coordinator boundaries, including
 between each native mutation and its journal record. A fresh CLI process resumes
@@ -357,7 +364,7 @@ without maintaining separate Git, file, peer or argument privacy policies.
 
 The inventory cross product supplies actual CLI, Git-diff, settings-file,
 source-file and peer-comment values to every inventoried SDK/backend kind:
-**18 sites × five sources = 90 refusals**, complete tracker/history snapshots,
+**23 sites × five sources = 115 refusals**, complete tracker/history snapshots,
 zero changes and no partial receipt. End-to-end regressions separately exercise
 Git-derived sync, fresh audited foreign settings, shared/Git recovery and real
 handoffs. These properties retain the existing SDK read-cache limitation below;

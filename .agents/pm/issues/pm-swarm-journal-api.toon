@@ -1,0 +1,14 @@
+id: pm-swarm-journal-api
+title: Adopt public SDK transaction journal inspection when available
+description: "Replace the read-only SDK journal compatibility adapter with a typed host-bound transaction status/inspection API when upstream pm-cli#1597 supplies one. Preserve deterministic identity, exact native version/hash checks, whole-document admission and copied-message retry regressions. The current implementation uses public readFileIfExists at the documented SDK journal location; commitWorkspaceTransaction remains its sole writer and coordinator."
+type: Issue
+status: blocked
+priority: 2
+tags[3]: "gh:unbraind/pm-cli#1597",sdk-gap,"upstream:pm-cli#1597"
+created_at: "2026-10-27T04:14:27.107Z"
+updated_at: "2026-10-27T04:14:27.107Z"
+author: codex-agent
+acceptance_criteria: "Use the public host-bound journal reader once exported; preserve every close crash, peer-edit and copied-message regression; remove the format-specific read adapter."
+parent: pm-swarm-y972
+blocked_reason: Blocked on unbraind/pm-cli#1597 public journal inspection API.
+body: ""

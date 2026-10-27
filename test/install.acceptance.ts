@@ -12,6 +12,7 @@ import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
 import { requireBun } from './install-helpers.ts';
 import { processExit } from './process-helpers.ts';
+import { assertPackedCloseOwnership } from './packed-ownership-helpers.ts';
 import { assertTrackerInvocations, assertIncomingHandoffRefusals } from './invocation-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
@@ -188,6 +189,7 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
     const another = invoke(runtime, ['create', 'Task', 'Packed explicit start']).id as string;
     const started = invoke(runtime, ['swarm', 'start', another]);
     invoke(runtime, ['swarm', 'close', another, '--token', String(started.token), '--note', 'Packed start verified']);
+    assertPackedCloseOwnership(runtime, repo, pmRoot, host, env);
     invoke(runtime, ['swarm', 'reclaim', '--stale-after', '120', '--dry-run']);
     const resource = invoke(runtime, ['create', 'Task', 'Packed resource', '--tags', 'swarm-resource']).id as string;
     invoke(runtime, ['swarm', 'resource', resource]);

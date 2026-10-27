@@ -97,16 +97,20 @@ retry `swarm_document_changed`. Host commands reuse their injected client, and
 package copies share request scope. A second SDK module identity produces
 `swarm_sdk_mismatch`: share the host SDK installation and restart after removing
 the nested dependency. Full internal reads retain large bodies and annotations.
-Close uses `commitItemMutations` on the SDK workspace transaction coordinator: a
-fenced metadata patch followed by native close. The deterministic transaction ID
-and `swarm_close_transaction` receipt let the same token and note resume after
-ownership was cleared. Interrupted work resumes; ordinary failures compensate
+Close uses one `commitWorkspaceTransaction` with a fenced metadata update
+followed by native close. Its deterministic identity, validated SDK journal and
+complete native document versions let the same token and note resume after
+ownership was cleared. Free-text history messages and mutable markers never
+authorize recovery or rollback. Interrupted work resumes; ordinary failures compensate
 through the SDK. This flow does not return `swarm_partial_commit`.
 See [privacy admission](docs/privacy-admission.md).
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use
 `pm swarm heartbeat` separately when a long queue needs background liveness.
-Refusal tests cover every registered mutator. Cold SDK reads can still create
+Failed Git or shared starts release only their newly acquired claims; Git cleanup
+checks the owned branch, worktree and configuration, preserving peer changes.
+Cleanup remains active through final receipt admission and heartbeat publication,
+and nested locks release before the tracker pin. Refusal tests cover every registered mutator. Cold SDK reads can still create
 derived caches; see the documented SDK read-effect limit and the
 [per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
 

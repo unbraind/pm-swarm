@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from '@babel/parser';
-import { acquireLock, acknowledgeLinkedTests, runLinkedTests, commitItemMutations } from '@unbrained/pm-cli/sdk';
+import { acquireLock, acknowledgeLinkedTests, runLinkedTests, commitItemMutations, commitWorkspaceTransaction } from '@unbrained/pm-cli/sdk';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { changedFiles } from '../src/git.ts';
 import { commitMutation, SettingsRefusal, updateSettings } from '../src/settings.ts';
@@ -18,11 +18,12 @@ import { rejectedCorpus } from './privacy-corpus.ts';
 /** Stable production write sites: new SDK or backend writers must join this inventory and its property. */
 const WRITE_SITES = [
   'lease.ts:acquireLock', 'swarm.ts:acquireLock',
-  'progress.ts:comments', 'resource-tracker.ts:update',
+  'progress.ts:comments', 'resource-tracker.ts:update', 'resource-tracker.ts:update',
   'resources.ts:transact',
   'settings.ts:mutateWorkspaceSettings',
-  'shared-tracker.ts:update', 'shared-tracker.ts:files', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'close.ts:commitItemMutations',
-  'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:files', 'swarm.ts:acknowledgeLinkedTests', 'swarm.ts:release',
+  'shared-tracker.ts:update', 'shared-tracker.ts:files', 'shared-tracker.ts:release', 'shared-tracker.ts:update',
+  'close.ts:commitWorkspaceTransaction', 'close.ts:update', 'close.ts:close', 'close.ts:restore',
+  'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:files', 'swarm.ts:acknowledgeLinkedTests', 'swarm.ts:release',
   'test-runner.ts:runLinkedTests',
 ].sort();
 
@@ -94,6 +95,9 @@ test('each enumerated sink refuses private values from CLI git settings files an
       switch (method) {
         case 'acquireLock': return commitMutation({ resource: 'privacy-probe', author: value }, async admitted => { const release = await acquireLock(f.pmRoot, admitted.resource, 30, admitted.author); await release(); });
         case 'commitItemMutations': return commitMutation({ author: value, transactionId: 'privacy-probe', mutations: [{ op: 'close' as const, id, reason: value }] }, admitted => commitItemMutations({ ...admitted, pmRoot: f.pmRoot }));
+        case 'commitWorkspaceTransaction': return commitMutation({ author: value, transactionId: 'privacy-probe' }, admitted => commitWorkspaceTransaction({ ...admitted, pmRoot: f.pmRoot, steps: [{ id: 'probe', async inspect() { return { state: 'pending' }; }, async apply() { return null; }, async compensate() {} }] }));
+        case 'close': return commitMutation({ id, note: value }, admitted => f.client.close(admitted.id, admitted.note));
+        case 'restore': return commitMutation({ id, target: value }, admitted => f.client.restore(admitted.id, admitted.target));
         case 'update': return commitMutation({ id, options: { comment: [value] } }, admitted => f.client.update(admitted.id, admitted.options));
         case 'files': return commitMutation({ id, options: { add: [value] } }, admitted => f.client.files(admitted.id, admitted.options));
         case 'claim': return commitMutation({ id, options: { author: value } }, admitted => f.client.claim(admitted.id, admitted.options));

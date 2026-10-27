@@ -26,8 +26,11 @@ class GitCommandFailure extends Error {
 }
 /** Await a lane result without changing the established Git error transport. */
 async function laneOperation(operation: Promise<Record<string, unknown>>, repo: string | undefined): Promise<Record<string, unknown>> {
-  try { return await operation; }
-  catch (error) { if (repo === undefined) throw error; throw new GitCommandFailure(error); }
+  try {
+    const result = await operation;
+    return repo !== undefined && typeof result.worktree === 'string' ? { ...result, worktree: relative(repo, result.worktree) } : result;
+  }
+  catch (error) { if (repo === undefined || error instanceof SettingsRefusal) throw error; throw new GitCommandFailure(error); }
 }
 /** Read a scalar from the immutable input frame already checked by admission. */
 function textOption(value: unknown): string | undefined { return value as string | undefined; }
@@ -130,7 +133,6 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     ctx = { ...ctx, args: [...ctx.args], options: { ...ctx.options }, global: { ...ctx.global } };
     validateCommandInputs(command, ctx);
     const result = await dispatch(command, ctx);
-    if (typeof result.worktree === 'string') result.worktree = relative(repositoryRoot(ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root)!, result.worktree);
     assertPrivatePathSafe(result);
     return result;
   } catch (error) {

@@ -61,7 +61,7 @@ export function assertSdkInstance(client?: unknown): void {
   if (ADMISSION.identities.size !== 1 || (client !== undefined && !(client instanceof PmClient))) throw new SettingsRefusal('swarm_sdk_mismatch', 'Use the host SDK client and one shared pm SDK installation; remove the nested SDK dependency, reinstall the extension and restart the process.');
 }
 /** Remove only SDK read projections, then compare every persisted field and the complete body canonically. */
-function documentFingerprint(item: Record<string, unknown>): string {
+export function documentFingerprint(item: Record<string, unknown>): string {
   const collections = ['comments', 'notes', 'learnings', 'files', 'tests', 'docs', 'reminders', 'events'];
   const metadata = Object.fromEntries(Object.entries(item).filter(([key, value]) => !['body', 'notes_count', 'tests_count', 'collection_counts'].includes(key)
     && !(collections.includes(key) && Array.isArray(value) && value.length === 0)));

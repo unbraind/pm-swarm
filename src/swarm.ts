@@ -1,4 +1,5 @@
 import { scheduleNext } from './fair-scheduling.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
 import { gitEnvironment } from './git-environment.ts';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
@@ -6,21 +7,31 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve, extname, relative } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal } from '@unbrained/pm-cli/sdk';
-import type { PmClient, TestResult } from '@unbrained/pm-cli/sdk';
+import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath } from '@unbrained/pm-cli/sdk';
+import type { PmClient, TestResult, ClaimResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
 import { branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
 import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
-import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings } from './settings.ts';
-import { inspectItem, readItem } from './inspection.ts';
+import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, SettingsRefusal } from './settings.ts';
+import { inspectItem, readItem, historySnapshot } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 import { recoveryItem } from './recovery.ts';
+
+/** Every acquisition and following fallible step before a Git start receipt is returned. */
+export const START_TRANSITIONS = ['claimed', 'claim_read', 'branch_created', 'worktree_created', 'configured', 'published', 'receipt'] as const;
+/** Request-local trusted diagnostics for failure/interleaving tests, never a CLI or environment switch. */
+const START_OBSERVER = new AsyncLocalStorage<(transition: typeof START_TRANSITIONS[number]) => void | Promise<void>>();
+/** Observe real start boundaries without substituting SDK/Git reads, writes or results. */
+export function withStartTransitionObserver<T>(observer: (transition: typeof START_TRANSITIONS[number]) => void | Promise<void>, operation: () => T): T { return START_OBSERVER.run(observer, operation); }
+
+/** Emit a boundary only after its acquisition receipt has been retained for cleanup. */
+async function startTransition(transition: typeof START_TRANSITIONS[number]): Promise<void> { await START_OBSERVER.getStore()?.(transition); }
 
 /** Bind all operations to one real repository, tracker, and caller identity. */
 export class Swarm {
@@ -108,7 +119,8 @@ export class Swarm {
       const common = git(this.repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
       // Coordination is not a domain write and must not announce principal liveness before admission.
       const release = await retryLock(() => { lease.assert(); return commitMutation({ resource: 'operation', author: this.author }, admitted => acquireLock(join(common, 'swarm.local'), admitted.resource, 1800, admitted.author)); });
-      try { return await operation(lease); } finally { await release(); }
+      lease.onRelease(release);
+      return operation(lease);
     }, { allowBlocking: true, receiptWorkspace: this.repo });
   }
 
@@ -129,20 +141,87 @@ export class Swarm {
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     assertPrivatePathSafe({ id: item.id, branch, base, worktree: relative(this.repo, path), overlap_warnings });
-    await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, admitted => this.client.claim(admitted.id, admitted.options)));
-    const claimed = (await readItem(this.client, id)).item;
-    let created = false;
+    const initial = await historySnapshot(this.pmRoot, String(item.id));
+    let receipt: ClaimResult | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
+    let branchOwned = false; let created = false; let configured = false;
+    let cleaned = false;
+    const cleanup = async () => {
+      if (cleaned) return; cleaned = true;
+      const failures: unknown[] = [];
+      /** Attempt every independent owned release, even if an earlier cleanup fails. */
+      const clean = async (action: () => void | Promise<void>) => { try { await action(); } catch (failure) { failures.push(failure); } };
+      let metadataClean = publication === undefined;
+      if (publication !== undefined && receipt !== undefined) await clean(async () => {
+        const version = receipt!.previous_assignee === null ? initial.version + 1 : initial.version;
+        const current = await this.acquisitionSnapshot(String(item.id), version, receipt!.item);
+        for (const key of ['swarm_branch', 'swarm_base', 'swarm_base_ref']) if (current.document.metadata[key] !== publication![key]) throw new StaleFenceError('lane metadata');
+        const keys = ['swarm_branch', 'swarm_base', 'swarm_base_ref'];
+        await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => item[key] !== undefined).map(key => `${key}=${String(item[key])}`), unset: keys.filter(key => item[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options)), { announce: false });
+        metadataClean = true;
+      });
+      if (metadataClean && configured) await clean(() => {
+        if (git(this.repo, ['config', '--local', '--get', `swarm.lane.${item.id}`]) !== path) throw new StaleFenceError('lane configuration');
+        git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]);
+      });
+      if (metadataClean && created) await clean(() => {
+        if (commit(path, 'HEAD') !== base) throw new StaleFenceError('lane worktree');
+        git(this.repo, ['worktree', 'remove', path]);
+      });
+      if (metadataClean && branchOwned) await clean(() => {
+        if (git(this.repo, ['worktree', 'list', '--porcelain']).includes(`branch refs/heads/${branch}\n`)) throw new StaleFenceError('lane branch');
+        git(this.repo, ['update-ref', '-d', `refs/heads/${branch}`, base]);
+      });
+      if (receipt !== undefined && receipt.previous_assignee === null && receipt.skipped !== true) await clean(() => this.releaseAcquiredClaim(String(item.id), initial.version + 1, receipt!.item, lease));
+      if (failures.length > 0) throw new SettingsRefusal('swarm_document_changed', 'Start failed and some owned cleanup could not be verified. Preserve peer changes, inspect the remaining claim or Git lane, and reconcile it before retrying.');
+    };
+    lease.onFailure(cleanup);
     try {
-      git(this.repo, ['worktree', 'add', '-b', branch, path, base]); created = true;
-      git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]);
-      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed }, admitted => this.client.update(admitted.id, admitted.options)));
+      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item }, async admitted => {
+        receipt = await this.client.claim(admitted.id, admitted.options);
+        claimed = { ...receipt.item, body: item.body ?? '' }; return receipt;
+      }));
+      await startTransition('claimed');
+      claimed = (await readItem(this.client, id)).item;
+      await startTransition('claim_read');
+      git(this.repo, ['update-ref', `refs/heads/${branch}`, base, '0'.repeat(base.length)]); branchOwned = true;
+      await startTransition('branch_created');
+      git(this.repo, ['worktree', 'add', path, branch]); created = true;
+      await startTransition('worktree_created');
+      git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]); configured = true;
+      await startTransition('configured');
+      await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`] }, item: claimed! }, async admitted => {
+        const published = await this.client.update(admitted.id, admitted.options); publication = { ...published.item, body: claimed!.body ?? '' }; return published;
+      }));
+      await startTransition('published');
+      const result = { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
+      await startTransition('receipt');
+      return result;
     } catch (error) {
-      if (created) { git(this.repo, ['config', '--local', '--unset', `swarm.lane.${item.id}`]); git(this.repo, ['worktree', 'remove', path]); }
-      if (branchExists(this.repo, branch)) git(this.repo, ['branch', '-D', branch]);
-      if (view.claim_state?.claimed === false) await lease.write(() => commitItemMutation({ id: item.id, options: { author: this.author }, item: claimed }, admitted => this.client.release(admitted.id, admitted.options)));
+      await cleanup();
       throw error;
     }
-    return { id: item.id, branch, base, worktree: path, overlap_warnings, missing_merge_drivers: missingDrivers(path) };
+  }
+
+  /** Release only the exact acquired native claim lineage; fresh content and peer ownership survive cleanup. */
+  async releaseAcquiredClaim(id: string, version: number, expected: Record<string, unknown>, lease: Lease): Promise<void> {
+    const current = await this.acquisitionSnapshot(id, version, expected);
+    await lease.write(() => commitItemMutation({ id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author } }, admitted => this.client.release(admitted.id, admitted.options)), { announce: false });
+  }
+
+  /** Verify the acquired native receipt and every later ownership transition without trusting messages. */
+  async acquisitionSnapshot(id: string, version: number, expected: Record<string, unknown>) {
+    const acquired = await historySnapshot(this.pmRoot, id, version);
+    if (documentFingerprint(acquired.document.metadata) !== documentFingerprint(expected)) throw new StaleFenceError('start claim receipt');
+    const current = await historySnapshot(this.pmRoot, id);
+    const history = await readHistoryEntries(getHistoryPath(this.pmRoot, id), id);
+    let owner = acquired.document.metadata.assignee;
+    for (let next = version + 1; next <= current.version; next++) {
+      const point = await historySnapshot(this.pmRoot, id, next); const entry = history[point.target.historyIndex];
+      if (['claim', 'release', 'restore'].includes(entry.op) || point.document.metadata.assignee !== owner) throw new StaleFenceError('start claim lineage');
+      owner = point.document.metadata.assignee;
+    }
+    if (owner !== this.author) throw new StaleFenceError('start claim owner');
+    return current;
   }
 
   /** Discover lanes from certified item fields and existing local branches. */
@@ -264,14 +343,14 @@ export class Swarm {
     const trust = await resolveLinkedTestTrustBatch(this.pmRoot, tests, await resolveLinkedTestSourceRef(this.repo));
     if (trust.some(decision => !decision.trusted)) throw new Error(`Linked tests are untrusted for ${id}`);
     const directory = mkdtempSync(join(tmpdir(), 'pm-swarm-')); const path = join(directory, 'verify');
-    git(this.repo, ['worktree', 'add', '--detach', path, sha]);
     try {
+      git(this.repo, ['worktree', 'add', '--detach', path, sha]);
       await commitMutation({ tests, at: nowIso() }, admitted => acknowledgeLinkedTests(join(path, '.agents/pm'), admitted.tests, admitted.at));
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
       const environment: NodeJS.ProcessEnv = { ...gitEnvironment(), PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
       const result = spawnSync(process.execPath, [fileURLToPath(runner)], { cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
       if (result.status !== 0 || result.stdout !== JSON.stringify({ passed: true })) throw new Error(`Linked tests failed for ${id}: ${result.stderr}`);
-    } finally { git(this.repo, ['worktree', 'remove', '--force', path]); rmSync(directory, { recursive: true, force: true }); }
+    } finally { try { if (existsSync(join(path, '.git'))) git(this.repo, ['worktree', 'remove', '--force', path]); } finally { rmSync(directory, { recursive: true, force: true }); } }
   }
 
   /** Reap only terminal merged branches, and release only this caller's stale claims. */
@@ -306,7 +385,7 @@ export class Swarm {
         if (pathResult.status === 0) git(this.repo, ['config', '--local', '--unset', `swarm.lane.${lane.id}`]);
       }
       removed.push(lane.id);
-      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.author }, item: current }, admitted => this.client.release(admitted.id, admitted.options))); released.push(lane.id); }
+      if (lane.agent === this.author) { if (!dryRun) await lease.write(() => commitItemMutation({ id: lane.id, options: { author: this.author }, item: current }, admitted => this.client.release(admitted.id, admitted.options)), { announce: false }); released.push(lane.id); }
     }
     return { dry_run: dryRun, removed, released, cleanup, refused };
   }
