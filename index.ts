@@ -31,4 +31,4 @@ export { settings } from './src/settings.ts';
 /** Expose portable lane contracts. */
 export type { Candidate, Lane, Prediction, Separation, SwarmSettings } from './src/types.ts';
 /** Activate the swarm command family and its extension fields. */
-export default defineExtension({ name: 'pm-swarm', version: '2026.10.15', description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
+export default defineExtension({ name: 'pm-swarm', version: "2026.10.28", description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
