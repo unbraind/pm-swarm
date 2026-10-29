@@ -73,7 +73,7 @@ export function traceCloseTail(t: TestContext, f: Awaited<ReturnType<typeof shar
   const tokens = new Map<string, string>(); const remove = tokens.delete.bind(tokens);
   tokens.delete = key => { hit('tokens.delete'); return remove(key); };
   const engine = new Swarm(f.repo, f.pmRoot, client, 'shared-test');
-  return { state, restore, close: (token: string) => completeClaim(engine, id, 'Public completion', token, tokens) };
+  return { state, restore, close: (token?: string) => completeClaim(engine, id, 'Public completion', token, tokens) };
 }
 
 /** Fail the actual asynchronous native call before invocation or immediately after its real return. */

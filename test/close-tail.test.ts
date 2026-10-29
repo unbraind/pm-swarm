@@ -76,6 +76,20 @@ test('lease renewal failures during an awaited native return retain the committe
   });
 });
 
+test('error-only empty-runtime cleanup cannot hide a committed legacy native close', async t => {
+  for (const fault of FAULTS) await t.test(fault.name, async child => {
+    const f = await sharedFixture(child); installCloseTailProbe(f); const id = await f.item(); await f.client.claim(id);
+    let publication = false; let cleanup = false;
+    const probe = traceCloseTail(child, f, id, { index: event => {
+      if (event === 'renameSync:agent.json.temporary') { publication = true; return true; }
+      if (event === 'rmdirSync:swarm') { cleanup = true; return true; }
+      return false;
+    }, value: () => cleanup ? fault.value() : new Error('Injected initial heartbeat fault') });
+    try { await assert.rejects(probe.close(), remedy(id, true)); }
+    finally { probe.restore(); assert.equal(publication, true); assert.equal(cleanup, true); await assertOutcome(f, id, true); }
+  });
+});
+
 for (const committed of [false, true]) test(`native promise rejection ${committed ? 'after' : 'before'} commit retains the exact outcome and typed remedy`, async t => {
   for (const fault of [...FAULTS, { name: 'promise object rejection', value: () => ({ rejected: 'Injected promise fault' }) }]) await t.test(fault.name, async child => {
     const f = await sharedFixture(child); const { id, claim } = await closeClaim(f); const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
