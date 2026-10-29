@@ -180,7 +180,7 @@ the installed host. npm/Bun dependency installation alone does not activate it.
 
 ## Without git
 
-Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
+Resource deadlock detection and request declarations, Plan progress reads and witness declarations, plus resource status, reservation, renewal, publication and release work in plain trackers and never invoke Git, including when Git is absent from PATH. Git worktree planning and branch landing require Git. See the resource example below for an independent resource loop alongside item claims.
 
 The primary agent loop is `next` → heartbeat while working → `sync --files --token` → `close --token`. Run `pm init` in a plain directory and install the extension there. Mode is detected once per invocation; non-Git workspaces return `mode: shared-tracker`. `settings` works without repository detection. The tracker commands do not start Git in this mode, including when Git is absent from PATH.
 
@@ -519,3 +519,13 @@ GitHub OIDC releases keep provenance enabled.
 
 See [portable receipts and generation-owned recovery](docs/receipt-and-generation-verification.md)
 for compatibility fixtures, interleaving matrices and native lock evidence.
+
+## Resource deadlock witnesses
+
+`pm swarm deadlocks` explains explicit multi-resource waiting with bounded SDK
+cycle components, fenced wait edges and reviewable manual release alternatives.
+Detection is read-only. Inspect an anchor with `pm swarm deadlocks <resource>`,
+then preview `--action request --token <token> --resources <ids> --revision <revision>`;
+add `--apply` to record intent. `--clear` withdraws intent without releasing the
+reservation. Expired or superseded generations never participate. See the
+[complete example and concurrency contract](docs/resource-deadlocks.md).

@@ -204,6 +204,10 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
     const reserved = invoke(runtime, ['swarm', 'resource', resource, '--action', 'reserve']);
     invoke(runtime, ['swarm', 'resource', resource, '--action', 'renew', '--token', String(reserved.token)]);
     invoke(runtime, ['swarm', 'resource', resource, '--action', 'publish', '--token', String(reserved.token), '--note', 'Packed publication']);
+    const wanted = invoke(runtime, ['create', 'Task', 'Packed wanted slot', '--tags', 'swarm-resource']).id as string;
+    const observed = invoke(runtime, ['swarm', 'deadlocks', resource]);
+    invoke(runtime, ['swarm', 'deadlocks', resource, '--action', 'request', '--token', String(reserved.token), '--resources', wanted, '--revision', String(observed.revision), '--apply']);
+    assert.deepEqual(invoke(runtime, ['swarm', 'deadlocks']).cycles, []);
     invoke(runtime, ['swarm', 'resource', resource, '--action', 'release', '--token', String(reserved.token)]);
     const land = spawnSync(runtime, [host, 'swarm', 'land', '--json'], { cwd: repo, env, encoding: 'utf8' });
     assert.equal(land.status, 2); assert.match(land.stdout + land.stderr, /needs a git repository/);
@@ -233,4 +237,45 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
     assert.equal(invoke(runtime, ['health', '--strict-exit']).ok, true);
   }
   assert.equal(existsSync(join(repo, '.git')), false);
+});
+
+/** Verify one immutable pack through actual npm-global and Bun-global host symlinks. */
+test('packed deadlock commands use the SDK supplied by global npm and Bun hosts', { timeout: 600000 }, async t => {
+  requireBun();
+  const root = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-global-witness-'));
+  t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const version = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { devDependencies: Record<string, string> }).devDependencies['@unbrained/pm-cli'];
+  const environment = gitEnvironment({ ...process.env, HOME: scratch, NPM_CONFIG_USERCONFIG: '/dev/null', npm_config_userconfig: '/dev/null', GIT_CEILING_DIRECTORIES: scratch });
+  for (const key of Object.keys(environment)) if (/token|secret|password|credential|api_key|npm_media_server/i.test(key)) delete environment[key];
+  /** Run each public package manager or host without inherited credentials or user configuration. */
+  const invoke = (cwd: string, bin: string, args: string[], extra: NodeJS.ProcessEnv = {}) => {
+    const result = spawnSync(bin, args, { cwd, env: { ...environment, ...extra }, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 300000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout;
+  };
+  const packed = JSON.parse(invoke(root, 'npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch])) as { filename: string; shasum: string }[];
+  const tarball = join(scratch, packed[0].filename); const bytes = readFileSync(tarball);
+  const extracted = join(scratch, 'artifact'); mkdirSync(extracted);
+  invoke(root, 'tar', ['-xzf', tarball, '-C', extracted]);
+  for (const manager of ['npm', 'bun']) {
+    const prefix = join(scratch, `${manager}-prefix`); const project = join(scratch, `${manager}-project`); mkdirSync(project);
+    const globalEnv = { BUN_INSTALL: prefix, BUN_INSTALL_GLOBAL_DIR: join(prefix, 'install/global'), BUN_INSTALL_BIN: join(prefix, 'bin') };
+    if (manager === 'npm') invoke(project, 'npm', ['install', '--global', '--prefix', prefix, '--ignore-scripts', `@unbrained/pm-cli@${version}`]);
+    else invoke(project, 'bun', ['add', '--global', '--ignore-scripts', `@unbrained/pm-cli@${version}`], globalEnv);
+    const host = join(prefix, 'bin/pm'); assert.ok(existsSync(host));
+    const pmEnv = { ...globalEnv, PM_PATH: join(project, '.agents/pm'), PM_SOURCE_PM_PATH: join(project, '.agents/pm'), PM_SOURCE_WORKSPACE_ROOT: project, PM_GLOBAL_PATH: join(project, 'global-context'), PM_AUTHOR: 'global-worker' };
+    /** Exercise the global pm executable rather than resolving its target ourselves. */
+    const pm = (...args: string[]) => JSON.parse(invoke(project, host, [...args, '--json'], pmEnv)) as Record<string, unknown>;
+    pm('init', 'global-witness', '--defaults', '--agent-guidance', 'skip');
+    pm('install', join(extracted, 'package'), '--project');
+    const anchor = String(pm('create', 'Task', 'Global anchor', '--tags', 'swarm-resource', '--parent', 'none').id);
+    const target = String(pm('create', 'Task', 'Global target', '--tags', 'swarm-resource', '--parent', 'none').id);
+    const held = pm('swarm', 'resource', anchor, '--action', 'reserve');
+    const current = pm('swarm', 'deadlocks', anchor);
+    const declaration = ['swarm', 'deadlocks', anchor, '--action', 'request', '--resources', target, '--token', String(held.token), '--revision', String(current.revision)];
+    assert.equal(pm(...declaration).applied, false);
+    assert.equal(pm(...declaration, '--apply').applied, true);
+    const observed = pm('swarm', 'deadlocks'); assert.equal(observed.resources, 2); assert.deepEqual(observed.cycles, []);
+    assert.deepEqual(readFileSync(tarball), bytes, 'The accepted artifact changed between consumers');
+  }
+  console.log(JSON.stringify({ global_hosts: 2, artifact_shasum: packed[0].shasum, same_artifact: true }));
 });

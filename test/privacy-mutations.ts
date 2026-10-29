@@ -23,7 +23,7 @@ export function mutationInputs(variant: MutationVariant, id = 'public-item'): { 
     const key = flag.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
     if (required[key] !== undefined) options[key] = required[key];
   }
-  return { args: variant.id ? [id] : [], options: { ...options, ...variant.options } };
+  return { args: variant.id || variant.command === 'deadlocks' ? [id] : [], options: { ...options, ...variant.options } };
 }
 
 /** Create an owned core Plan through the real CLI and read its coherent progress revision. */

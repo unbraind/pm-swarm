@@ -1,3 +1,7 @@
+/** Declare pending resource waits and expose read-only SDK cycle witnesses. */
+export { ResourceDeadlocks, DeadlockRefusal, RESOURCE_REQUEST_FIELD, parseResourceRequest, DEADLOCK_BOUNDARIES, withDeadlockObserver } from './src/deadlocks.ts';
+/** Portable declaration, wait edge, witness and refusal contracts. */
+export type { ResourceRequest, ResourceWait, DeadlockReport, DeadlockRefusalCode } from './src/deadlocks.ts';
 /** Expose opt-in fair assignment options, compact decisions and actionable refusals. */
 export { SchedulingRefusal } from './src/fair-scheduling.ts';
 /** Typed policy inputs and bounded scheduling receipts. */
