@@ -1,3 +1,4 @@
+import { DeadlockRefusal } from './deadlocks.ts';
 import type { CommandHandlerContext } from '@unbrained/pm-cli/sdk/authoring';
 import { assertPrivatePathSafe, resolveSwarmSettings, SettingsRefusal, validatePersistedRoot } from './settings.ts';
 import { FairPolicy } from './fair-scheduling.ts';
@@ -17,7 +18,7 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   for (const arg of ctx.args) if (typeof arg !== 'string' || !arg.trim()) invalid('Supply nonempty item ids.');
   for (const [name, value] of Object.entries(ctx.options)) {
     if (value === undefined) continue;
-    if (['dryRun', 'apply', 'execute', 'full', 'strict', 'watch'].includes(name)) {
+    if (['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(name)) {
       if (typeof value !== 'boolean') invalid('Supply boolean switches without a value.');
     } else if (typeof value !== 'string' || !value.trim()) invalid('Supply one nonempty value for each flag.');
   }
@@ -46,6 +47,12 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
 
 /** Validate action-specific numeric and declaration inputs without opening a backend. */
 export function validateActionInputs(command: string, options: Record<string, unknown>): void {
+  if (command === 'deadlocks') {
+    if (options.action !== undefined && !['detect', 'inspect', 'request'].includes(String(options.action))) throw new DeadlockRefusal('deadlock_invalid', 'Use --action detect, inspect or request.');
+    if (options.limit !== undefined && (!Number.isSafeInteger(Number(options.limit)) || Number(options.limit) < 1 || Number(options.limit) > 50)) throw new DeadlockRefusal('deadlock_invalid', 'Set limit to an integer from 1 through 50.');
+    if (options.clear === true && options.resources !== undefined) throw new DeadlockRefusal('deadlock_invalid', 'Supply either --clear or --resources.');
+    if (options.action !== 'request' && ['token', 'resources', 'revision', 'clear', 'apply'].some(key => options[key] !== undefined)) throw new DeadlockRefusal('deadlock_invalid', 'Use --action request with declaration flags; inspection and detection are read-only.');
+  }
   if (command === 'schedule') new FairPolicy('input-admission', { skills: options.skills === undefined ? [] : String(options.skills).split(',').map(value => value.trim()), maxWaitSeconds: options.maxWait === undefined ? undefined : Number(options.maxWait), limit: options.limit === undefined ? undefined : Number(options.limit) });
   if (command === 'resource') {
     const action = options.action ?? 'status';

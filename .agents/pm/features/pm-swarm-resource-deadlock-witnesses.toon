@@ -1,0 +1,46 @@
+id: pm-swarm-resource-deadlock-witnesses
+title: Explain resource deadlocks with fenced request witnesses
+description: "Record explicit pending resource requests, project current holder/requester wait edges and return bounded SDK cycle components with reviewable manual release alternatives."
+type: Feature
+status: in_progress
+priority: 2
+tags[1]: "gh:unbraind/pm-swarm#38"
+created_at: "2026-10-29T07:28:14.800Z"
+updated_at: "2026-10-29T09:14:02.560Z"
+author: codex-agent
+acceptance_criteria: A two-worker/two-resource deadlock yields the exact cycle; expired generations are excluded; detection revokes nothing; SDK graph cycle results match the projected requests.
+comments[9]{created_at,author,text}:
+  "2026-10-29T07:28:37.596Z",codex-agent,"Overlap recheck: core SDK owns fenced claims, native history and graph collectOrderingCycles; pm-graph exposes structural cycles and pm-gantt-chart scheduling cycles. Existing swarm reservations guard one resource and fair scheduling selects ready work. No package records multi-resource pending waits. New requests bind a live held resource generation to wanted resource identities; detection is observational and never changes leases. Reuse native SDK guards and append-only heads; workspace transactions alone do not exclude ordinary writers (pm-cli#1620)."
+  "2026-10-29T07:45:09.550Z",codex-agent,"Implemented typed ResourceDeadlocks request/inspect/detect APIs and native swarm deadlocks command. Requests bind current anchor fences and exact native history revisions; previews and writes share the same path. SDK collectOrderingCycles supplies components. Focused cycle, expiry, withdrawal, revision replay and all three native mutation-boundary ABA cases pass. Public main snapshot 3ee1ad5: 32 items, 0 resources, 0 requests, 0 edges and 0 cycles; all tracker files/directories read-only, changed files 0, measured observation 11128 ms. Cold writable guard lists may create ignored metadata caches; read-only SDK fallback succeeds. Full release gates reserved for CI as instructed; 500-sequence model and packed consumer coverage in progress."
+  "2026-10-29T07:59:57.178Z",codex-agent,"Validation: 10 focused non-git tests passed (exact cycle, revisions/replays, malformed records, all native mutation-boundary ABA cases, registry roles, graph limits and dependent changes); 1000 seeded schema producer cases passed. Same immutable pack shasum 79b5902335dac8479617d1f39a6729ade98cfae2 passed npm-global and Bun-global host acceptance, 1 test/2 hosts. Linked pm test run passed 2 schema tests with exit 0. Behavioral revert in a disposable copy removed SDK cycle projection: positive cycle test exited 1 on the expected cycle assertion; restoring the implementation exited 0. Typecheck/lint/docstrings/duplication and identity checks passed. Full 500-sequence model, npm/Bun full release checks and installation matrix are CI evidence; local long model run was stopped after 100 sequences when its fixture was superseded by relationship/focus coverage. No full suite was run on the saturated host. Remaining concurrency window: related resources may change after final native-history checks; detection always reprojects current holders and never revokes."
+  "2026-10-29T08:05:51.396Z",codex-agent,"PR #38 is ready for review. Final targeted coverage before the expiry-window tightening: 11 tests passed and src/deadlocks.ts measured 100 statements/branches/functions/lines. Added a clock-controlled regression for a reservation expiring during the observation itself: detection now refuses this stale observation instead of returning an expired holder. Post-history-check token and owner races both refuse, preserving peer state. Refactored repeated fixture setup; duplication is again 0% without changing thresholds. Current CI receipt: https://github.com/unbraind/pm-swarm/pull/38/checks; final npm/Bun release-gate counts and exact run URL are retained on the PR. Public-copy numbers and revert proof remain in docs/resource-deadlocks-verification.md. The 500-sequence native state/focus/relationship model is required by CI; no local full-gate claim."
+  "2026-10-29T08:08:31.537Z",codex-agent,"Final refinements verified: expiry crossing the observation window refuses with deadlock_stale; withdrawn empty declarations are excluded from the pending request count. Both focused regressions passed. The seeded model now compares native body read-back as well as relationships, ownership, foreign fields and request envelopes. Final local typecheck, lint, docstring gate (37 files, 185 declarations), duplication (0 percent), changelog and prior identity checks passed. Native-window and observation tests now total 12 distinct focused tests; 500 randomized preview/apply/replay sequences and whole-source npm/Bun coverage remain required on final-head CI. No items closed and no resources revoked; this claim remains released for orchestrator verification."
+  "2026-10-29T08:18:21.326Z",codex-agent,"Strengthened the admission-boundary ABA regression with the existing real SDK native-history helper: release/claim/restore recreates byte-identical item content and a strictly longer native history. All three native boundaries require the exact swarm_superseded code; the focused regression passed. This replaces the weaker title-only restoration setup and updates verification wording. Runtime implementation is unchanged by this final test strengthening. No approval is inferred from skipped automated reviews; final-head release-gate evidence is on PR #38."
+  "2026-10-29T08:27:00.056Z",codex-agent,"CI https://github.com/unbraind/pm-swarm/actions/runs/40840075014 ran 954 tests on each Node matrix job: 951 passed, 3 failed because new deadlocks command/write sites were absent from the existing privacy fixture inventories. Both Node versions passed all 500 seeded native model sequences. Fixed the inventories without changing runtime code or weakening guards. Targeted rerun passed 3/3: 20140 rejected-input cases across 20 mutating variants and 85 encodings with zero tracker changes, plus 22 enumerated writer sites, 16 locked native-history sites and 110 refused sink/source cases with zero durable changes. Typecheck, lint and duplication remain green. Superseded runs are not approval or final-head evidence; the final npm/Bun release gates must pass on the new commit and their receipts are retained on PR #38."
+  "2026-10-29T08:46:01.071Z",codex-agent,"Found and fixed producer/reader disagreement for a legacy native live reservation at generation 0: ResourceReservations.status and the request schema accept it, while detection excluded it. Detection now honors that same nonnegative generation domain. Real SDK regression declares the request as its owner and checks the exact projected wait edge, with malformed sibling records still isolated. In a disposable copy, reverting only this generation predicate fails the expected request-projection assertion (exit 1); restoration passes (exit 0). Typecheck/lint/duplication/docstrings passed. Prior-head Node 26 npm release gates completed successfully and Bun gates started; exact final-head npm/Bun results are still required and will be recorded on PR #38. Remaining unrelated-resource interleaving window is unchanged and documented."
+  "2026-10-29T09:13:58.682Z",codex-agent,"Complete CI matrix passed at b6aff7f: https://github.com/unbraind/pm-swarm/actions/runs/40844606730. Final shared-path refinements now also cover the reservation adapter default when the native generation field is absent: one exported internal resourceGeneration normalizer serves reservations and witnesses, while commit guards compare the exact native representation and its history. Explicit and implicit generation-zero declarations both preview/apply and project the exact expected wait edge through real SDK state. Preview now calls the same full native-document privacy guard as commit; both preview/apply refuse a private document with byte-identical tracker state. Targeted native/concurrency tests passed 4/4 and final compatibility/privacy tests 2/2; typecheck/lint/duplication/docstrings passed (37 files, 186 declarations). Runtime changes require a fresh final-head CI matrix, linked on PR #38; no earlier green run substitutes for that evidence."
+files[16]{path,scope}:
+  index.ts,project
+  src/admission.ts,project
+  src/commands.ts,project
+  src/deadlocks.ts,project
+  src/resource-tracker.ts,project
+  src/resources.ts,project
+  test/deadlocks-edges.test.ts,project
+  test/deadlocks-public.acceptance.ts,project
+  test/deadlocks.test.ts,project
+  test/install.acceptance.ts,project
+  test/privacy-admission.test.ts,project
+  test/privacy-invocation.test.ts,project
+  test/privacy-mutations.ts,project
+  test/privacy-punctuation.test.ts,project
+  test/privacy-refusals.test.ts,project
+  test/privacy-sinks.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-concurrency=1 --test-name-pattern='strict declaration|extreme declaration' test/deadlocks.test.ts,project,codex-agent,"2026-10-29T07:54:27.510Z",local_mutation,feat/resource-deadlock-witnesses
+docs[4]{path,scope}:
+  CHANGELOG.md,project
+  docs/resource-deadlocks-verification.md,project
+  docs/resource-deadlocks.md,project
+  README.md,project
+body: ""

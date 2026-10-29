@@ -11,6 +11,7 @@ import { assertPrivatePathSafe, SettingsRefusal, updateSettings } from '../src/s
 import { containsPrivatePath } from '../src/privacy.ts';
 import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
+import { ResourceDeadlocks } from '../src/deadlocks.ts';
 import { ResourceReservations } from '../src/resources.ts';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { PlanProgress } from '../src/progress.ts';
@@ -40,8 +41,11 @@ test('every mutating command cross rejected encoding and input position is byte-
   const resource = (await f.client.create({ type: 'Task', title: 'Resource', tags: 'swarm-resource' })).item.id;
   const resources = new ResourceReservations(trackerResourceBackend(f.shared.engine), 'shared-test');
   const reservation = await resources.reserve(resource);
+  const target = (await f.client.create({ type: 'Task', title: 'Pending resource target', tags: 'swarm-resource', parent: 'none' })).item.id;
+  const requestRevision = (await new ResourceDeadlocks(f.shared.engine).inspect(resource)).revision;
   const { plan, view } = await ownedPlan(f);
   const inputs: Record<string, { args: string[]; options: Record<string, unknown> }> = {
+    deadlocks: { args: [resource], options: { action: 'request', token: reservation.token, resources: target, revision: requestRevision, apply: true } },
     schedule: { args: [], options: { skills: 'typescript' } }, next: { args: [], options: { parent: 'public-parent' } },
     start: { args: [ready], options: { root: 'lanes', base: 'main', branchPrefix: 'work/' } },
     sync: { args: [id], options: { files: 'src/work.ts,test/work.ts', token: claim.token, apply: true } },
@@ -75,7 +79,7 @@ test('every mutating command cross rejected encoding and input position is byte-
       await unchanged(f.pmRoot, () => runCommand(command, ctx), `${command}/invalid-scalar`); checked++;
     }
   }
-  assert.equal(scenarios.length, 19); assert.ok(checked > 2000);
+  assert.equal(scenarios.length, 20); assert.ok(checked > 2000);
   console.log(JSON.stringify({ mutating_variants: scenarios.length, encodings: rejectedCorpus.length, refused_input_cases: checked, tracker_changes: 0, partial_receipts: 0 }));
 });
 

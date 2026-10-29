@@ -4,6 +4,7 @@
 
 ### Added
 
+- Explain resource deadlocks with fenced request witnesses ([pm-swarm-resource-deadlock-witnesses](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-resource-deadlock-witnesses.toon))
 - Integrate settings and package quality gates ([pm-swarm-y972](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-y972.toon))
 
 ### Fixed
