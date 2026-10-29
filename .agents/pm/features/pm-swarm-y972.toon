@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-29T00:13:53.246Z"
+updated_at: "2026-10-29T01:41:53.356Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[202]{created_at,author,text}:
+comments[207]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -215,7 +215,12 @@ comments[202]{created_at,author,text}:
   "2026-10-29T00:08:32.403Z",codex-agent,"Merge-only continuation after MERGE review: read main release 0c936c2, release archive fix 7feb492 and toolchain update 19f0dd8 before resolving conflicts. Preserve main version 2026.10.28, its local verified-archive publish path and SDK/toolchain 2026.10.25; retain all reviewed package settings, renderer, privacy, native-close refusal and diagnostic exports. Use a two-parent merge, regenerate changelog, focused module tests then types/lint with at most two workers. No rebase, force-push, merge of the PR or release."
   "2026-10-29T00:13:23.476Z",codex-agent,"Merge resolution: index.ts is byte-identical to the reviewed PR entry point except its default-extension version line, taken verbatim from main release 0c936c2 (2026.10.28). Every settings/renderer/receipt/history diagnostic and read-only-close export survives. Main 7feb492 local verified-archive publish path is preserved alongside all PR release protections; main 19f0dd8 SDK, changelog and ops 2026.10.25 pins and lockfile are retained. Incoming pm-swarm-aa9h item/history are byte-identical to main; no existing history records were merged by hand. Installed merge mappings before merging. Initial stale-runtime health refusal was resolved by npm ci with the new main pin, without override. Strict health with required merge mappings passes; only telemetry_queue_pending:1 is advisory and untouched. Focused commands/settings-renderer/close/changelog/release-policy selection passed 66/66 (90852.698198 ms), zero failures/skips/cancellations. Pinned pm linked changelog bridge passed 1/1. Typecheck and lint run after the focused suite. Regenerate/check changelog after final tracker writes, then create the two-parent merge and run npm/Bun CI on that exact head. No production algorithm, test threshold, test exclusion, release permission or review scope changed."
   "2026-10-29T00:13:52.106Z",codex-agent,"Final merge-local verification: npm run typecheck and npm run lint both passed after 66/66 focused tests and 1/1 pinned PM bridge test. Release my claim with this item still in_progress. Changelog generation/check, append-only history-prefix verification and final merge commit follow; exact-head npm/Bun CI will be linked in PR 24 and the final report, with the newly authorized maximum 45-minute wait. No further tracker writes during final CI verification."
-files[101]{path,scope}:
+  "2026-10-29T01:06:55.380Z",codex-agent,"Re-review class: the native SDK close commits inside withSwarmLease, but the final heartbeat, receipt admission and lease cleanup run after the inner close handler. Move the handler around the entire awaited lease lifecycle and retain the observed native primary-commit flag outside it. Every later error becomes the safe read-only recovery refusal with canonical item/native-journal remedy; unexpected storage errors before an observed commit get a distinct typed uncommitted-close code, preserving existing typed admission/fence refusals. Add real non-Git SDK fault enumeration across every observed post-commit operation and pre-commit counterparts, including storage errno values, non-Error throws and actual promise rejection. No automatic close replay or restore. Prove the handler reversion fails, then focused/type/lint checks and exact-head npm/Bun CI with the 45-minute cap."
+  "2026-10-29T01:24:29.248Z",codex-agent,"Behavioral revert proof: in a disposable credential-free source copy, revert only completeClaim to a05c433 while retaining the current error class and tests. node --test --test-concurrency=1 --test-reporter=tap --test-name-pattern=\"final lease heartbeat\" test/close-tail.test.ts exits 1 with 0/1 passing: the second principal-heartbeat rename throws raw EIO after native close. The test verifies in finally that the real native item is closed with exactly one close history entry. No module/import failure; the source worktree was never reverted. Restored-source focused run passes that case and the renewal/promise/pre-commit selection (23/23). The exhaustive storage-fault run passed 147/147 before the final metadata/helper refinements; a pinned linked final-source run measures the entire close module next."
+  "2026-10-29T01:32:03.877Z",codex-agent,"Final-source linked run exercised 173 tests: 172 passed and one retained peer-close regression failed. The new generic pre-commit storage classification hid a peer native close as not_committed. Preserve the unchanged peer assertion by checking the admitted native history head after an uncommitted generic failure; an advanced head remains swarm_superseded, with no ownership inference or writes. Post-commit errors still go directly through the single recovery handler without any history re-interpretation. The same run measured all close lines/functions/statements at 100 percent; only the reopened-history branch was absent from this targeted file selection, so include the existing reopen regression in the final selection. No assertions or thresholds weakened."
+  "2026-10-29T01:41:43.743Z",codex-agent,"Final post-commit boundary evidence: pinned pm test --only-last --run --progress passed 176/176 across close-tail, native/refusal/peer/reopen and resources, zero fail/skip/cancel (185136.801231 ms). src/close.ts measured 100 statements/branches/functions/lines, with no ignore or threshold change. The dynamic completion inventory has 32 operations x EIO/ENOSPC/EACCES/scalar throws = 128 faults; actual native promise rejection covers five causes both before and after commit; four real 5.2-second renewal cases cover asynchronous lease failure. Every post-commit fault names the item/native journal, reports observed commitment and retains exactly one native close; read-only retries preserve bytes. Pre-commit faults leave the item open with zero close entries and a distinct typed code; existing fencing refusals remain unchanged. Reverting only completeClaim makes the final-heartbeat regression fail on raw EIO after its finally check proves one committed close. The final test-helper deduplication retained all assertions; restored focused selection passed 23/23 (48040.814531 ms). Typecheck, lint, zero duplication, build and 177 documented declarations across 36 files pass. One outer awaited lease try/catch covers all completion awaits and cleanup; no replay, restore or recovery journal coordinator was added. No new SDK gap."
+  "2026-10-29T01:41:47.776Z",codex-agent,"Freeze this patch for exact-head npm/Bun CI on PR 24, with at most two workers and the authorized 45-minute wait. Keep this item in_progress and release my claim before final tracker/changelog checks and push; CI URL and counts will be recorded in the PR body and final report. Main is included. Public failed-run evidence remains append-only and the peer test was preserved rather than weakened."
+files[103]{path,scope}:
   CHANGELOG.md,project
   docs/native-close.md,project
   index.ts,project
@@ -254,6 +259,8 @@ files[101]{path,scope}:
   test/close-refusal-worker.ts,project
   test/close-refusal.test.ts,project
   test/close-regressions.test.ts,project
+  test/close-tail-helpers.ts,project
+  test/close-tail.test.ts,project
   test/commands.test.ts,project
   test/edges.test.ts,project
   test/fencing.test.ts,project
@@ -317,7 +324,7 @@ files[101]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[29]:
+tests[31]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -573,6 +580,22 @@ tests[29]:
     provenance:
       author: codex-agent
       created_at: "2026-10-29T00:12:18.077Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node_modules/.bin/c8 --include=src/close.ts --reporter=text --reports-dir=coverage/close-tail node --test --test-concurrency=2 --test-reporter=tap test/close-tail.test.ts test/close-refusal.test.ts test/close-native.test.ts test/close-peer.test.ts test/resources.test.ts
+    scope: project
+    timeout_seconds: 1200
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-29T01:23:44.849Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node_modules/.bin/c8 --include=src/close.ts --reporter=text --reports-dir=coverage/close-tail node --test --test-concurrency=2 --test-reporter=tap test/close-tail.test.ts test/close-refusal.test.ts test/close-native.test.ts test/close-peer.test.ts test/close-regressions.test.ts test/resources.test.ts
+    scope: project
+    timeout_seconds: 1200
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-29T01:32:05.971Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[7]{path,scope}:

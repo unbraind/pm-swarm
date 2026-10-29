@@ -34,6 +34,19 @@ matching documents and matching tokens never prove ownership.
 Previously closed items remain unsupported even after a native reopen or restore.
 This conservative rule never tries to decide who owned an earlier close.
 Repeated calls leave native items, histories and legacy journals unchanged.
+The completion handler awaits the whole lease lifecycle, including receipt
+admission, both principal heartbeats and all release/cleanup operations. Once the
+primary native commit is observed, any later failure returns the same typed
+recovery refusal with `committed: true` for SDK callers. Its remedy explicitly
+states that the native close committed and names the item and native journal.
+Errors and thrown scalars are never echoed as generic completion failures.
+
+Unexpected storage failures within the lease before an observed commit return
+`swarm_close_not_committed`, naming the item and journal and asking the operator to
+inspect storage/lease state and refresh ownership before retrying. Existing typed
+privacy, history and fencing refusals retain their own code. This is based on the
+actual native commit hook, never inferred from an author or copied journal text.
+
 Swarm never resumes close, compensates the primary, restores dependents or repairs
 its own missing receipt automatically. Inspect the native item, dependency state
 and journal with core commands and reconcile explicitly. Core owns the

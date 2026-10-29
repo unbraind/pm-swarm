@@ -2,7 +2,7 @@ import { relative, sep } from 'node:path';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, validateWorkspaceTransactionIdentity, getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
 import { clientMutationSnapshot, inspectItem } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
-import { commitItemMutation, assertPrivatePathSafe, SettingsRefusal } from './settings.ts';
+import { commitItemMutation, assertPrivatePathSafe, assertItemHistoryHead, SettingsRefusal } from './settings.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import type { Swarm } from './swarm.ts';
@@ -13,11 +13,14 @@ export class CloseRecoveryUnsupported extends SettingsRefusal {
   readonly item_id: string;
   /** Tracker-relative native history or legacy transaction entry requiring inspection. */
   readonly journal_entry: string;
+  /** Present only when this invocation observed the primary native commit. */
+  readonly committed: true | undefined;
   /** Refuse recovery without echoing local coordinates or document content. */
-  constructor(id: string, entry: string) {
+  constructor(id: string, entry: string, committed = false) {
     assertPrivatePathSafe({ id, entry });
-    super('swarm_close_recovery_unsupported', `Inspect item ${id} and journal entry ${entry} with native pm commands. Preserve their bytes and reconcile explicitly; swarm never resumes, restores or rewrites an interrupted close.`, 'close');
+    super('swarm_close_recovery_unsupported', `${committed ? 'The native close committed. ' : ''}Inspect item ${id} and journal entry ${entry} with native pm commands. Preserve their bytes and reconcile explicitly; swarm never resumes, restores or rewrites an interrupted close.`, 'close');
     this.name = 'CloseRecoveryUnsupported'; this.item_id = id; this.journal_entry = entry;
+    this.committed = committed ? true : undefined;
   }
 }
 /** Legacy markers identify entries to inspect; they never select an automatic restore target. */
@@ -59,14 +62,18 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
     try { const snapshot = await clientMutationSnapshot(engine.pmRoot, engine.client, row.id); related.set(String(snapshot.item.id), { item: snapshot.item, history: snapshot.historyHead }); }
     catch { /* Unreadable foreign rows stay unadmitted; core reports affected dependent failures unchanged. */ }
   }
-  return withSwarmLease(engine.pmRoot, engine.author, async lease => {
-    let result: Awaited<ReturnType<typeof engine.client.close>>; let written = false;
-    try { result = await lease.write(() => commitItemMutation({ id: canonicalId, item, note, options: { author: engine.author, message: 'Swarm native close' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { history: admission.historyHead, related, onCommitted: () => { written = true; } })); }
-    catch (error) {
-      if (error instanceof SettingsRefusal && !written) throw error;
-      throw new CloseRecoveryUnsupported(canonicalId, `${journal}#after=${admission.historyHead.length}`);
-    }
-    assertPrivatePathSafe(result.warnings, 'warnings'); tokens.delete(canonicalId);
-    return { id: canonicalId, closed: true as const, ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}) };
-  });
+  let written = false;
+  try {
+    // Await the entire lifecycle: final receipt admission, heartbeat and release are part of close.
+    return await withSwarmLease(engine.pmRoot, engine.author, async lease => {
+      const result = await lease.write(() => commitItemMutation({ id: canonicalId, item, note, options: { author: engine.author, message: 'Swarm native close' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { history: admission.historyHead, related, onCommitted: (_before, after) => { if (after.metadata.id === canonicalId) written = true; } }));
+      assertPrivatePathSafe(result.warnings, 'warnings'); tokens.delete(canonicalId);
+      return { id: canonicalId, closed: true as const, ...(result.warnings.length > 0 ? { warnings: result.warnings } : {}) };
+    });
+  } catch (error) {
+    if (written) throw new CloseRecoveryUnsupported(canonicalId, `${journal}#after=${admission.historyHead.length}`, true);
+    if (error instanceof SettingsRefusal || error instanceof StaleFenceError) throw error;
+    await assertItemHistoryHead(engine.pmRoot, canonicalId, admission.historyHead);
+    throw new SettingsRefusal('swarm_close_not_committed', `No native close commit was observed for item ${canonicalId}. Inspect journal entry ${journal} and the operation lease, resolve the refusal or storage failure, then refresh ownership before retrying.`, 'close');
+  }
 }
