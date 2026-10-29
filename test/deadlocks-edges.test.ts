@@ -4,6 +4,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 import { ResourceDeadlocks, Swarm, RESOURCE_TAG, RESOURCE_REQUEST_FIELD, withDeadlockObserver, parseResourceRequest } from '../index.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { SettingsRefusal } from '../src/settings.ts';
+import { unchanged } from './privacy-snapshot.ts';
 import { declareService } from './privacy-mutations.ts';
 
 /** Seed previously supported native resource fields through the actual SDK. */
@@ -35,14 +37,18 @@ test('foreign request damage is isolated and same-owner requests are already sat
   await f.client.update(a, { field: [`${RESOURCE_REQUEST_FIELD}=${' '.repeat(4097)}`] });
   assert.equal((await w.inspect(a)).request, null);
   assert.ok((await w.detect()).skipped.some(row => row.id === a && row.reason === 'invalid_or_foreign_request'));
-  await f.client.update(b, { assignee: 'worker-1', field: ['swarm_token=0'] });
   const zero = new ResourceDeadlocks(new Swarm(f.repo, f.pmRoot, f.client, 'worker-1'));
-  const revision = (await zero.inspect(b)).revision;
-  const accepted = await zero.request(b, { version: 1, token: '0', resources: [a] }, revision, true);
-  assert.equal(accepted.applied, true);
-  const projected = await zero.detect();
-  assert.equal(projected.requests, 1, 'Every accepted generation uses the same reservation validity on read-back');
-  assert.deepEqual(projected.edges, [{ requester: 'worker-1', holder: 'worker-0', anchor: b, anchor_token: '0', resource: a, token: '1' }]);
+  for (const implicit of [false, true]) {
+    await f.client.update(b, { assignee: 'worker-1', ...(implicit ? { unset: ['swarm_token', RESOURCE_REQUEST_FIELD] } : { field: ['swarm_token=0'] }) });
+    const revision = (await zero.inspect(b)).revision;
+    const input = { version: 1, token: '0', resources: [a] };
+    const preview = await zero.request(b, input, revision);
+    const accepted = await zero.request(b, input, revision, true);
+    assert.equal(accepted.applied, true); assert.equal(accepted.changed, preview.changed);
+    const projected = await zero.detect();
+    assert.equal(projected.requests, 1, 'Every accepted generation uses the same reservation validity on read-back');
+    assert.deepEqual(projected.edges, [{ requester: 'worker-1', holder: 'worker-0', anchor: b, anchor_token: '0', resource: a, token: '1' }]);
+  }
   await f.client.update(b, { field: ['swarm_token=damaged'] });
   assert.ok((await w.detect()).skipped.some(row => row.id === b && row.reason === 'inactive_or_expired'));
   declareService(f);
@@ -103,4 +109,15 @@ test('known expiries crossing the observation window refuse instead of returning
     }, () => w.detect()), { code: 'deadlock_stale' });
   } finally { t.mock.timers.reset(); }
   assert.equal((await w.detect()).resources, 2);
+});
+
+
+test('preview and apply share the full native document privacy refusal without side effects', async t => {
+  const { f, a, b, w } = await edgeFixture(t);
+  const privateBody = encodeURIComponent(['', 'home', 'private', 'context'].join('/'));
+  await f.client.update(a, { body: privateBody, force: true });
+  const revision = (await w.inspect(a)).revision;
+  for (const apply of [false, true]) await unchanged(f.pmRoot,
+    () => w.request(a, { version: 1, token: '1', resources: [b] }, revision, apply),
+    `private-document-${apply}`, error => error instanceof SettingsRefusal && error.code === 'swarm_private_path');
 });

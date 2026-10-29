@@ -23,6 +23,9 @@ export class ResourceRefusal extends Error {
 export function validateResourceToken(token: unknown): asserts token is string {
   if (typeof token !== 'string' || !/^(0|[1-9][0-9]*)$/.test(token)) throw new ResourceRefusal('resource_stale_fence', 'Supply the decimal --token returned by reserve; discard an invalid token and reserve again.');
 }
+/** Preserve the native reservation adapter's default generation for legacy optional fields. */
+export function resourceGeneration(value: unknown): string { return String(value ?? '0'); }
+
 /** Portable snapshot of an explicit resource item on the selected tracker. */
 export interface ResourceRecord {
   id: string;

@@ -2,10 +2,10 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { collectOrderingCycles } from '@unbrained/pm-cli/sdk/graph';
 import { inspectItem, inspectItems, mutationSnapshot } from './inspection.ts';
-import { assertItemHistoryHead, commitItemMutation, documentFingerprint } from './settings.ts';
+import { assertItemHistoryHead, assertPrivatePathSafe, commitItemMutation, documentFingerprint } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
 import { withSwarmLease } from './lease.ts';
-import { ResourceReservations, RESOURCE_TAG } from './resources.ts';
+import { ResourceReservations, RESOURCE_TAG, resourceGeneration } from './resources.ts';
 import { trackerResourceBackend } from './resource-tracker.ts';
 import type { Swarm } from './swarm.ts';
 
@@ -107,6 +107,7 @@ export class ResourceDeadlocks {
         if (canonical !== target || canonical === anchor.id) throw new DeadlockRefusal('deadlock_invalid', 'Use distinct canonical resource ids other than the anchor.');
         targets.set(canonical, paired);
       }
+      assertPrivatePathSafe(snapshot.item, 'document');
       const value = JSON.stringify(request);
       const receipt = admitReceipt({ id: anchor.id, revision, request, changed: JSON.stringify(storedRequest(snapshot.item[RESOURCE_REQUEST_FIELD])) !== value, applied: apply });
       /** Recheck all decision heads and expiry immediately before the native target write. */
@@ -120,7 +121,7 @@ export class ResourceDeadlocks {
       await OBSERVER.getStore()?.('validated');
       await revalidate();
       if (apply && receipt.changed) {
-        await commitItemMutation({ id: anchor.id, item: snapshot.item, options: { author: this.engine.author, field: [`${RESOURCE_REQUEST_FIELD}=${value}`] } }, admitted => this.engine.client.update(admitted.id, admitted.options), { history: snapshot.historyHead, generation: { token: request.token }, beforeWrite: revalidate });
+        await commitItemMutation({ id: anchor.id, item: snapshot.item, options: { author: this.engine.author, field: [`${RESOURCE_REQUEST_FIELD}=${value}`] } }, admitted => this.engine.client.update(admitted.id, admitted.options), { history: snapshot.historyHead, generation: { token: snapshot.item.swarm_token }, beforeWrite: revalidate });
         await OBSERVER.getStore()?.('committed');
         const written = await this.local(anchor.id);
         if (written[RESOURCE_REQUEST_FIELD] !== value) throw new DeadlockRefusal('deadlock_stale', 'A peer superseded the declaration; inspect current request state before retrying.');
@@ -143,10 +144,11 @@ export class ResourceDeadlocks {
     const live = new Map<string, Record<string, unknown>>();
     const skipped: DeadlockReport['skipped'] = [];
     for (const item of resources) {
-      if (statusIsTerminal(String(item.status), registry) || typeof item.assignee !== 'string' || !item.assignee.trim() || typeof item.swarm_token !== 'string' || !/^(0|[1-9][0-9]{0,79})$/.test(item.swarm_token) || typeof item.swarm_resource_expires_at !== 'string' || !(Date.parse(item.swarm_resource_expires_at) > now)) {
+      const token = resourceGeneration(item.swarm_token);
+      if (statusIsTerminal(String(item.status), registry) || typeof item.assignee !== 'string' || !item.assignee.trim() || !/^(0|[1-9][0-9]{0,79})$/.test(token) || typeof item.swarm_resource_expires_at !== 'string' || !(Date.parse(item.swarm_resource_expires_at) > now)) {
         skipped.push({ id: String(item.id), reason: 'inactive_or_expired' }); continue;
       }
-      live.set(String(item.id), item);
+      live.set(String(item.id), { ...item, swarm_token: token });
     }
     const edges: ResourceWait[] = []; let requests = 0;
     for (const [id, item] of live) {
