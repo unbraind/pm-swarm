@@ -1,10 +1,19 @@
 # Changelog
 
-## 2026.10.15 - 2026-10-15
+## Unreleased
 
 ### Added
 
 - Integrate settings and package quality gates ([pm-swarm-y972](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-y972.toon))
+
+### Fixed
+
+- Resume fenced close with an SDK workspace transaction ([pm-swarm-atomic-close](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-atomic-close.toon))
+
+## 2026.10.28 - 2026-10-28
+
+### Added
+
 - Select ready work fairly using skills, age and handoff costs ([pm-swarm-fair-scheduling](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-fair-scheduling.toon))
 - Aggregate revision-bound shared plan progress witnesses ([pm-swarm-plan-progress](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-plan-progress.toon))
 - Coordinate parallel agents on a shared tracker without git ([pm-swarm-shared-tracker](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-shared-tracker.toon))
@@ -20,10 +29,6 @@
 ### Changed
 
 - Adopt pm-github 2026.10.16: default-branch-safe gated sync and daily gated closeout PRs ([pm-swarm-lux2](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-lux2.toon))
-
-### Fixed
-
-- Resume fenced close with an SDK workspace transaction ([pm-swarm-atomic-close](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-atomic-close.toon))
 
 ### Other
 

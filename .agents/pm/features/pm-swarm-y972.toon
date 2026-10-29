@@ -7,12 +7,12 @@ status: in_progress
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-27T21:31:09.464Z"
+updated_at: "2026-10-29T00:13:53.246Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
-comments[199]{created_at,author,text}:
+comments[202]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
   "2026-10-15T19:50:57.430Z",codex-agent,"Ordinary full release gate passed 70/70 suite tests, four 100% coverage dimensions across 18 source files, and zero production audit findings, then packed acceptance exposed untracked in-repository lane directories in its tightened fixture. Ignore the fixture-owned lane directory; retain the production clean-worktree refusal. Packed npm/native Bun acceptance also exercises default receipt omission and real full flags. Full gates will be rerun after this fixture correction."
@@ -212,7 +212,11 @@ comments[199]{created_at,author,text}:
   "2026-10-27T21:15:21.916Z",codex-agent,"Split freeze evidence: node --test --test-concurrency=2 --test-reporter=tap test/close-*.test.ts test/resources.test.ts under c8 passed 24/24, zero failures/skips/cancellations/todo (78177.119951 ms); src/close.ts measures 100 statements/branches/functions/lines without ignores. Pinned pm test --only-last --run --progress passed the new canonical/recovery link: 5/5 (6873.313782 ms). Restored Git-derived sync full-tracker regression passed 1/1. Broader targeted snapshot/receipt/sink tests exercised all lines/functions of inspection; only the ordering regression above failed and was fixed without weakening assertions. npm run typecheck, lint, build, docstring (36 files, 174 declarations), duplication (zero clones, 0/12784 lines across 131 sources) pass. Full package 100/100/100/100 plus packed npm/Bun acceptance remain the final-head CI release gates at https://github.com/unbraind/pm-swarm/pull/24/checks, at most two workers. All tracker writes finish before that push; CI run URL and exact counts will be reported in the PR body. Origin/main is included: 58 ahead, zero behind. No merge or release."
   "2026-10-27T21:31:00.541Z",codex-agent,"First split CI https://github.com/unbraind/pm-swarm/actions/runs/40585383828 measured 745 tests on Node22 and Node26: 741 passed, four failed; statements/functions/lines 100 percent, branches 99.91 percent. Two expectations incorrectly assumed the retired owner/token close policy instead of native assignee clearing and the new unsupported-recovery code; corrected them to exact native behavior, retaining native byte-oracle tests. The whole-tracker refusal property exposed SDK read bookkeeping before close rejection. One pure admitCloseDocument now runs for local refusal and again on the authoritative head-before-document snapshot. Native canonical identity uses the SDK public mutation-free get projection at version 1 (only immutable ID consumed), including resources, progress and cleanup; no current-read usage is written just to choose a history stream. Registry input/state assertions remain unchanged and pass: 509 input plus 37 state/backend cases, zero tracker changes/partial receipts. Added real resource heartbeat/handoff refusal cases and a real locked beforeWrite callback refusal to cover both previously missed branches. Targeted restored run 12/12 (9372.656776 ms), history/cleanup/lost-return run 9/9 (6959.947053 ms). Three new disposable behavioral reverts each exit 1: remove pure local refusal => close tracker assertion fails; remove mutation-free identity => resource tracker assertion fails; remove locked callback => Missing expected rejection and an unwanted native comment. Source restored before positive checks. Typecheck/lint/build pass, duplication zero (0/12816 lines across 132 sources), 176 declarations across 36 files documented. Previous close-module 100 percent coverage is superseded by final-head CI after this shared preflight refactor. CodeQL passed the first split head; no full release approval claimed. The existing 30-minute cutoff still starts at the first split push."
   "2026-10-27T21:31:08.616Z",codex-agent,"Pinned pm test --only-last --run --progress now passes the corrected split regression link: 12/12, no failures/skips. All CI remediation tracker writes finish before the next push; final run and packed acceptance counts will be recorded in PR 24. Release this claim, retain in_progress, and leave recovery Feature/issue 34 open."
-files[100]{path,scope}:
+  "2026-10-29T00:08:32.403Z",codex-agent,"Merge-only continuation after MERGE review: read main release 0c936c2, release archive fix 7feb492 and toolchain update 19f0dd8 before resolving conflicts. Preserve main version 2026.10.28, its local verified-archive publish path and SDK/toolchain 2026.10.25; retain all reviewed package settings, renderer, privacy, native-close refusal and diagnostic exports. Use a two-parent merge, regenerate changelog, focused module tests then types/lint with at most two workers. No rebase, force-push, merge of the PR or release."
+  "2026-10-29T00:13:23.476Z",codex-agent,"Merge resolution: index.ts is byte-identical to the reviewed PR entry point except its default-extension version line, taken verbatim from main release 0c936c2 (2026.10.28). Every settings/renderer/receipt/history diagnostic and read-only-close export survives. Main 7feb492 local verified-archive publish path is preserved alongside all PR release protections; main 19f0dd8 SDK, changelog and ops 2026.10.25 pins and lockfile are retained. Incoming pm-swarm-aa9h item/history are byte-identical to main; no existing history records were merged by hand. Installed merge mappings before merging. Initial stale-runtime health refusal was resolved by npm ci with the new main pin, without override. Strict health with required merge mappings passes; only telemetry_queue_pending:1 is advisory and untouched. Focused commands/settings-renderer/close/changelog/release-policy selection passed 66/66 (90852.698198 ms), zero failures/skips/cancellations. Pinned pm linked changelog bridge passed 1/1. Typecheck and lint run after the focused suite. Regenerate/check changelog after final tracker writes, then create the two-parent merge and run npm/Bun CI on that exact head. No production algorithm, test threshold, test exclusion, release permission or review scope changed."
+  "2026-10-29T00:13:52.106Z",codex-agent,"Final merge-local verification: npm run typecheck and npm run lint both passed after 66/66 focused tests and 1/1 pinned PM bridge test. Release my claim with this item still in_progress. Changelog generation/check, append-only history-prefix verification and final merge commit follow; exact-head npm/Bun CI will be linked in PR 24 and the final report, with the newly authorized maximum 45-minute wait. No further tracker writes during final CI verification."
+files[101]{path,scope}:
+  CHANGELOG.md,project
   docs/native-close.md,project
   index.ts,project
   manifest.json,project
@@ -313,7 +317,7 @@ files[100]{path,scope}:
   test/start-cleanup.test.ts,project
   test/start-peer-cleanup.test.ts,project
   test/tooling.test.ts,project
-tests[27]:
+tests[29]:
   - command: "node --test --test-name-pattern=\"partition|plan uses|start claims|status predicts|merge-tree invokes|reap removes|settings use|registered host|command entry|native host\" test/swarm.test.ts test/commands.test.ts"
     scope: project
     timeout_seconds: 600
@@ -553,6 +557,22 @@ tests[27]:
     provenance:
       author: codex-agent
       created_at: "2026-10-27T21:29:47.526Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=2 --test-reporter=tap test/commands.test.ts test/settings-and-output.test.ts test/close-regressions.test.ts test/changelog-pm.test.ts test/release-approval.test.ts
+    scope: project
+    timeout_seconds: 600
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-29T00:10:52.604Z"
+      source_kind: local_mutation
+      source_ref: feat/settings-and-quality-gates
+  - command: node --test --test-concurrency=1 --test-reporter=tap test/changelog-pm.test.ts
+    scope: project
+    timeout_seconds: 180
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-29T00:12:18.077Z"
       source_kind: local_mutation
       source_ref: feat/settings-and-quality-gates
 docs[7]{path,scope}:
