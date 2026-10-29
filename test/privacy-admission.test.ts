@@ -75,7 +75,7 @@ test('every mutating command cross rejected encoding and input position is byte-
       await unchanged(f.pmRoot, () => runCommand(command, ctx), `${command}/invalid-scalar`); checked++;
     }
   }
-  assert.equal(scenarios.length, 19); assert.ok(checked > 2000);
+  assert.equal(scenarios.length, 20); assert.ok(checked > 2000);
   console.log(JSON.stringify({ mutating_variants: scenarios.length, encodings: rejectedCorpus.length, refused_input_cases: checked, tracker_changes: 0, partial_receipts: 0 }));
 });
 

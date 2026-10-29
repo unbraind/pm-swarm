@@ -18,7 +18,7 @@ test('registered mutators refuse every input admission class without tracker cha
   const registered = host.activation.registrations.commands.map(definition => definition.command.replace(/^swarm /, ''));
   assert.deepEqual([...registered].sort(), Object.keys(swarmCommandDefinitions).sort());
   const variants = registered.flatMap(command => mutationVariants().filter(variant => variant.command === command));
-  assert.equal(variants.length, 19); assert.ok(variants.some(variant => variant.command === 'start'));
+  assert.equal(variants.length, 20); assert.ok(variants.some(variant => variant.command === 'start'));
   const codes = new Set<string>(); const counts: Record<string, number> = {};
   const privateValue = encodeURIComponent(['', 'home', 'private', 'project'].join('/'));
   for (const variant of variants) {
@@ -36,7 +36,7 @@ test('registered mutators refuse every input admission class without tracker cha
     if (variant.id) await refuse('missing-id', { ...base, args: [] }, 'swarm_input_invalid');
     for (const flag of variant.flags) {
       const key = flag.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
-      const boolean = ['dryRun', 'apply', 'execute', 'full', 'strict', 'watch'].includes(key);
+      const boolean = ['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(key);
       for (const value of boolean ? ['yes', null, 1] : ['', ['repeated'], null, 1]) {
         await refuse(`shape/${key}`, { ...base, options: { ...base.options, [key]: value } }, 'swarm_input_invalid');
       }
@@ -60,7 +60,7 @@ test('registered mutators refuse every input admission class without tracker cha
       for (const patch of [{ stage: 'invalid' }, { step: '' }, { revision: 'invalid' }, { evidence: 'x'.repeat(4097) }]) await refuse('witness-domain', { ...base, options: { ...base.options, ...patch } });
     }
   }
-  assert.deepEqual([...codes].sort(), ['progress_invalid', 'resource_invalid', 'resource_stale_fence', 'schedule_invalid', 'swarm_input_invalid', 'swarm_private_path', 'swarm_settings_invalid'].sort());
+  assert.deepEqual([...codes].sort(), ['deadlock_invalid', 'progress_invalid', 'resource_invalid', 'resource_stale_fence', 'schedule_invalid', 'swarm_input_invalid', 'swarm_private_path', 'swarm_settings_invalid'].sort());
   console.log(JSON.stringify({ registered_commands: registered.length, mutating_commands: Object.keys(counts).length, mutation_variants: variants.length, refused_input_cases: Object.values(counts).reduce((sum, value) => sum + value, 0), refusal_codes: [...codes].sort(), cases_per_command: counts, tracker_changes: 0, partial_receipts: 0 }));
 });
 
@@ -153,7 +153,9 @@ test('registered mutators preserve a prepared tracker across state and backend r
   await refuse('next', undefined, { parent: nextScope }, 'swarm_private_path');
   await refuse('schedule', undefined, { parent: nextScope }, 'swarm_private_path');
 
+  await refuse('deadlocks', resource, { action: 'request', token: reservation.token, resources: resource, revision: '1:' + '0'.repeat(64), apply: true }, 'deadlock_stale');
   declareService(f);
+  await refuse('deadlocks', resource, { action: 'inspect' }, 'deadlock_backend');
   await refuse('resource', resource, { action: 'renew', token: reservation.token }, 'resource_backend_refused');
   await refuse('schedule', undefined, {}, 'schedule_backend_refused');
   assert.equal((await f.client.get(held)).item.swarm_token, claim.token);

@@ -11,7 +11,7 @@ test('whole punctuation runs normalize before privacy decisions across random ho
     const child = spawnSync(process.execPath, [fileURLToPath(new URL('./privacy-punctuation-worker.ts', import.meta.url)), '250', String(seed ^ index)], { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: '' }, timeout: 120000 });
     assert.equal(child.status, 0, `Punctuation worker ${index}: ${child.stderr.replaceAll(home, '[configured-home]')}`);
     const result = JSON.parse(child.stdout) as { private_cases: number; allowed_cases: number; renderer_cases: number; variants: number };
-    assert.equal(result.variants, 19); privateCases += result.private_cases; allowedCases += result.allowed_cases; renderers += result.renderer_cases;
+    assert.equal(result.variants, 20); privateCases += result.private_cases; allowedCases += result.allowed_cases; renderers += result.renderer_cases;
   }
   assert.equal(privateCases, 5000); assert.equal(allowedCases, 5000);
   console.log(JSON.stringify({ seed: '0xc0ffee71', random_homes: 20, private_cases: privateCases, allowed_cases: allowedCases, command_refusals: privateCases * 19, command_admissions: allowedCases * 19, renderer_cases: renderers, false_refusals: 0, escapes: 0 }));

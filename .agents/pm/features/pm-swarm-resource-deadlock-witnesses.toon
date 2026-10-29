@@ -1,0 +1,31 @@
+id: pm-swarm-resource-deadlock-witnesses
+title: Explain resource deadlocks with fenced request witnesses
+description: "Record explicit pending resource requests, project current holder/requester wait edges and return bounded SDK cycle components with reviewable manual release alternatives."
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-10-29T07:28:14.800Z"
+updated_at: "2026-10-29T08:00:03.803Z"
+author: codex-agent
+acceptance_criteria: A two-worker/two-resource deadlock yields the exact cycle; expired generations are excluded; detection revokes nothing; SDK graph cycle results match the projected requests.
+comments[3]{created_at,author,text}:
+  "2026-10-29T07:28:37.596Z",codex-agent,"Overlap recheck: core SDK owns fenced claims, native history and graph collectOrderingCycles; pm-graph exposes structural cycles and pm-gantt-chart scheduling cycles. Existing swarm reservations guard one resource and fair scheduling selects ready work. No package records multi-resource pending waits. New requests bind a live held resource generation to wanted resource identities; detection is observational and never changes leases. Reuse native SDK guards and append-only heads; workspace transactions alone do not exclude ordinary writers (pm-cli#1620)."
+  "2026-10-29T07:45:09.550Z",codex-agent,"Implemented typed ResourceDeadlocks request/inspect/detect APIs and native swarm deadlocks command. Requests bind current anchor fences and exact native history revisions; previews and writes share the same path. SDK collectOrderingCycles supplies components. Focused cycle, expiry, withdrawal, revision replay and all three native mutation-boundary ABA cases pass. Public main snapshot 3ee1ad5: 32 items, 0 resources, 0 requests, 0 edges and 0 cycles; all tracker files/directories read-only, changed files 0, measured observation 11128 ms. Cold writable guard lists may create ignored metadata caches; read-only SDK fallback succeeds. Full release gates reserved for CI as instructed; 500-sequence model and packed consumer coverage in progress."
+  "2026-10-29T07:59:57.178Z",codex-agent,"Validation: 10 focused non-git tests passed (exact cycle, revisions/replays, malformed records, all native mutation-boundary ABA cases, registry roles, graph limits and dependent changes); 1000 seeded schema producer cases passed. Same immutable pack shasum 79b5902335dac8479617d1f39a6729ade98cfae2 passed npm-global and Bun-global host acceptance, 1 test/2 hosts. Linked pm test run passed 2 schema tests with exit 0. Behavioral revert in a disposable copy removed SDK cycle projection: positive cycle test exited 1 on the expected cycle assertion; restoring the implementation exited 0. Typecheck/lint/docstrings/duplication and identity checks passed. Full 500-sequence model, npm/Bun full release checks and installation matrix are CI evidence; local long model run was stopped after 100 sequences when its fixture was superseded by relationship/focus coverage. No full suite was run on the saturated host. Remaining concurrency window: related resources may change after final native-history checks; detection always reprojects current holders and never revokes."
+files[8]{path,scope}:
+  index.ts,project
+  src/admission.ts,project
+  src/commands.ts,project
+  src/deadlocks.ts,project
+  test/deadlocks-edges.test.ts,project
+  test/deadlocks-public.acceptance.ts,project
+  test/deadlocks.test.ts,project
+  test/install.acceptance.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-concurrency=1 --test-name-pattern='strict declaration|extreme declaration' test/deadlocks.test.ts,project,codex-agent,"2026-10-29T07:54:27.510Z",local_mutation,feat/resource-deadlock-witnesses
+docs[3]{path,scope}:
+  docs/resource-deadlocks-verification.md,project
+  docs/resource-deadlocks.md,project
+  README.md,project
+body: ""
