@@ -154,6 +154,7 @@ export class ResourceDeadlocks {
       const request = storedRequest(item[RESOURCE_REQUEST_FIELD]);
       if (request === null) { skipped.push({ id, reason: 'invalid_or_foreign_request' }); continue; }
       if (request.token !== item.swarm_token) { skipped.push({ id, reason: 'stale_request_generation' }); continue; }
+      if (request.resources.length === 0) continue;
       requests++;
       for (const target of request.resources) {
         const holder = live.get(target);
@@ -171,7 +172,7 @@ export class ResourceDeadlocks {
     const alternatives = [...new Map(cyclicEdges.map(edge => [edge.resource, { resource: edge.resource, owner: edge.holder, token: edge.token }])).values()];
     await OBSERVER.getStore()?.('observed');
     const fresh = await inspectItems(this.engine.pmRoot, this.engine.repo);
-    if (fresh === null || documentFingerprint({ resources: fresh.filter(item => (item.tags as string[]).includes(RESOURCE_TAG)) }) !== documentFingerprint({ resources })) throw new DeadlockRefusal('deadlock_stale', 'Resource state changed during observation; rerun detection on current generations.');
+    if (fresh === null || documentFingerprint({ resources: fresh.filter(item => (item.tags as string[]).includes(RESOURCE_TAG)) }) !== documentFingerprint({ resources }) || [...live.values()].some(item => Date.parse(String(item.swarm_resource_expires_at)) <= Date.now())) throw new DeadlockRefusal('deadlock_stale', 'Resource state changed during observation; rerun detection on current generations.');
     return admitReceipt({ resources: resources.length, requests, edge_count: edges.length, cycle_count: cycles.length, alternative_count: alternatives.length, skipped_count: skipped.length, edges: edges.slice(0, limit), cycles: cycles.slice(0, limit), alternatives: alternatives.slice(0, limit), skipped: skipped.slice(0, limit), truncated: [edges, cycles, alternatives, skipped].some(rows => rows.length > limit), read_only: true });
   }
 }

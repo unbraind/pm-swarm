@@ -68,7 +68,7 @@ derived metadata caches on a cold writable tracker; cache persistence is best
 effort and detection also works with the entire tracker read-only. It supports at most 128 resources
 and 512 projected edges. Larger topology yields `deadlock_limit` with a remedy,
 rather than an incomplete negative result. Each returned collection has a default
-10-row limit, configurable from 1 through 50. `truncated` announces omitted rows;
+10-row limit, configurable from 1 through 50. `requests` counts live, nonempty declarations. `truncated` announces omitted rows;
 a cycle can involve edges omitted from the compact edge collection. All counts
 are bounded integers. No import/export/sync format or replay journal is added;
 request persistence and read-back use native SDK item fields and history.

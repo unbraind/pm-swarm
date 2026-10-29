@@ -85,3 +85,14 @@ test('ordinary writers changing fences after history checks refuse before previe
     assert.equal(injected, true);
   }
 });
+
+
+test('known expiries crossing the observation window refuse instead of returning stale holders', async t => {
+  const { w } = await edgeFixture(t);
+  try {
+    await assert.rejects(withDeadlockObserver(boundary => {
+      if (boundary === 'observed') t.mock.timers.enable({ apis: ['Date'], now: Date.now() + 7200000 });
+    }, () => w.detect()), { code: 'deadlock_stale' });
+  } finally { t.mock.timers.reset(); }
+  assert.equal((await w.detect()).resources, 2);
+});

@@ -66,7 +66,7 @@ test('preview, withdrawal and revision-bound replays preserve foreign fields and
   const after = (await f.client.get(a, { depth: 'full' })).item;
   for (const key of ['parent', 'dependencies', 'assignee', 'tags', 'body', 'title', 'swarm_token', 'swarm_resource_expires_at']) assert.deepEqual(after[key], before[key]);
   await w.request(a, { ...input, resources: [] }, current.revision, true);
-  assert.equal((await w.detect()).requests, 1); assert.deepEqual((await w.detect()).edges, []);
+  assert.equal((await w.detect()).requests, 0); assert.deepEqual((await w.detect()).edges, []);
   await assert.rejects(f.witnesses[1].request(a, input, (await w.inspect(a)).revision, true), { code: 'deadlock_stale' });
 });
 
@@ -114,7 +114,8 @@ test('500 seeded operation sequences compare SDK read-back to an independent req
     const canonical = { version: 1 as const, token: '1', resources: active ? [b] : [] };
     const variant = { ...canonical, token: ' 1\r\n', resources: canonical.resources.map(id => ` ${id}\r\n`) };
     const revision = (await w.inspect(a)).revision;
-    const before = (await inspectItem(f.pmRoot, f.repo, a))!.item;
+    const beforeView = (await inspectItem(f.pmRoot, f.repo, a))!;
+    const before = beforeView.item;
     const preview = await w.request(a, variant, revision);
     assert.equal(preview.changed, model !== JSON.stringify(canonical));
     const result = await w.request(a, variant, revision, true);
@@ -124,7 +125,9 @@ test('500 seeded operation sequences compare SDK read-back to an independent req
     // Replay older inputs in randomized order with their original native revision.
     const replay = old[random() % old.length];
     await assert.rejects(w.request(a, replay.value, replay.revision, true), { code: 'deadlock_stale' });
-    const readBack = (await inspectItem(f.pmRoot, f.repo, a))!.item;
+    const afterView = (await inspectItem(f.pmRoot, f.repo, a))!;
+    const readBack = afterView.item;
+    assert.equal(afterView.body, beforeView.body);
     assert.equal(readBack[RESOURCE_REQUEST_FIELD], model);
     for (const key of ['parent', 'dependencies', 'assignee', 'tags', 'description', 'swarm_token', 'swarm_resource_expires_at']) assert.deepEqual(readBack[key], before[key]);
     assert.deepEqual(parseResourceRequest(JSON.parse(String(readBack[RESOURCE_REQUEST_FIELD]))), canonical);
