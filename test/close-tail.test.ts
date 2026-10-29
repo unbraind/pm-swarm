@@ -15,6 +15,7 @@ import { installCloseTailProbe, rejectNativeClose, traceCloseTail } from './clos
 const FAULTS = [
   ...['EIO', 'ENOSPC', 'EACCES'].map(code => ({ name: code, value: () => Object.assign(new Error(`${code}: Injected storage fault`), { code }) })),
   { name: 'non-Error', value: () => 'Injected scalar fault' },
+  { name: 'undefined rejection', value: () => undefined },
 ];
 /** Activate the native observer before acquiring the real claim used by a fault case. */
 async function observedClaim(t: Parameters<typeof sharedFixture>[0]) {

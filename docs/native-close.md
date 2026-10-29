@@ -39,7 +39,9 @@ admission, both principal heartbeats and all release/cleanup operations. Once th
 primary native commit is observed, any later failure returns the same typed
 recovery refusal with `committed: true` for SDK callers. Its remedy explicitly
 states that the native close committed and names the item and native journal.
-Errors and thrown scalars are never echoed as generic completion failures.
+Errors and thrown scalars are never echoed as generic completion failures. The
+lease records failure presence separately from its unknown value, so an undefined
+throw or empty promise rejection cannot be mistaken for successful renewal.
 
 Unexpected storage failures within the lease before an observed commit return
 `swarm_close_not_committed`, naming the item and journal and asking the operator to

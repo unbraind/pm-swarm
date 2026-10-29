@@ -188,7 +188,7 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
         await delay(50 + Math.random() * 150);
       }
     } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
-    let failure: unknown;
+    let failure: { value: unknown } | undefined;
     /** Always validate both generations; synchronous Git work retains its live pin past expiry. */
     const generation = () => {
       const owner = readRuntime<Owner>(path);
@@ -196,7 +196,7 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
       return owner;
     };
     const assert = () => {
-      if (failure !== undefined) throw failure;
+      if (failure !== undefined) throw failure.value;
       const owner = generation();
       if (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs) throw new StaleFenceError('operation');
     };
@@ -206,7 +206,7 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
       publish(path, { ...identity, token, heartbeat: Date.now() });
       timer = setInterval(() => {
         try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); if (admitted) announce(); }
-        catch (error) { failure = error; }
+        catch (error) { failure = { value: error }; }
       }, renewMs);
       assert(); const result = await operation(lease);
       try { assert(); }
