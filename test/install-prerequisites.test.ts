@@ -26,7 +26,7 @@ for (const kind of ['missing', 'failed', 'empty', 'working'] as const) {
   });
 }
 
-for (const scenario of ['packed npm/npx', 'packed tarball coordinates']) {
+for (const scenario of ['packed npm/npx', 'packed npm tarball', 'packed bun tarball']) {
   test(`${scenario} reports missing Bun before consumer setup`, t => {
     const bin = mkdtempSync(join(tmpdir(), 'swarm-acceptance-prerequisite-'));
     t.after(() => rmSync(bin, { recursive: true, force: true }));

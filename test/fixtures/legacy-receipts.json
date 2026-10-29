@@ -1,0 +1,25 @@
+{
+  "package": "pm-swarm",
+  "version": "2026.10.15",
+  "integrity": "sha512-AKX80FWC0iDRCioA/wZCpM5rQIdhXALwDP2pMuXHa7H67TcUnC0fFkMNQl+bPr21y1fP1AEi1sbI/XVMMzFrZg==",
+  "host": "2026.10.23",
+  "receipts": [
+    {
+      "id": "legacy-plain",
+      "branch": "swarm/legacy-plain",
+      "base": "ebb32c2d1518d30e77170a7700e372cf8617c771",
+      "worktree": "@operator-home@/.pm-swarm/legacy-project-legacy-plain",
+      "overlap_warnings": [],
+      "missing_merge_drivers": []
+    },
+    {
+      "id": "legacy-unicode",
+      "branch": "swarm/legacy-unicode",
+      "base": "ebb32c2d1518d30e77170a7700e372cf8617c771",
+      "worktree": "@operator-home@/legacy lanes ü/legacy-project-legacy-unicode",
+      "overlap_warnings": [],
+      "missing_merge_drivers": []
+    }
+  ],
+  "normalization": "Only the disposable operator-home prefix is replaced by @operator-home@; domain fields and coordinate suffixes are unchanged."
+}

@@ -12,6 +12,8 @@ import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
 import { requireBun } from './install-helpers.ts';
 import { processExit } from './process-helpers.ts';
+import { assertPackedCloseOwnership } from './packed-ownership-helpers.ts';
+import { assertTrackerInvocations, assertIncomingHandoffRefusals } from './invocation-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
 test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, async t => {
@@ -75,7 +77,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     assert.equal(next.selected, id); assert.equal(next.dry_run, true);
     const start = JSON.parse(pm('swarm', 'start', id, '--agent', 'install-test', '--json')) as { branch: string; worktree: string };
     assert.equal(start.branch, `swarm/${id}`);
-    assert.equal(start.worktree, join(cwd, 'lanes', `${runtime}-${id}`));
+    assert.equal(start.worktree, join('lanes', `${runtime}-${id}`));
     const host = join(cwd, 'node_modules/.bin/pm');
     const directPlan = JSON.parse(run(cwd, runtime === 'npm' ? process.execPath : 'bun', [host, 'swarm', 'plan', '--json'])) as { suggested_start_set: string[] };
     assert.deepEqual(directPlan.suggested_start_set, []);
@@ -117,6 +119,14 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     run(cwd, 'git', ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record lane']);
     assert.equal((JSON.parse(pm('swarm', 'land', '--execute', '--json')) as { executed: boolean }).executed, true);
     assert.equal((JSON.parse(pm('swarm', 'reap', '--dry-run', '--json')) as { removed: string[] }).removed.length, 0);
+    for (const command of ['schedule', 'next']) for (const format of ['json', 'toon']) {
+      const candidate = JSON.parse(pm('create', 'Task', `Packed live ${command} ${format}`, '--json')).id as string;
+      pm('files', candidate, '--add', `src/${command}-${format}.ts`);
+      const output = pm('swarm', command, ...(format === 'json' ? ['--json'] : []));
+      const receipt = (format === 'json' ? JSON.parse(output) : decodeToon(output)) as { selected: string; worktree: string };
+      assert.equal(receipt.selected, candidate); assert.equal(receipt.worktree, join('lanes', `${runtime}-${candidate}`));
+      assert.equal(output.includes(scratch), false);
+    }
     for (const file of run(cwd, 'git', ['ls-files', '-z', '.agents/pm']).split('\0').filter(Boolean)) assert.equal(readFileSync(join(cwd, file), 'utf8').includes(scratch), false, file);
   }
   assert.deepEqual(fixtureSnapshot(decoy), before, 'Decoy repository changed');
@@ -140,17 +150,17 @@ test('built artifact has zero runtime dependencies beyond Node and the pm SDK', 
 
 
 /** Exercise the actual tarball on a plain tracker through Node and native Bun. */
-test('packed tarball coordinates a non-git tracker with explicit files and healthy history', { timeout: 600000 }, async t => {
+for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball runs every command on a fresh non-git tracker`, { timeout: 600000 }, async t => {
   const bun = requireBun();
   const packageRoot = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-shared-install-'));
-  t.after(() => rm(scratch, { recursive: true, force: true }));
-  const repo = join(scratch, 'project'); mkdirSync(repo);
+  t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+  const repo = join(scratch, 'project \u03a9 space'); mkdirSync(repo);
   const pmRoot = join(repo, '.agents/pm');
-  const host = join(packageRoot, 'node_modules/.bin/pm');
-  const env = gitEnvironment({ ...process.env, HOME: scratch, GIT_CEILING_DIRECTORIES: scratch, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PM_PATH: pmRoot, PM_SOURCE_WORKSPACE_ROOT: repo, PM_SOURCE_PM_PATH: pmRoot, PM_GLOBAL_PATH: join(scratch, 'global-pm'), PM_AUTHOR: 'packed-worker' });
+  const host = join(repo, 'node_modules/.bin/pm');
+  const env = gitEnvironment({ ...process.env, HOME: scratch, GIT_CEILING_DIRECTORIES: scratch, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PM_PATH: pmRoot, PM_SOURCE_WORKSPACE_ROOT: repo, PM_SOURCE_PM_PATH: pmRoot, PM_GLOBAL_PATH: join(scratch, 'global-pm'), PM_AUTHOR: 'packed-worker', NPM_CONFIG_USERCONFIG: '/dev/null', npm_config_userconfig: '/dev/null' });
   /** Run the real pinned host and reject extension activation or command failures. */
   const invoke = (runtime: string, args: string[]) => {
-    const result = spawnSync(runtime, [host, ...args, '--json'], { cwd: repo, env, encoding: 'utf8' });
+    const result = spawnSync(runtime, [host, '--path', pmRoot, ...args, '--json'], { cwd: repo, env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.doesNotMatch(result.stdout + result.stderr, /Extension activation failures/);
     return JSON.parse(result.stdout) as Record<string, unknown>;
@@ -159,23 +169,45 @@ test('packed tarball coordinates a non-git tracker with explicit files and healt
   assert.equal(packed.status, 0, packed.stderr);
   const filename = (JSON.parse(packed.stdout) as { filename: string }[])[0].filename;
   const tarball = join(repo, filename); writeFileSync(tarball, readFileSync(join(scratch, filename)));
+  writeFileSync(join(repo, 'package.json'), '{"name":"swarm-plain-consumer","private":true,"type":"module"}\n');
+  const installed = spawnSync(manager, [manager === 'npm' ? 'install' : 'add', '--ignore-scripts', '@unbrained/pm-cli@2026.10.23', tarball], { cwd: repo, env, encoding: 'utf8' });
+  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   invoke(process.execPath, ['init', 'packed-shared', '--defaults', '--agent-guidance', 'skip']);
   invoke(process.execPath, ['install', `./${filename}`, '--project']);
   const nodeBin = join(scratch, 'node-only'); mkdirSync(nodeBin); symlinkSync(process.execPath, join(nodeBin, 'node'));
   env.PATH = nodeBin;
   invoke(process.execPath, ['swarm', 'settings', '--progress-orchestrator', 'coordinator', '--apply']);
-  for (const runtime of [process.execPath, bun]) {
+  for (const runtime of [manager === 'npm' ? process.execPath : bun]) {
+    assert.equal(assertTrackerInvocations({ runtime, host, project: repo, pmRoot, environment: env }), 12);
     const id = invoke(runtime, ['create', 'Task', 'Packed shared lane']).id as string;
     invoke(runtime, ['files', id, '--add', 'src/work.ts']);
     invoke(runtime, ['update', id, '--add-tags', 'skill:typescript']);
     const preview = invoke(runtime, ['swarm', 'schedule', '--skills', 'typescript', '--dry-run']);
     assert.equal(preview.selected, id); assert.equal(preview.mode, 'shared-tracker');
+    invoke(runtime, ['swarm', 'plan']);
     const selected = invoke(runtime, ['swarm', 'next', '--agent', 'packed-worker']);
     assert.equal(selected.selected, id); assert.equal(selected.mode, 'shared-tracker'); assert.equal('branch' in selected, false);
+    assert.equal(assertIncomingHandoffRefusals({ runtime, host, project: repo, pmRoot, environment: env }, id, String(selected.token), ['typescript']), 16);
+    invoke(runtime, ['swarm', 'heartbeat', id, '--token', String(selected.token)]);
     const synced = invoke(runtime, ['swarm', 'sync', id, '--files', 'src/work.ts,test/work.test.ts', '--apply', '--token', String(selected.token)]);
     assert.deepEqual(synced.add, ['test/work.test.ts']);
     const status = invoke(runtime, ['swarm', 'status']); assert.equal((status.lanes as unknown[]).length, 1);
-    invoke(runtime, ['update', id, '--status', 'closed', '--message', 'Packed work verified']);
+    const transferred = invoke(runtime, ['swarm', 'handoff', id, '--token', String(selected.token), '--to', 'receiver', '--note', 'Packed context']);
+    invoke(runtime, ['swarm', 'close', id, '--agent', 'receiver', '--token', String(transferred.token), '--note', 'Packed work verified']);
+    const another = invoke(runtime, ['create', 'Task', 'Packed explicit start']).id as string;
+    const started = invoke(runtime, ['swarm', 'start', another]);
+    invoke(runtime, ['swarm', 'close', another, '--token', String(started.token), '--note', 'Packed start verified']);
+    assertPackedCloseOwnership(runtime, repo, pmRoot, host, env);
+    invoke(runtime, ['swarm', 'reclaim', '--stale-after', '120', '--dry-run']);
+    const resource = invoke(runtime, ['create', 'Task', 'Packed resource', '--tags', 'swarm-resource']).id as string;
+    invoke(runtime, ['swarm', 'resource', resource]);
+    const reserved = invoke(runtime, ['swarm', 'resource', resource, '--action', 'reserve']);
+    invoke(runtime, ['swarm', 'resource', resource, '--action', 'renew', '--token', String(reserved.token)]);
+    invoke(runtime, ['swarm', 'resource', resource, '--action', 'publish', '--token', String(reserved.token), '--note', 'Packed publication']);
+    invoke(runtime, ['swarm', 'resource', resource, '--action', 'release', '--token', String(reserved.token)]);
+    const land = spawnSync(runtime, [host, 'swarm', 'land', '--json'], { cwd: repo, env, encoding: 'utf8' });
+    assert.equal(land.status, 2); assert.match(land.stdout + land.stderr, /needs a git repository/);
+
     // A terminal item can retain a stale claim after import or explicit override.
     invoke(runtime, ['claim', id, '--force']);
     assert.deepEqual(invoke(runtime, ['swarm', 'reap', '--dry-run']).released, [id]);

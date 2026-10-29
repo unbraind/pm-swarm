@@ -1,0 +1,23 @@
+id: pm-swarm-durable-close-recovery
+title: Durable multi-item close recovery
+description: "Split from PR 24 by orchestrator decision. Own all journaled recovery, native close ownership proof and multi-item compensation. Current PR only performs fresh native close and refuses replay without automatic repair."
+type: Feature
+status: open
+priority: 2
+tags[3]: close-recovery,durability,"gh:unbraind/pm-swarm#34"
+created_at: "2026-10-27T19:53:07.216Z"
+updated_at: "2026-10-27T21:15:24.658Z"
+author: codex-agent
+acceptance_criteria: "Canonicalize short IDs through host native get before every history read, including service-capable contexts; capture history heads before authoritative decision documents and recheck under the same native writer lock; identify own forward close and every restore by a durable unique compensation_id and exact SDK journal identity, never author, message markers or document equality; refuse unrelated same-author native closes and copied transaction markers; native close owns dependent unblock, blocker-field removal, Plan behavior and unchanged warnings, and actual read-back defines successors; persist full immutable member/pre-close bytes digest/post-close history domain before restore, fsync intent, progress and parent-directory updates; durable per-member restored/pending receipts recover own progress without mistaking it for peers; never restore peers or foreign records, and release/claim/restore ABA must be detected from locked native history heads even when all bytes and tokens match; real-process SIGKILL after every forward and reverse step including 0..N member restores with 1-3 dependents converges to exact pre-close item bytes with append-only audit history, no duplicates or loss; peer edits between restores stop with typed partial receipts preserving restored and pending members; lost native returns and ordinary coordinator failures preserve all lifecycle members coherently; packed npm/Bun, non-Git and installed separate/shared SDK layouts exercise every boundary; property tests, revert proofs, full 100 percent coverage, documentation and release gates."
+dependencies[1]{id,kind,created_at,author,source_kind,author_source}:
+  pm-swarm-y972,related,"2026-10-27T19:53:07.216Z",codex-agent,"cli:create:dep",detected
+comments[2]{created_at,author,text}:
+  "2026-10-27T20:23:51.975Z",codex-agent,"Repository issue https://github.com/unbraind/pm-swarm/issues/34 owns the full rounds 5-15 close protocol. It is related to pm-swarm-y972; the existing dependent-progress issue 32 is linked as a narrower subtask. Removed prototype and tests remain reproducible from commit 0157465. Current PR intentionally has no swarm close transaction, automatic primary restore, member compensation, native-history ownership reconstruction or saved-result adoption."
+  "2026-10-27T21:15:24.658Z",codex-agent,"Scope boundary implemented in PR 24: fresh native close only, immutable refusal after lost returns, prior native closes or legacy markers. Current regressions preserve an unrelated same-author close, service-context short IDs, reopened preimages and native dependent effects after SIGKILL. Full journaled recovery, exact compensation ownership and all multi-member restore progress remain this open Feature and issue 34. No automatic restore implementation ships."
+files[3]{path,scope}:
+  src/close.ts,project
+  test/close-process-refusal.test.ts,project
+  test/close-regressions.test.ts,project
+docs[1]{path,scope}:
+  docs/native-close.md,project
+body: ""

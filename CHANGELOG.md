@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Integrate settings and package quality gates ([pm-swarm-y972](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-y972.toon))
+
+### Fixed
+
+- Resume fenced close with an SDK workspace transaction ([pm-swarm-atomic-close](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-atomic-close.toon))
+
 ## 2026.10.28 - 2026-10-28
 
 ### Added

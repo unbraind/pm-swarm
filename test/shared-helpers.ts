@@ -20,7 +20,7 @@ export async function sharedFixture(t: TestContext) {
   const client = new PmClient({ cwd: repo, pmRoot, author: 'shared-test', noExtensions: false });
   await client.init('shared-test', { defaults: true, agentGuidance: 'skip' });
   const extension = join(pmRoot, 'extensions/pm-swarm'); mkdirSync(extension, { recursive: true });
-  writeFileSync(join(extension, 'manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers'] }));
+  writeFileSync(join(extension, 'manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers', 'hooks'] }));
   writeFileSync(join(extension, 'entry.js'), `export { default } from '${new URL('../index.ts', import.meta.url).href}';\n`);
   const bin = join(repo, 'bin'); mkdirSync(bin); symlinkSync(process.execPath, join(bin, 'node'));
   const env = gitEnvironment({ ...process.env, HOME: repo, PATH: bin, PM_PATH: pmRoot, PM_AUTHOR: 'shared-test', PM_GLOBAL_PATH: join(repo, '.pm-cli'), GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' });

@@ -10,8 +10,8 @@ import { gitEnvironment } from '../src/git-environment.ts';
 import { Swarm } from '../src/swarm.ts';
 
 /** Create a real Git repository and SDK tracker with isolated fixture identity. */
-export async function fixture(t: TestContext) {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'pm-swarm-test-'))); const repo = join(root, 'repo'); mkdirSync(repo);
+export async function fixture(t: TestContext, base = tmpdir()) {
+  const root = realpathSync(mkdtempSync(join(base, 'pm-swarm-test-'))); const repo = join(root, 'repo'); mkdirSync(repo);
   t.after(() => rmSync(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
   const sourceEnv = { ...process.env };
   const clean = gitEnvironment();
@@ -24,7 +24,7 @@ export async function fixture(t: TestContext) {
   const pmRoot = join(repo, '.agents/pm'); const client = new PmClient({ cwd: repo, pmRoot, author: 'swarm-test', noExtensions: false });
   await client.init('swarm-test', { defaults: true, agentGuidance: 'skip' });
   mkdirSync(join(pmRoot, 'extensions/pm-swarm'), { recursive: true });
-  writeFileSync(join(pmRoot, 'extensions/pm-swarm/manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers'] }));
+  writeFileSync(join(pmRoot, 'extensions/pm-swarm/manifest.json'), JSON.stringify({ name: 'pm-swarm', version: '2026.10.15', entry: 'entry.js', capabilities: ['commands', 'schema', 'renderers', 'hooks'] }));
   writeFileSync(join(pmRoot, 'extensions/pm-swarm/entry.js'), `export { default } from '${new URL('../index.ts', import.meta.url).href}';\n`);
   appendFileSync(join(repo, '.gitignore'), '\n.agents/pm/extensions/\n');
   const swarm = new Swarm(repo, pmRoot, client, 'swarm-test');

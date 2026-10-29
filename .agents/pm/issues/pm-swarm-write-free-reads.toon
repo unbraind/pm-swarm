@@ -1,0 +1,21 @@
+id: pm-swarm-write-free-reads
+title: Require write-free SDK current reads for cold refusal invariance
+description: "Pinned SDK 2026.10.23 PmClient.get records derived context usage for current reads; full current gets and listAllComplete can materialize metadata caches. PmClientOptions, GetOptions and PmCompleteListOptions expose no per-call no-write mode. Public createMutationGuardSdk.get provides a pure local metadata lookup and is used for package admission, but its list method uses the persistent cache. Cold corpus-dependent or provider-owned refusals cannot yet promise zero SDK runtime writes without a write-free certified-list/current-read capability. Preserve SDK-owned caches and usage records; do not disable configuration or reimplement tracker listing. Orchestrator to report the missing SDK capability upstream."
+type: Issue
+status: open
+priority: 2
+tags[2]: privacy,sdk-gap
+created_at: "2026-10-25T10:11:49.433Z"
+updated_at: "2026-10-25T11:03:45.908Z"
+author: codex-agent
+parent: pm-swarm-y972
+comments[1]{created_at,author,text}:
+  "2026-10-25T11:01:33.162Z",codex-agent,"Measured cold strict-overlap refusal with pinned SDK 2026.10.23: item and history bytes unchanged; zero package runtime files left; five SDK metadata-cache files created. Whole tracker byte identity is therefore false on this cold corpus read. test/sdk-read-effects.acceptance.ts generates this measurement with real SDK operations and accepts future zero-write SDK behavior. PmCompleteListOptions currently exposes includeBody only, without a non-persisting complete-list mode; preserve SDK-owned files rather than deleting peer state."
+files[2]{path,scope}:
+  src/inspection.ts,project
+  test/sdk-read-effects.acceptance.ts,project
+tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,source_ref}}:
+  node --test test/sdk-read-effects.acceptance.ts,project,120,codex-agent,"2026-10-25T11:03:45.688Z",local_mutation,feat/settings-and-quality-gates
+docs[1]{path,scope}:
+  docs/privacy-admission.md,project
+body: ""

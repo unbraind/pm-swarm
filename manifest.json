@@ -9,6 +9,7 @@
   "capabilities": [
     "commands",
     "renderers",
-    "schema"
+    "schema",
+    "hooks"
   ]
 }

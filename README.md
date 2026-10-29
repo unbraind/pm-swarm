@@ -2,7 +2,7 @@
 
 Coordinate dozens of agents on one pm tracker, with renewed heartbeats, fenced ownership, dead-agent recovery and context handoff. pm-swarm uses SDK readiness, dependencies and declared file footprints to choose parallel work and show overlaps. Agents can share a plain directory and the same tracker. Git worktree lanes add optional branch isolation and merge prediction when the workspace is a Git worktree. It never pushes.
 
-Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. Automated GitHub releases require the repository variable `PM_RELEASE_APPROVED=true`. After publication:
+Install with PM CLI/SDK 2026.10.23 or later (Node 22.18 or later). Git lanes additionally require Git with `merge-tree --write-tree`. Automated GitHub releases require the repository variable `PM_RELEASE_APPROVED=true`. Install the published package:
 
 ```sh
 pm install pm-swarm --project
@@ -25,17 +25,137 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
-| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fence, finish and release a shared claim in one mutation |
+| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Delegate one fenced native close; interrupted recovery refuses |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
 | resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
 | reap | `pm swarm reap --dry-run` | Preview terminal claim release; in Git, also remove merged terminal lanes |
 | settings | `pm swarm settings --base main --root ../lanes --branch-prefix swarm/ --limit 4 --apply` | Preview or apply the `swarm` settings section through the SDK |
 
+## Settings and compact output
+
+The `swarm` section in the SDK-owned settings document has these defaults:
+
+| Setting | CLI flag | Default |
+| --- | --- | --- |
+| `base` | `--base` | `main` |
+| `root` | `--root` | `../.pm-swarm` |
+| `branch_prefix` | `--branch-prefix` | `swarm/` |
+| `lane_limit` | `--limit` | `4` (integer 1–8) |
+| `progress_orchestrator` | `--progress-orchestrator` | unset |
+
+Flags override individual configured values. Preview is the default; `--apply`
+writes through the host's audited settings transaction. The freshly locked
+section is patched so competing updates and foreign settings survive. Stored
+roots must be relative. Invalid values return `swarm_settings_invalid` with a
+remedy and exit 2. Example:
+
+```sh
+pm swarm settings --root ../lanes --branch-prefix work/ --limit 2
+pm swarm settings --root ../lanes --branch-prefix work/ --limit 2 --apply --operation-id configure-lanes-v1
+pm swarm settings --json
+pm swarm plan --limit 1
+```
+
+For embedded hosts, `settings`, `resolveSwarmSettings`, `swarmSettingsSection`,
+`updateSettings` and `SettingsRefusal` expose the same typed surface. Pass the
+injected host SDK into `updateSettings`; reuse `operationId` only to retry the
+same intent. `start --base/--root/--branch-prefix` override Git lane settings
+for that invocation. `plan --limit` overrides planning capacity.
+
+The pinned SDK has no extension settings-section registration API and its
+normalized reader omits extension-owned sections. The package therefore uses
+public SDK file APIs under the audited mutation lock. Native host registration
+is tracked separately in [pm-swarm-native-settings](.agents/pm/issues/pm-swarm-native-settings.toon), blocked on pm-cli#1580; see [verification](docs/settings-and-quality-gates.md).
+
+All swarm commands register scoped TOON/JSON host rendering. JSON is compact;
+TOON planning omits full read receipts unless `--full` is supplied. Private user-home
+paths in nested result values, keys, watch events or errors trigger a typed
+`swarm_private_path` refusal. Replace them with project-relative paths. CLI Git
+worktree locations are relative to the project root.
+
+All commands use the same receipt projection, including live `schedule`. A
+relative top-level `worktree` is an operator filesystem reference; its folder
+names are retained even when they resemble home-root text. Notes, nested
+context and persisted content keep their privacy checks. The scheduler validates
+its complete decision receipt before acquiring a claim or creating a worktree.
+Embedded SDK lane methods retain their local filesystem coordinates; call
+`admitReceipt(result, workspace)` before sharing them. `projectReceipt` and
+`assertReceiptSafe` expose the same separate projection and admission steps.
+
+Failed acquisition cleanup compares the exact `swarm_token` generation at every
+native write. `swarm_superseded` means a peer owns a newer or otherwise different
+generation: preserve its claim and Git resources, refresh its receipt and retry.
+Terminal Git reaping holds the same native item lock and compares its fencing generation before local cleanup.
+Git cleanup runs inside the SDK item writer lock without adding an item/history
+mutation, and configuration removal compares the exact value atomically.
+Cleanup also compares the captured native history length and SDK stream hash
+inside that same lock. Release/claim/restore cycles cannot regain an older
+acquisition by recreating identical item content or tokens. See
+[native-history compare-and-set](docs/native-history-cas.md) and [native close contract](docs/native-close.md) for the recovery
+paths, SDK contract and adversarial matrix.
+
+Tracker locations are invocation inputs: absolute and relative `--path`, `PM_PATH`
+and cwd discovery work inside home directories and with spaces or Unicode.
+These locations stay local; private paths in stored notes, settings or shared
+results remain refused. Incoming handoff context is checked before `next` or
+`schedule` acquires a lease, caches a token or renews the agent heartbeat, then
+checked again against the decision made inside the lease.
+
+Private input is checked before any swarm dispatch or writer lease, including
+notes, flags, settings and SDK mutation arguments. The pinned SDK privacy scanner
+runs first; whole-text canonicalization also detects embedded and encoded private home paths.
+Ordinary prose, remote URLs and non-home absolute paths remain allowed.
+Relative paths, framework route folders and HTTP(S) URLs remain supported.
+The guard searches substrings without whitespace tokenization or URL exemptions.
+Relative framework routes keep their original punctuation.
+Path runs retain punctuation until POSIX and Windows normalization resolves dot
+segments. The full literal run ends only at whitespace or NUL; additional
+presentation-aware views never discard that run.
+Every item writer admits its complete resulting document under the native SDK
+lock and compares the current document with its checked snapshot. Refresh and
+retry `swarm_document_changed`. Host commands reuse their injected client, and
+package copies share request scope. A second SDK module identity produces
+`swarm_sdk_mismatch`: share the host SDK installation and restart after removing
+the nested dependency. Full internal reads retain large bodies and annotations.
+Close resolves IDs through native `get()` before history selection and delegates
+one fresh native close with full-document and history admission. It performs no
+swarm metadata update, transaction replay or automatic restore. Any earlier native
+close (including reopened items), terminal state, legacy markers and interrupted
+native returns produce
+`swarm_close_recovery_unsupported`, naming the canonical item and native/legacy
+journal entry for explicit inspection. Native lifecycle fields and dependent
+warnings remain core-owned. Every failure after the observed native commit,
+including final heartbeat and lease cleanup, returns the typed recovery refusal
+and its item/journal remedy. Unexpected storage failures before that commit use
+`swarm_close_not_committed`. Local refusals precede native read bookkeeping; the
+authoritative admission repeats those same checks after capturing its history head. See [native close](docs/native-close.md).
+[Issue 34](https://github.com/unbraind/pm-swarm/issues/34) owns durable multi-item
+recovery; it is outside this PR's implementation.
+
+Coordination leases keep renewing during validation, while persistent principal
+liveness is announced after a successful write or completion. Use
+`pm swarm heartbeat` separately when a long queue needs background liveness.
+Failed Git or shared starts release only their newly acquired claims; Git cleanup
+checks the owned branch, worktree and configuration, preserving peer changes.
+Cleanup remains active through final receipt admission and heartbeat publication,
+and nested locks release before the tracker pin. Refusal tests cover every registered mutator. Cold SDK reads can still create
+derived caches; see the documented SDK read-effect limit and the
+[per-encoding oracle results and byte-invariance proof](docs/privacy-admission.md).
+
+Mutation payloads pass admission at each SDK write sink,
+including derived Git links, freshly locked settings, peer context and linked
+evidence. Percent decoding preserves valid Unicode sequences beside malformed
+bytes. Configured and resolved HOME/USERPROFILE spellings use the same
+canonicalization as candidate text. POSIX and Windows normalization resolve dot
+and dot-dot segments with directory-boundary matching. A native SDK transactional
+hook validates each complete proposed item document under its writer lock,
+including preserved fields, links, comments and body. Typed refusals name the
+field to repair. See [privacy admission](docs/privacy-admission.md).
+
 ## Install and release approval
 
-The first npm release is pending the maintainer's interactive bootstrap. After
-that first publish, the maintainer configures npm trusted publishing for
+For automated releases, the maintainer configures npm trusted publishing for
 `release.yml` and sets the repository variable `PM_RELEASE_APPROVED` to `true`.
 The daily workflow and manual dispatch both require this variable and `main`.
 Publishing uses OIDC with provenance; no stored npm token is needed.
@@ -177,7 +297,7 @@ Each planning wave contains mutually compatible items. The first wave is the sug
 
 `start` registers `swarm_branch`, `swarm_base` (the original commit SHA), and `swarm_base_ref` (the moving target ref). Defaults are base `main`, worktree root `../.pm-swarm`, branch prefix `swarm/`, lane limit 4. Flags override settings. Planning supports limits 1–8; landing searches up to eight active lanes exhaustively and refuses larger batches explicitly.
 
-Absolute worktree paths live only in repository-local Git config (`swarm.lane.<id>`). Never put machine paths into tracker fields, comments, or settings. A persisted root setting must be relative; an absolute `start --root` override remains local. Worktree paths may appear in command output. If the lane root is inside the repository, ignore that directory before landing so the base worktree stays clean. Existing absolute linked paths are rejected so sync cannot persist them. Keep `.agents/pm/extensions/` ignored: the host package installer records local tarball provenance there.
+Absolute worktree paths live only in repository-local Git config (`swarm.lane.<id>`). Keep private user-home locations out of tracker content. A persisted root setting must be relative; a non-home absolute `start --root` override remains local. CLI worktree locations are project-relative. If the lane root is inside the repository, ignore that directory before landing so the base worktree stays clean. Existing absolute linked paths are rejected so sync cannot persist them. Keep `.agents/pm/extensions/` ignored: the host package installer records local tarball provenance there.
 
 All package Git operations strip inherited Git location variables (`GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`, `GIT_COMMON_DIR`, `GIT_NAMESPACE`, and `GIT_PREFIX`). The explicit repository directory determines the target, including linked worktrees; hook environment variables cannot redirect operations to a parent or unrelated repository. Other Git configuration and identity variables remain available.
 
@@ -396,3 +516,6 @@ The approval variable controls GitHub releases; it does not impose a local npm
 publishing hold. Maintainers run the prepublish checks and authenticate with npm
 for local publication. The first local publish uses `--provenance=false`; daily
 GitHub OIDC releases keep provenance enabled.
+
+See [portable receipts and generation-owned recovery](docs/receipt-and-generation-verification.md)
+for compatibility fixtures, interleaving matrices and native lock evidence.

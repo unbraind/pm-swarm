@@ -19,7 +19,7 @@ for (const action of ['publication and reap', 'rollback'] as const) {
     const log = join(f.root, 'slow-operations');
     writeFileSync(join(bin, 'git'), `#!${process.execPath}\nimport { spawnSync } from 'node:child_process';\nimport { appendFileSync } from 'node:fs';\nconst args = process.argv.slice(2);\nif (args[0] === 'worktree' && ['add', 'remove'].includes(args[1])) {\n  const before = Date.now(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 31000);\n  appendFileSync(${JSON.stringify(log)}, JSON.stringify({ operation: args[1], elapsed: Date.now() - before }) + '\\n');\n}\nconst result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });\nprocess.exit(result.status ?? 1);\n`, { mode: 0o755 });
     process.env.PATH = `${bin}:${process.env.PATH}`;
-    const root = join(f.root, 'lanes'); const path = join(root, `repo-${id}`);
+    const root = '../lanes'; const path = join(f.repo, root, `repo-${id}`);
     if (action === 'rollback') {
       mkdirSync(path, { recursive: true }); writeFileSync(join(path, 'keep'), 'Unrelated fixture');
       await assert.rejects(f.swarm.start(id, { root }), /git worktree failed/);

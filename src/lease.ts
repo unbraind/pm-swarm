@@ -1,7 +1,9 @@
+import { commitMutation, SettingsRefusal } from './settings.ts';
 import { createHash, randomUUID } from 'node:crypto';
-import { linkSync, mkdirSync, readFileSync, readdirSync, readlinkSync, renameSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { closeSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { admitReceipt } from './receipts.ts';
 import { setTimeout as delay } from 'node:timers/promises';
 import { acquireLock } from '@unbrained/pm-cli/sdk';
 
@@ -21,8 +23,39 @@ export function readRuntime<T>(path: string): T | undefined {
 
 /** Replace one runtime record atomically, without truncating readers' data. */
 function publish(path: string, value: unknown): void {
+  commitMutation(value, admitted => publishAdmitted(path, admitted));
+}
+/** Publish only an admitted runtime record; temporary coordinates never become record content. */
+function publishAdmitted(path: string, value: unknown): void {
   const temporary = `${path}.${randomUUID()}`;
-  writeFileSync(temporary, JSON.stringify(value)); renameSync(temporary, path);
+  let owned = false; let descriptor: number;
+  try {
+    for (;;) {
+      try { descriptor = openSync(temporary, 'wx'); owned = true; break; }
+      catch (error) {
+        const failure = error as NodeJS.ErrnoException;
+        if (failure.code === 'EEXIST' && failure.path !== undefined && lstatSync(failure.path).isDirectory()) throw Object.assign(new Error('EISDIR: runtime publication requires a file'), { code: 'EISDIR' });
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        mkdirSync(dirname(path), { recursive: true });
+      }
+    }
+    try { writeFileSync(descriptor, JSON.stringify(value)); } finally { closeSync(descriptor); }
+    renameSync(temporary, path);
+  } finally { if (owned) rmSync(temporary, { force: true }); }
+}
+
+/** Remove only empty infrastructure directories this invocation created, preserving every peer record. */
+function removeEmptyRuntime(root: string, created: string | undefined): void {
+  if (created === undefined) return;
+  const boundary = dirname(created);
+  for (let directory = root; directory !== boundary; directory = dirname(directory)) {
+    try { rmdirSync(directory); }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (['ENOTEMPTY', 'EEXIST'].includes(String(code))) return;
+      if (code !== 'ENOENT') throw error;
+    }
+  }
 }
 
 /** Retry only the SDK's explicit pre-write contention refusal, with bounded jitter. */
@@ -49,7 +82,7 @@ export function heartbeatPath(pmRoot: string, author: string): string {
 
 /** Renew a principal's liveness without changing item history on each timer tick. */
 export function touchHeartbeat(pmRoot: string, author: string): string {
-  const heartbeat = new Date().toISOString(); publish(heartbeatPath(pmRoot, author), { heartbeat }); return heartbeat;
+  return commitMutation({ author, heartbeat: new Date().toISOString() }, admitted => { publish(heartbeatPath(pmRoot, admitted.author), { heartbeat: admitted.heartbeat }); return admitted.heartbeat; });
 }
 
 /** One process-owned operation lease, never stolen from a living writer. */
@@ -84,7 +117,7 @@ function alive(owner: Owner, locality: string | undefined): boolean {
 /** Revalidate an abandoned pin under the recovery lock before removing its generation. */
 export async function recoverLeasePin(pmRoot: string, author: string, locality: string | undefined, observed: Owner): Promise<void> {
   const pin = join(swarmRuntime(pmRoot), 'operation-pin.json');
-  const release = await retryLock(() => acquireLock(pmRoot, 'swarm-recovery', 30, author, false, false, 0));
+  const release = await retryLock(() => commitMutation({ resource: 'swarm-recovery', author }, admitted => acquireLock(pmRoot, admitted.resource, 30, admitted.author, false, false, 0)));
   try {
     const current = readRuntime<Owner>(pin);
     if (current?.token === observed.token && !alive(current, locality)) unlinkSync(pin);
@@ -92,14 +125,31 @@ export async function recoverLeasePin(pmRoot: string, author: string, locality: 
 }
 
 /** Tune durations; Git callers may retain the live process pin across synchronous work. */
-export interface LeaseOptions { leaseMs?: number; renewMs?: number; waitMs?: number; allowBlocking?: boolean }
+export interface LeaseOptions {
+  leaseMs?: number; renewMs?: number; waitMs?: number; allowBlocking?: boolean;
+  /** Project a local Git worktree coordinate exactly as the command does before admitting shared content. */
+  receiptWorkspace?: string;
+}
 
 /** Assertions and retriable writes bound to the current operation generation. */
 export interface Lease {
   /** Refuse a resumed operation whose lease expired or was superseded. */
   assert(): void;
+  /** Check the still-owned generation during cleanup, without requiring liveness renewal. */
+  assertOwned(): void;
   /** Recheck the generation before every SDK write attempt. */
-  write<T>(operation: () => Promise<T>): Promise<T>;
+  write<T>(operation: () => Promise<T>, options?: { announce?: boolean }): Promise<T>;
+  /** Retain rollback until receipt admission and the final heartbeat have succeeded. */
+  onFailure(cleanup: () => Promise<void>): void;
+  /** Release nested locks after all registered rollback actions, before the tracker pin. */
+  onRelease(release: () => Promise<void>): void;
+}
+
+/** Attempt all nested releases in reverse acquisition order, retaining each failure. */
+async function releaseAll(releases: (() => Promise<void>)[]): Promise<void> {
+  const failures: unknown[] = [];
+  for (const release of releases.reverse()) { try { await release(); } catch (failure) { failures.push(failure); } }
+  if (failures.length > 0) throw new AggregateError(failures, 'Owned nested locks could not all be released; inspect the remaining resources.');
 }
 
 /** Serialize multi-item decisions, renew liveness, and recover killed processes safely.
@@ -108,53 +158,83 @@ export interface Lease {
  */
 export async function withSwarmLease<T>(pmRoot: string, author: string, operation: (lease: Lease) => Promise<T>, options: LeaseOptions = {}): Promise<T> {
   const leaseMs = options.leaseMs ?? 30000; const renewMs = options.renewMs ?? 5000; const waitMs = options.waitMs ?? 300000;
-  const root = swarmRuntime(pmRoot); const path = join(root, 'operation.json'); const pin = join(root, 'operation-pin.json');
-  const identity = { pid: process.pid, process_start: processStart(process.pid), locality: leaseLocality() }; const token = randomUUID(); const started = Date.now();
-  const candidate = join(root, `request-${String(started).padStart(16, '0')}-${token}.json`);
-  let touched = Date.now(); touchHeartbeat(pmRoot, author);
-  publish(candidate, { ...identity, token });
+  const root = join(pmRoot, 'runtime/swarm'); const created = mkdirSync(root, { recursive: true }); let admitted = false;
   try {
-    for (;;) {
-      if (readRuntime<Owner>(candidate)?.token !== token) throw new StaleFenceError('operation request');
-      const name = readdirSync(root).filter(name => name.startsWith('request-') && name.endsWith('.json')).sort()[0];
-      if (name === undefined) throw new StaleFenceError('operation request');
-      const first = join(root, name);
-      const head = readRuntime<Owner>(first);
-      if (head?.token === token) {
-        try { linkSync(candidate, pin); break; }
-        catch (error) { if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST')) throw error; }
-        const owner = readRuntime<Owner>(pin);
-        if (owner !== undefined && !alive(owner, identity.locality)) {
-          await recoverLeasePin(pmRoot, author, identity.locality, owner);
+    const path = join(root, 'operation.json'); const pin = join(root, 'operation-pin.json');
+    const identity = { pid: process.pid, process_start: processStart(process.pid), locality: leaseLocality() }; const token = randomUUID(); const started = Date.now();
+    const candidate = join(root, `request-${String(started).padStart(16, '0')}-${token}.json`);
+    let timer: ReturnType<typeof setInterval> | undefined; let outcome: T;
+    const rollbacks: (() => Promise<void>)[] = []; const releases: (() => Promise<void>)[] = [];
+    try {
+    publish(candidate, { ...identity, token });
+    try {
+      for (;;) {
+        if (readRuntime<Owner>(candidate)?.token !== token) throw new StaleFenceError('operation request');
+        const name = readdirSync(root).filter(name => name.startsWith('request-') && name.endsWith('.json')).sort()[0];
+        if (name === undefined) throw new StaleFenceError('operation request');
+        const first = join(root, name);
+        const head = readRuntime<Owner>(first);
+        if (head?.token === token) {
+          try { linkSync(candidate, pin); break; }
+          catch (error) { if (!(typeof error === 'object' && error !== null && 'code' in error && error.code === 'EEXIST')) throw error; }
+          const owner = readRuntime<Owner>(pin);
+          if (owner !== undefined && !alive(owner, identity.locality)) {
+            await recoverLeasePin(pmRoot, author, identity.locality, owner);
+          }
+        } else if (head !== undefined && !alive(head, identity.locality)) {
+          rmSync(first, { force: true });
         }
-      } else if (head !== undefined && !alive(head, identity.locality)) {
-        rmSync(first, { force: true });
+        if (Date.now() - started >= waitMs) throw new Error('swarm_busy: live or unverifiable owner holds the tracker; retry after it finishes or inspect abandoned runtime records with all writers stopped');
+        await delay(50 + Math.random() * 150);
       }
-      if (Date.now() - started >= waitMs) throw new Error('swarm_busy: live or unverifiable owner holds the tracker; retry after it finishes or inspect abandoned runtime records with all writers stopped');
-      if (Date.now() - touched >= renewMs) { touchHeartbeat(pmRoot, author); touched = Date.now(); }
-      await delay(50 + Math.random() * 150);
+    } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
+    let failure: { value: unknown } | undefined;
+    /** Always validate both generations; synchronous Git work retains its live pin past expiry. */
+    const generation = () => {
+      const owner = readRuntime<Owner>(path);
+      if (owner?.token !== token || readRuntime<Owner>(pin)?.token !== token) throw new StaleFenceError('operation');
+      return owner;
+    };
+    const assert = () => {
+      if (failure !== undefined) throw failure.value;
+      const owner = generation();
+      if (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs) throw new StaleFenceError('operation');
+    };
+    /** Announce principal liveness only after a successful write or completed operation. */
+    const announce = () => { touchHeartbeat(pmRoot, author); admitted = true; };
+    const lease: Lease = { assert, assertOwned: generation, write: (operation, options) => retryLock(async () => { if (options?.announce === false) generation(); else assert(); const result = await operation(); if (options?.announce !== false) announce(); return result; }), onFailure: cleanup => { rollbacks.push(cleanup); }, onRelease: release => { releases.push(release); } };
+      publish(path, { ...identity, token, heartbeat: Date.now() });
+      timer = setInterval(() => {
+        try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); if (admitted) announce(); }
+        catch (error) { failure = { value: error }; }
+      }, renewMs);
+      assert(); const result = await operation(lease);
+      try { assert(); }
+      catch (error) {
+        // Legacy coordination probes may consume a fence refusal and return no receipt.
+        if (error instanceof StaleFenceError && result === undefined && rollbacks.length === 0) return result;
+        throw error;
+      }
+      admitReceipt(result, options.receiptWorkspace);
+      announce(); outcome = result;
+    } catch (error) {
+      const failures: unknown[] = [];
+      for (const rollback of rollbacks.reverse()) { try { await rollback(); } catch (failure) { failures.push(failure); } }
+      const refusal = failures.find(failure => failure instanceof SettingsRefusal || failure instanceof StaleFenceError);
+      if (refusal !== undefined) throw refusal;
+      if (failures.length > 0) throw new AggregateError([error, ...failures], 'Operation failed and owned rollback could not be completed; preserve peer state and inspect the remaining resources.');
+      throw error;
     }
-  } finally { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
-  let failure: unknown;
-  /** Always validate both generations; synchronous Git work retains its live pin past expiry. */
-  const assert = () => {
-    if (failure !== undefined) throw failure;
-    const owner = readRuntime<Owner>(path);
-    if (owner?.token !== token || readRuntime<Owner>(pin)?.token !== token || (!options.allowBlocking && Date.now() - owner.heartbeat >= leaseMs)) throw new StaleFenceError('operation');
-  };
-  const lease: Lease = { assert, write: operation => retryLock(async () => { assert(); return operation(); }) };
-  let timer: ReturnType<typeof setInterval> | undefined;
-  try {
-    publish(path, { ...identity, token, heartbeat: Date.now() });
-    timer = setInterval(() => {
-      try { assert(); publish(path, { ...identity, token, heartbeat: Date.now() }); touchHeartbeat(pmRoot, author); }
-      catch (error) { failure = error; }
-    }, renewMs);
-    assert(); return await operation(lease);
-  }
-  finally {
-    clearInterval(timer);
-    try { if (readRuntime<Owner>(path)?.token === token) unlinkSync(path); }
-    finally { if (readRuntime<Owner>(pin)?.token === token) unlinkSync(pin); }
-  }
+    finally {
+      clearInterval(timer);
+      try { await releaseAll(releases); } finally {
+      try { if (readRuntime<Owner>(candidate)?.token === token) unlinkSync(candidate); }
+      finally {
+        try { if (readRuntime<Owner>(path)?.token === token) unlinkSync(path); }
+        finally { if (readRuntime<Owner>(pin)?.token === token) unlinkSync(pin); }
+      }
+      }
+    }
+    return outcome;
+  } finally { if (!admitted) removeEmptyRuntime(root, created); }
 }
