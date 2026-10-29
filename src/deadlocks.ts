@@ -143,7 +143,7 @@ export class ResourceDeadlocks {
     const live = new Map<string, Record<string, unknown>>();
     const skipped: DeadlockReport['skipped'] = [];
     for (const item of resources) {
-      if (statusIsTerminal(String(item.status), registry) || typeof item.assignee !== 'string' || !item.assignee.trim() || typeof item.swarm_token !== 'string' || !/^[1-9][0-9]{0,79}$/.test(item.swarm_token) || typeof item.swarm_resource_expires_at !== 'string' || !(Date.parse(item.swarm_resource_expires_at) > now)) {
+      if (statusIsTerminal(String(item.status), registry) || typeof item.assignee !== 'string' || !item.assignee.trim() || typeof item.swarm_token !== 'string' || !/^(0|[1-9][0-9]{0,79})$/.test(item.swarm_token) || typeof item.swarm_resource_expires_at !== 'string' || !(Date.parse(item.swarm_resource_expires_at) > now)) {
         skipped.push({ id: String(item.id), reason: 'inactive_or_expired' }); continue;
       }
       live.set(String(item.id), item);

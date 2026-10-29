@@ -35,6 +35,14 @@ test('foreign request damage is isolated and same-owner requests are already sat
   await f.client.update(a, { field: [`${RESOURCE_REQUEST_FIELD}=${' '.repeat(4097)}`] });
   assert.equal((await w.inspect(a)).request, null);
   assert.ok((await w.detect()).skipped.some(row => row.id === a && row.reason === 'invalid_or_foreign_request'));
+  await f.client.update(b, { assignee: 'worker-1', field: ['swarm_token=0'] });
+  const zero = new ResourceDeadlocks(new Swarm(f.repo, f.pmRoot, f.client, 'worker-1'));
+  const revision = (await zero.inspect(b)).revision;
+  const accepted = await zero.request(b, { version: 1, token: '0', resources: [a] }, revision, true);
+  assert.equal(accepted.applied, true);
+  const projected = await zero.detect();
+  assert.equal(projected.requests, 1, 'Every accepted generation uses the same reservation validity on read-back');
+  assert.deepEqual(projected.edges, [{ requester: 'worker-1', holder: 'worker-0', anchor: b, anchor_token: '0', resource: a, token: '1' }]);
   await f.client.update(b, { field: ['swarm_token=damaged'] });
   assert.ok((await w.detect()).skipped.some(row => row.id === b && row.reason === 'inactive_or_expired'));
   declareService(f);
