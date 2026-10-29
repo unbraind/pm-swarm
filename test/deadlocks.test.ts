@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { AsyncResource } from 'node:async_hooks';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,6 +6,7 @@ import { collectOrderingCycles } from '@unbrained/pm-cli/sdk/graph';
 import { ResourceDeadlocks, ResourceReservations, RESOURCE_TAG, RESOURCE_REQUEST_FIELD, parseResourceRequest, trackerResourceBackend, Swarm } from '../index.ts';
 import { ITEM_MUTATION_BOUNDARIES, withItemMutationObserver } from '../src/settings.ts';
 import { inspectItem } from '../src/inspection.ts';
+import { historyPeer } from './history-aba-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 
 /** Create two real resource holders on one non-git tracker. */
@@ -83,17 +83,14 @@ test('one strict declaration schema refuses extremes, sparse arrays and extras, 
 
 test('declaration refuses every SDK mutation interleaving boundary and preserves a peer ABA', async t => {
   const f = await pair(t); const [a, b] = f.resources; const w = f.witnesses[0];
-  const peer = new AsyncResource('deadlock-independent-peer'); t.after(() => peer.emitDestroy());
+  const peer = historyPeer(f.client, f.pmRoot); t.after(peer.destroy);
   for (const boundary of ITEM_MUTATION_BOUNDARIES) {
     const revision = (await w.inspect(a)).revision; let injected = false;
     await assert.rejects(withItemMutationObserver(async point => {
       if (point !== boundary || injected) return;
       injected = true;
-      await peer.runInAsyncScope(async () => {
-        await f.client.update(a, { title: 'Peer temporary' });
-        await f.client.update(a, { title: 'Slot 0' });
-      });
-    }, () => w.request(a, { version: 1, token: '1', resources: [b] }, revision, true)), /swarm_(superseded|document_changed)/);
+      await peer.cycle(a);
+    }, () => w.request(a, { version: 1, token: '1', resources: [b] }, revision, true)), { code: 'swarm_superseded' });
     assert.equal(injected, true, boundary);
     assert.equal((await f.client.get(a, { depth: 'full' })).item[RESOURCE_REQUEST_FIELD], undefined);
   }

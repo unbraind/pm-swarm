@@ -20,7 +20,7 @@ Whitespace/CRLF variants share the production parser. Another 1,000 seeded schem
 cases exercise all array sizes through 16 and token sizes through 80 decimal digits.
 Sparse arrays, nonfinite values and malformed or oversized inputs are refused.
 
-An independent SDK request injects a competing title edit and restoration at each
+An independent SDK request injects native release/claim/restore sequences at each
 native admission boundary. The final document matches the original but native
 history has advanced: the pending-request write must refuse. No peer state is
 removed or rolled back.
