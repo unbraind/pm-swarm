@@ -1,6 +1,7 @@
 /** Enforce the tracked identity baseline and reject newly added private home paths. */
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { closeSync, mkdtempSync, openSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { isMainInvocation } from './main-invocation.ts';
@@ -10,13 +11,24 @@ function policyEntries(root: string, name: string): string[] {
   return readFileSync(join(root, '.github', name), 'utf8').split('\n').map(line => line.trim()).filter(line => line !== '' && !line.startsWith('#'));
 }
 
+/** Audit complete Git output without the subprocess pipe's fixed buffer ceiling. */
+function gitOutput(root: string, args: readonly string[]): string {
+  const directory = mkdtempSync(join(tmpdir(), 'pm-swarm-identity-'));
+  try {
+    const path = join(directory, 'stdout'); const descriptor = openSync(path, 'w');
+    try { execFileSync('git', [...args], { cwd: root, env: gitEnvironment(), stdio: ['ignore', descriptor, 'pipe'] }); }
+    finally { closeSync(descriptor); }
+    return readFileSync(path, 'utf8').trim();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+}
+
 /** Audit every post-baseline commit, including side branches, against tracked policy. */
 export function auditIdentities(root: string): string[] {
   const baseline = policyEntries(root, 'identity-baseline.txt');
   if (baseline.length !== 1 || !/^[a-f0-9]{40}$/i.test(baseline[0])) throw new Error('Invalid identity baseline');
   const approved = new Set(policyEntries(root, 'approved-git-identities.txt'));
   if (approved.size === 0) throw new Error('Approved identity list is empty');
-  const git = (args: readonly string[]): string => execFileSync('git', [...args], { cwd: root, env: gitEnvironment(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+  const git = (args: readonly string[]): string => gitOutput(root, args);
   git(['merge-base', '--is-ancestor', baseline[0], 'HEAD']);
   const commits = git(['rev-list', `${baseline[0]}..HEAD`]).split('\n').filter(Boolean);
   const violations: string[] = [];

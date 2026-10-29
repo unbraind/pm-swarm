@@ -1,3 +1,4 @@
+import { commitMutation, assertPrivatePathSafe } from './settings.ts';
 import { resolveClaimPrincipal } from '@unbrained/pm-cli/sdk';
 
 /** Explicit opt-in prevents ordinary work from becoming a resource accidentally. */
@@ -18,6 +19,10 @@ export class ResourceRefusal extends Error {
   }
 }
 
+/** Refuse absent or noncanonical resource tokens before acquiring a backend lease. */
+export function validateResourceToken(token: unknown): asserts token is string {
+  if (typeof token !== 'string' || !/^(0|[1-9][0-9]*)$/.test(token)) throw new ResourceRefusal('resource_stale_fence', 'Supply the decimal --token returned by reserve; discard an invalid token and reserve again.');
+}
 /** Portable snapshot of an explicit resource item on the selected tracker. */
 export interface ResourceRecord {
   id: string;
@@ -61,6 +66,7 @@ export class ResourceReservations {
     if (!record.resource || !/^(0|[1-9][0-9]*)$/.test(record.token) || (record.owner === null ? record.expires_at !== null : record.expires_at === null || !Number.isFinite(Date.parse(record.expires_at)))) {
       throw new ResourceRefusal('resource_invalid', 'Use an active item tagged swarm-resource with intact token, owner and expiry fields; inspect its history before repairing state.');
     }
+    assertPrivatePathSafe(record);
     return record;
   }
 
@@ -83,13 +89,19 @@ export class ResourceReservations {
     return { ...record, held: record.owner !== null && Date.parse(record.expires_at!) > Date.now() };
   }
 
+  /** Admit backend arguments and the freshly decided change inside the backend's own transaction. */
+  private transact(id: string, decide: (record: ResourceRecord) => ResourceChange): Promise<ResourceRecord> {
+    return commitMutation({ id, author: this.author }, admitted => this.backend.transact(admitted.id, admitted.author, record => commitMutation(decide(record), change => change)));
+  }
+
   /** Read one resource without taking a writer lease or invoking Git. */
   async status(id: string): Promise<ResourceReceipt> { return this.receipt(this.validate(await this.backend.read(id))); }
 
   /** Reserve an available resource with a strictly increasing durable generation. */
   async reserve(id: string, seconds = 300): Promise<ResourceReceipt> {
+    assertPrivatePathSafe(id); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    return this.receipt(await this.transact(id, record => {
       this.validate(record);
       if (record.owner !== null && Date.parse(record.expires_at!) > Date.now()) throw new ResourceRefusal('resource_busy', 'Inspect resource status; wait for expiry or ask the current owner to release. Use renew with its token to extend your own reservation.');
       return { ...record, owner: this.author, token: (BigInt(record.token) + 1n).toString(), expires_at: new Date(Date.now() + duration).toISOString() };
@@ -98,23 +110,29 @@ export class ResourceReservations {
 
   /** Extend a still-live reservation; a stale worker cannot resurrect an expired lease. */
   async renew(id: string, token: string, seconds = 300): Promise<ResourceReceipt> {
+    assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
     const duration = this.duration(seconds);
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    validateResourceToken(token);
+    return this.receipt(await this.transact(id, record => {
       this.fence(record, token); return { ...record, expires_at: new Date(Date.now() + duration).toISOString() };
     }));
   }
 
   /** Release and invalidate the generation without deleting its durable history. */
   async release(id: string, token: string): Promise<ResourceReceipt> {
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    assertPrivatePathSafe({ id, token }); assertPrivatePathSafe(this.author);
+    validateResourceToken(token);
+    return this.receipt(await this.transact(id, record => {
       this.fence(record, token); return { ...record, token: (BigInt(record.token) + 1n).toString(), owner: null, expires_at: null };
     }));
   }
 
   /** Publish a bounded tracker receipt only while the reservation is still owned. */
   async publish(id: string, token: string, note: string): Promise<ResourceReceipt> {
+    assertPrivatePathSafe({ id, token, note }); assertPrivatePathSafe(this.author);
     if (!note.trim() || note.length > 4096) throw new ResourceRefusal('resource_invalid', 'Supply a nonempty --note of at most 4096 characters.');
-    return this.receipt(await this.backend.transact(id, this.author, record => {
+    validateResourceToken(token);
+    return this.receipt(await this.transact(id, record => {
       this.fence(record, token); return { ...record, note };
     }));
   }

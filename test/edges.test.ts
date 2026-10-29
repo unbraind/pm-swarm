@@ -15,10 +15,10 @@ test('start refuses terminal lanes and rolls back newly acquired claims on Git o
   await assert.rejects(f.swarm.start(closed), /terminal/);
   const id = await f.item(); f.save();
   const path = join(f.root, 'lanes', `repo-${id}`); mkdirSync(path, { recursive: true }); writeFileSync(join(path, 'occupied'), 'Keep this data');
-  await assert.rejects(f.swarm.start(id, { root: join(f.root, 'lanes') }), /worktree failed/);
+  await assert.rejects(f.swarm.start(id, { root: '../lanes' }), /worktree failed/);
   assert.equal((await f.client.get(id)).claim_state?.claimed, false);
   await f.client.claim(id);
-  await assert.rejects(f.swarm.start(id, { root: join(f.root, 'lanes') })); assert.equal((await f.client.get(id)).claim_state?.claimed, true);
+  await assert.rejects(f.swarm.start(id, { root: '../lanes' })); assert.equal((await f.client.get(id)).claim_state?.claimed, true);
   const native = new PmClient({ cwd: f.repo, pmRoot: f.pmRoot, author: 'swarm-test', noExtensions: true });
   await assert.rejects(new Swarm(f.repo, f.pmRoot, native, 'swarm-test').start(id), /active extension/);
   assert.equal(branchExists(f.repo, `swarm/${id}`), false);

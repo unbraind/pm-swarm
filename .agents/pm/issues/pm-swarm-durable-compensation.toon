@@ -1,0 +1,21 @@
+id: pm-swarm-durable-compensation
+title: Resume durable native close compensation across dependents
+description: Dependent restore-progress subtask of pm-swarm-durable-close-recovery and repository issue 34. PR 24 now performs fresh native close only and refuses all close recovery with swarm_close_recovery_unsupported; it never restores the primary or dependents automatically.
+type: Issue
+status: open
+priority: 2
+tags[3]: compensation,durability,"gh:unbraind/pm-swarm#32"
+created_at: "2026-10-27T18:09:19.394Z"
+updated_at: "2026-10-27T20:31:24.582Z"
+author: codex-agent
+acceptance_criteria: "Persist a unique compensation_id and complete immutable member/preimage/history-head domain before any restore; fsync journal checkpoints and parent-directory updates; bind every native restore to that compensation identity and exact target; durably checkpoint restored members; recover without classifying own progress as a peer; preserve peer edits and report typed restored/pending lists; real-process SIGKILL after each restore 0..N with 1-3 dependents converges to exact pre-close item bytes while retaining audit history; peer edit between restores and copied marker tests preserve foreign mutations; packed npm and Bun consumers, docs, focused revert proofs and full CI gates."
+parent: pm-swarm-y972
+dependencies[1]{id,kind,created_at,author,source_kind,author_source}:
+  pm-swarm-durable-close-recovery,related,"2026-10-27T20:13:20.515Z",codex-agent,"cli:update:dep",detected
+comments[1]{created_at,author,text}:
+  "2026-10-27T18:43:49.460Z",codex-agent,"Current PR deliberately performs zero dependent restores. Native close, auto-unblocking and warnings remain core-owned; only primary-only compensation can resume automatically. This follow-up owns the unique member compensation identity, complete domain and durable per-member checkpoints. The acceptance requires the full after-each-member SIGKILL matrix; the current pre-restore SIGKILL preservation tests are not claimed as that expanded recovery evidence. Pinned SDK remains the version adopted from main."
+files[1]{path,scope}:
+  src/close.ts,project
+docs[1]{path,scope}:
+  docs/native-close.md,project
+body: ""

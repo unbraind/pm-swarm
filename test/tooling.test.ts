@@ -210,6 +210,19 @@ test('identity policy checks side-branch commits and merged additions', () => {
   assert.equal(auditIdentities(root).length, 3);
 });
 
+test('identity policy audits complete large patches and still detects private content at the end', () => {
+  const root = identityFixture('identity-large'); const publicText = 'Public tracker evidence '.repeat(100000);
+  writeFileSync(join(root, 'large.txt'), publicText);
+  fixtureGit(root, ['add', 'large.txt']); fixtureGit(root, ['commit', '-m', 'Record large public fixture']);
+  assert.deepEqual(auditIdentities(root), []);
+  const privatePath = ['', 'home', 'fixture', 'private'].join('/');
+  writeFileSync(join(root, 'large.txt'), `${publicText}${privatePath}\n`);
+  fixtureGit(root, ['add', 'large.txt']); fixtureGit(root, ['commit', '-m', 'Add disallowed large fixture tail']);
+  assert.deepEqual(auditIdentities(root).map(violation => violation.split(': ')[1]), ['added absolute home path']);
+  let rendered = ''; const status = runIdentityGate(root, line => { rendered += line; });
+  assert.equal(status, 1); assert.ok(!rendered.includes(privatePath));
+});
+
 test('identity policy runs as a required CI and release gate', () => {
   const ci = readFileSync(join(repositoryRoot, '.github/workflows/ci.yml'), 'utf8');
   const manifest = JSON.parse(readFileSync(join(repositoryRoot, 'package.json'), 'utf8')) as { scripts: Record<string, string> };

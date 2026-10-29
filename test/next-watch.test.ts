@@ -122,7 +122,7 @@ for (const legacy of [false, true]) for (const command of ['start', 'next']) tes
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const lane = JSON.parse(result.stdout) as { id: string; selected?: string; branch: string; worktree: string; warnings?: string[]; overlap_warnings: unknown[] };
   assert.equal(lane.id, id); assert.equal(lane.branch, `swarm/${id}`);
-  assert.equal(git(lane.worktree, ['branch', '--show-current']), lane.branch);
+  assert.equal(git(join(f.repo, lane.worktree), ['branch', '--show-current']), lane.branch);
   assert.deepEqual(lane.overlap_warnings, []);
   if (command === 'next') { assert.equal(lane.selected, id); assert.match(lane.warnings!.join(' '), /Unknown footprint/); }
   assert.equal((await f.client.get(id)).claim_state?.assignee, 'swarm-test');
@@ -204,7 +204,7 @@ for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines
 
 test('watch restores SIGINT listener after a real status failure', async t => {
   const f = await fixture(t); const id = await f.item(); await f.client.update(id, { field: ['swarm_branch=main'] });
-  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   const before = process.listenerCount('SIGINT');
   await assert.rejects(ext.runCommand({ command: 'swarm status', pmRoot: f.pmRoot, options: { watch: true }, global: { outputFormat: 'json' } }), /no base SHA/);
   assert.equal(process.listenerCount('SIGINT'), before);
@@ -212,7 +212,7 @@ test('watch restores SIGINT listener after a real status failure', async t => {
 
 
 test('watch completion renderer owns only completed watch results, preserving native status and other commands', async () => {
-  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   for (const format of ['toon', 'json'] as const) {
     const completed = await ext.runRendererOverride({ format, command: 'swarm status', result: { swarm_watch_complete: true } });
     assert.equal(completed.overridden, true); assert.equal(completed.rendered, '');

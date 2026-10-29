@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { PmClient, readSettings, resolveAuthor, resolvePmRoot } from '@unbrained/pm-cli/sdk';
 import type { GetResult, PmClientOptions } from '@unbrained/pm-cli/sdk';
-import { settings } from './settings.ts';
+import { inspectItem, readItem, clientMutationSnapshot } from './inspection.ts';
+import { commitItemMutation, assertPrivatePathSafe, assertSdkInstance, SettingsRefusal, settings } from './settings.ts';
 
 /** Versioned recorded-author comment envelope; ordinary discussion never becomes a witness. */
 export const PROGRESS_PREFIX = 'swarm-progress/v2 ';
@@ -83,6 +84,11 @@ function decode(text: string): ProgressWitness | undefined {
   }
   return row as unknown as ProgressWitness;
 }
+/** Validate a proposed witness before any settings read or backend access. */
+export function validateProgressWitness(options: ProgressDeclaration): ProgressWitness {
+  assertPrivatePathSafe(options);
+  return decode(PROGRESS_PREFIX + JSON.stringify({ step: options.step, revision: options.revision, stage: options.stage, evidence: options.evidence }))!;
+}
 /** Compose parallel Plan progress through native SDK reads and atomic idempotent comments.
  * Actors use the same author resolution as SDK mutations; flags are assertions.
  * Tracker configuration supplies approval authority. Asserted identities need
@@ -95,12 +101,13 @@ export class PlanProgress {
   readonly pmRoot: string;
   /** Explicit SDK author option, never an agent or orchestrator flag. */
   private readonly sdkAuthor: string | undefined;
-  /** Bind SDK author options once; active hosts reuse native schema/provider context. */
-  constructor(options: PmClientOptions = {}, activeHost = false) {
+  /** Reuse the exact host client; legacy boolean hints use normal native activation, never an assumed host scope. */
+  constructor(options: PmClientOptions = {}, activeHost: boolean | PmClient = false) {
     this.pmRoot = resolvePmRoot(options.cwd ?? process.cwd(), options.pmRoot);
     this.sdkAuthor = options.author;
     const bound = { ...options, pmRoot: this.pmRoot };
-    this.client = activeHost ? PmClient.forActiveExtensionHost(bound) : new PmClient(bound);
+    this.client = typeof activeHost !== 'boolean' ? activeHost : new PmClient(bound);
+    assertSdkInstance(this.client);
   }
 
   /** Resolve the actor exactly as the SDK records mutation history and load tracker authority. */
@@ -110,16 +117,21 @@ export class PlanProgress {
     let config: Awaited<ReturnType<typeof settings>>;
     try { config = await settings(this.pmRoot); } catch { throw new ProgressRefusal('progress_invalid', 'Repair swarm settings and configure progress_orchestrator as one nonempty author identity using swarm settings.'); }
     const orchestrator = config.progress_orchestrator?.trim() ?? null;
+    assertPrivatePathSafe({ actor, orchestrator });
     if ((options.agent !== undefined && options.agent !== actor) || (options.orchestrator !== undefined && options.orchestrator !== orchestrator)) throw new ProgressRefusal('progress_role', 'Match --agent to the SDK-recorded author (PM_AUTHOR or SDK author option), and --orchestrator to tracker swarm.progress_orchestrator; flags cannot select either identity.');
     return { actor, orchestrator };
   }
 
   /** Read complete normalized core Plan metadata without agent output ceilings. */
-  private async snapshot(id: string): Promise<PlanSnapshot> {
-    // Unbounded SDK reads cannot produce the budget-omission union member.
-    const result = await this.client.get(id, { depth: 'full', outputBudget: 'unbounded', outputLimit: 'unbounded' }) as GetResult;
-    if (result.item.type !== 'Plan' || !Array.isArray(result.item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
-    return result.item;
+  private async snapshot(id: string, admit = false) {
+    const read = async (canonicalId = id) => {
+      const fresh = await inspectItem(this.pmRoot, this.pmRoot, canonicalId);
+      return fresh === null ? (await readItem(this.client, canonicalId)).item : { ...fresh.item, body: fresh.body };
+    };
+    const snapshot = admit ? await clientMutationSnapshot(this.pmRoot, this.client, id, read) : { item: await read(), historyHead: undefined };
+    const item = snapshot.item as PlanSnapshot;
+    if (item.type !== 'Plan' || !Array.isArray(item.plan_steps)) throw new ProgressRefusal('progress_invalid', 'Use an existing core Plan item with steps; create or edit it with pm plan.');
+    return { ...snapshot, item };
   }
 
   /** Derive all levels from the same snapshot before applying bounded pagination. */
@@ -128,7 +140,7 @@ export class PlanProgress {
     if (options.revision !== undefined && options.revision !== revision) throw new ProgressRefusal('progress_stale', 'Read progress again and re-evaluate evidence against its current revision.');
     const offset = options.offset ?? 0; const limit = options.limit ?? 20;
     if (!Number.isInteger(offset) || offset < 0 || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new ProgressRefusal('progress_invalid', 'Use a nonnegative integer --offset and --limit from 1 through 100.');
-    const witnesses = item.comments!.flatMap(comment => {
+    const witnesses = (item.comments ?? []).flatMap(comment => {
       const witness = decode(comment.text); return witness === undefined ? [] : [{ ...witness, author: comment.author }];
     });
     const steps = item.plan_steps!.map(step => {
@@ -150,7 +162,7 @@ export class PlanProgress {
   /** Inspect progress without acquiring writer leases or changing item history. */
   async view(id: string, options: ProgressOptions = {}): Promise<ProgressView> {
     const { orchestrator } = await this.authority(options);
-    return this.project(await this.snapshot(id), options, orchestrator);
+    return this.project((await this.snapshot(id)).item, options, orchestrator);
   }
 
   /** Preview or explicitly append an attributed declaration; stale races stay stale.
@@ -159,9 +171,24 @@ export class PlanProgress {
    * preserve one another's comments; no package-local coordination lock is used.
    */
   async witness(id: string, options: ProgressDeclaration): Promise<{ id: string; revision: string; dry_run: boolean; actor: string; witness: ProgressWitness }> {
-    const witness = decode(PROGRESS_PREFIX + JSON.stringify({ step: options.step, revision: options.revision, stage: options.stage, evidence: options.evidence }))!;
+    return this.witnessRetried(id, options);
+  }
+
+  /** Bound native conflict retries while preserving the final typed refusal and all peer evidence. */
+  private async witnessRetried(id: string, options: ProgressDeclaration, attempt = 0): ReturnType<PlanProgress['witness']> {
+    try { return await this.witnessAttempt(id, options); }
+    catch (error) {
+      if (error instanceof SettingsRefusal && ['swarm_document_changed', 'swarm_superseded'].includes(error.code) && attempt < 7) return this.witnessRetried(id, options, attempt + 1);
+      throw error;
+    }
+  }
+
+  /** Refresh every role/revision prerequisite after a benign append race; stale evidence and privacy never retry. */
+  private async witnessAttempt(id: string, options: ProgressDeclaration): Promise<{ id: string; revision: string; dry_run: boolean; actor: string; witness: ProgressWitness }> {
+    assertPrivatePathSafe({ id, options, author: this.sdkAuthor });
+    const witness = validateProgressWitness(options);
     const { actor, orchestrator } = await this.authority(options);
-    const item = await this.snapshot(id);
+    const { item, historyHead } = await this.snapshot(id, options.apply === true);
     const step = item.plan_steps!.find(row => row.id === witness.step);
     if (step === undefined) throw new ProgressRefusal('progress_invalid', 'Use a step id from the current Plan progress view.');
     const view = this.project(item, { ...options, offset: item.plan_steps!.indexOf(step), limit: 1 }, orchestrator);
@@ -173,7 +200,7 @@ export class PlanProgress {
       if (step.owner === actor || (witness.stage === 'accepted' && (view.orchestrator !== actor || selected.reviewers.includes(actor)))) throw new ProgressRefusal('progress_role', 'Use an independent reviewer and the tracker-configured orchestrator for acceptance.');
       if (!selected.produced || (witness.stage === 'accepted' && !selected.reviewed)) throw new ProgressRefusal('progress_prerequisite', 'Production evidence and then an independent review are required before acceptance.');
     }
-    if (options.apply === true) await this.client.comments(id, { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true });
+    if (options.apply === true) await commitItemMutation({ id, options: { add: PROGRESS_PREFIX + JSON.stringify(witness), author: actor, ifAbsent: true }, item }, admitted => this.client.comments(admitted.id, admitted.options), { history: historyHead! });
     return { id: item.id, revision: view.revision, dry_run: options.apply !== true, actor, witness };
   }
 }

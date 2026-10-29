@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { writeFileSync, readFileSync } from 'node:fs';
@@ -277,7 +278,7 @@ test('shared planning retains unknown solitary waves and ignores stale Git field
 /** Measure host-bound shared dispatch as well as real CLI subprocess behavior. */
 test('shared SDK dispatch covers active, terminal, unknown and explicit-file operations', async t => {
   const f = await sharedFixture(t);
-  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   /** Call the registered handler with the real host SDK and complete tracker context. */
   const run = async (verb: string, options: Record<string, unknown> = {}, args: string[] = []) => (await harness.runCommand({ command: `swarm ${verb}`, pmRoot: f.pmRoot, options, args, global: { author: 'shared-test' } })).result;
   await run('settings', { limit: '3', apply: true });
@@ -319,6 +320,15 @@ test('Git refusal exit codes retain the existing dispatcher behavior', async t =
 });
 
 
+test('Git missing-item refusals retain the native SDK exit code', async t => {
+  const f = await fixture(t); const id = 'swarm-test-absent'; let expected = 0;
+  try { await f.client.get(id); }
+  catch (error) { assert.ok(isPmCliExpectedError(error)); expected = error.exitCode; }
+  assert.notEqual(expected, 0);
+  const result = swarmCli(f, ['start', id]);
+  assert.equal(result.status, expected, result.stdout + result.stderr);
+});
+
 for (const operation of ['plan', 'preview', 'next', 'start', 'sync', 'reap'] as const) {
   test(`shared ${operation} reuses one corpus without per-lane claim reads`, async t => {
     const f = await sharedFixture(t);
@@ -338,7 +348,7 @@ for (const operation of ['plan', 'preview', 'next', 'start', 'sync', 'reap'] as 
       case 'reap': await f.shared.reap(); break;
     }
     assert.equal(corpusReads, operation === 'sync' ? 0 : 1, 'sync reads only its target; selection certifies the corpus');
-    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready] : operation === 'sync' ? [active] : [], 'only the selected item needs a direct ownership read');
+    assert.deepEqual(itemReads, operation === 'next' || operation === 'start' ? [ready, ready] : operation === 'sync' ? [active, active] : [], 'only the selected item needs canonical identity and authoritative ownership reads');
   });
 }
 

@@ -1,4 +1,6 @@
+import { assertPrivatePathSafe, commitItemMutation, assertMutationReceipt } from './settings.ts';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, discoverExtensions } from '@unbrained/pm-cli/sdk';
+import { clientMutationSnapshot, inspectItem } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
 import { RESOURCE_TAG, ResourceRefusal } from './resources.ts';
 import type { ResourceBackend, ResourceRecord } from './resources.ts';
@@ -20,25 +22,41 @@ export function trackerResourceBackend(engine: Swarm): ResourceBackend {
     return settings;
   };
   /** Read only resource metadata; reject terminal items and preserve ordinary claims. */
-  const read = async (id: string): Promise<ResourceRecord> => {
+  const snapshot = async (id: string, admit = false) => {
     const settings = await supported();
-    const item = (await engine.client.get(id, { depth: 'full' })).item;
-    return { id: String(item.id), resource: (item.tags as string[]).includes(RESOURCE_TAG) && !statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(settings.schema)), token: String(item.swarm_token ?? '0'), owner: typeof item.assignee === 'string' && item.assignee.trim() ? item.assignee : null, expires_at: typeof item.swarm_resource_expires_at === 'string' ? item.swarm_resource_expires_at : null };
+    const local = await inspectItem(engine.pmRoot, engine.repo, id);
+    if (local === null) throw new ResourceRefusal('resource_backend_refused', 'Storage ownership changed during admission; configure its explicit ResourceBackend before retrying.');
+    const paired = admit ? await clientMutationSnapshot(engine.pmRoot, engine.client, id, async canonicalId => {
+      const fresh = await inspectItem(engine.pmRoot, engine.repo, canonicalId);
+      if (fresh === null) throw new ResourceRefusal('resource_backend_refused', 'Storage ownership changed; configure its explicit ResourceBackend.');
+      return { ...fresh.item, body: fresh.body };
+    }) : undefined;
+    const item: Record<string, unknown> = paired?.item ?? { ...local.item, body: local.body };
+    return { item, initial: paired, record: { id: String(item.id), resource: (item.tags as string[]).includes(RESOURCE_TAG) && !statusIsTerminal(String(item.status), resolveRuntimeStatusRegistry(settings.schema)), token: String(item.swarm_token ?? '0'), owner: typeof item.assignee === 'string' && item.assignee.trim() ? item.assignee : null, expires_at: typeof item.swarm_resource_expires_at === 'string' ? item.swarm_resource_expires_at : null } };
   };
   return {
-    read,
+    read: async (id: string): Promise<ResourceRecord> => (await snapshot(id)).record,
     /** Serialize with #12 claims and hold its live writer pin across the SDK commit. */
     async transact(id, author, decide) {
       await supported();
       return withSwarmLease(engine.pmRoot, author, lease => lease.write(async () => {
-        const next = decide(await read(id));
+        const { item, initial, record: currentRecord } = await snapshot(id, true);
+        assertPrivatePathSafe(item, 'document');
+        const next = decide(currentRecord);
         lease.assert();
-        await engine.client.update(next.id, {
+        let publication: Record<string, unknown> | undefined;
+        lease.onFailure(async () => {
+          if (publication === undefined || next.owner !== author || next.token === currentRecord.token) return;
+          const current = await engine.acquisitionSnapshot(String(item.id), initial!.version + 1, publication);
+          assertMutationReceipt({ token: current.document.metadata.swarm_token, expires: current.document.metadata.swarm_resource_expires_at }, { token: next.token, expires: next.expires_at }, 'A peer changed the acquired reservation; preserve its state and inspect resource history before retrying.');
+          await lease.write(() => commitItemMutation({ id: next.id, item: { ...current.document.metadata, body: current.document.body }, options: { author, unset: ['assignee', 'swarm_resource_expires_at'], message: 'Release failed reservation acquisition' } }, admitted => engine.client.update(admitted.id, admitted.options), { generation: { token: next.token }, history: current.historyHead }), { announce: false });
+        });
+        await commitItemMutation({ id: next.id, options: {
           author, force: true,
           ...(next.owner === null ? { unset: ['assignee', 'swarm_resource_expires_at'] } : { assignee: next.owner }),
           field: [`swarm_token=${next.token}`, ...(next.expires_at === null ? [] : [`swarm_resource_expires_at=${next.expires_at}`])],
           comment: [next.note === undefined ? `Swarm resource generation ${next.token}: ${next.owner === null ? 'released' : 'reserved until ' + next.expires_at}` : `Swarm resource generation ${next.token}: ${next.note}`],
-        });
+        }, item }, async admitted => { const result = await engine.client.update(admitted.id, admitted.options); publication = result.item; return result; }, { history: initial!.historyHead, onCommitted: (_before, after) => { publication = after.metadata; } });
         const { note: _note, ...record } = next; return record;
       }));
     },

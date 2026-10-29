@@ -46,7 +46,7 @@ test('handoff atomically publishes owner, higher fence, note and receiver contex
   await f.shared.next(); await assert.rejects(f.shared.close(id, ''), /requires/);
   assert.deepEqual(await f.shared.close(id, 'Verified'), { id, closed: true });
   const final = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(final.status, 'closed'); assert.equal(final.assignee, undefined); assert.equal(final.swarm_token, '4');
+  assert.equal(final.status, 'closed'); assert.equal(final.assignee, undefined); assert.equal(final.swarm_token, back.token);
   assert.equal((await f.shared.next()).selected, null);
 });
 
@@ -82,11 +82,11 @@ test('renewal outlives the lease, expiry and supersession fail closed, live pins
   const f = await sharedFixture(t); const path = join(f.pmRoot, 'runtime/swarm/operation.json');
   await withSwarmLease(f.pmRoot, 'long-worker', async lease => {
     const initial = readRuntime<{ heartbeat: number }>(path)!.heartbeat;
+    await lease.write(() => f.client.create({ type: 'Task', title: 'Renewed write' }));
     await delay(5200); lease.assert();
     assert.ok(readRuntime<{ heartbeat: number }>(path)!.heartbeat > initial);
     assert.ok(readRuntime(heartbeatPath(f.pmRoot, 'long-worker')));
     await assert.rejects(withSwarmLease(f.pmRoot, 'rival', async () => {}, { waitMs: 0 }), /swarm_busy/);
-    await lease.write(() => f.client.create({ type: 'Task', title: 'Renewed write' }));
   }, { leaseMs: 5000, renewMs: 100 });
   assert.equal(existsSync(path), false);
   await withSwarmLease(f.pmRoot, 'expired', async lease => {
@@ -116,7 +116,7 @@ test('lock retries wait through real SDK contention and never retry unrelated or
 
 test('new registered commands parse tokens and report actionable native errors without git', async t => {
   const f = await sharedFixture(t); const id = await f.item(['src']);
-  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers'] });
+  const harness = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
   /** Dispatch registered handlers against the real fixture SDK. */
   const run = async (verb: string, args: string[] = [], options: Record<string, unknown> = {}) => (await harness.runCommand({ command: `swarm ${verb}`, pmRoot: f.pmRoot, args, options, global: { author: 'shared-test' } })).result;
   await run('start', [id]); await run('heartbeat'); await run('heartbeat', [id], { token: '1' });
@@ -128,7 +128,7 @@ test('new registered commands parse tokens and report actionable native errors w
   assert.equal(refused.status, 2); assert.match(refused.stdout + refused.stderr, /swarm_stale_fence/);
   f.run('swarm', 'heartbeat', id, '--agent', 'receiver', '--token', '2');
   f.run('swarm', 'close', id, '--agent', 'receiver', '--token', '2', '--note', 'Complete');
-  await assert.rejects(run('close', [id], { note: 'Stale', token: '2' }), /swarm_stale_fence/);
+  await assert.rejects(run('close', [id], { note: 'Stale', token: '2' }), /swarm_close_recovery_unsupported/);
 });
 
 
@@ -148,23 +148,22 @@ test('a real killed lease holder is recovered, and Linux PID reuse does not reta
 });
 
 
-test('queued operations renew agent liveness while respecting the live process pin', async t => {
+test('queued operations defer principal liveness until successful admission and always release the holder', async t => {
   const f = await sharedFixture(t); let entered = () => {};
   const ready = new Promise<void>(resolve => { entered = resolve; });
   let release = () => {}; const resume = new Promise<void>(resolve => { release = resolve; });
   const owner = withSwarmLease(f.pmRoot, 'busy-worker', async () => { entered(); await resume; });
   await ready;
-  const waiting = withSwarmLease(f.pmRoot, 'queued-worker', async lease => { lease.assert(); }, { renewMs: 20 });
-  const first = readRuntime<{ heartbeat: string }>(heartbeatPath(f.pmRoot, 'queued-worker'))!.heartbeat;
-  let second = first;
+  let admitted = false;
+  const waiting = withSwarmLease(f.pmRoot, 'queued-worker', async lease => { lease.assert(); admitted = true; }, { renewMs: 20 });
+  const heartbeat = heartbeatPath(f.pmRoot, 'queued-worker');
   try {
-    const deadline = Date.now() + 10000;
-    while (second === first && Date.now() < deadline) {
-      await delay(25);
-      second = readRuntime<{ heartbeat: string }>(heartbeatPath(f.pmRoot, 'queued-worker'))!.heartbeat;
-    }
+    await delay(75);
+    assert.equal(admitted, false, 'the live pin still serializes validation');
+    assert.equal(existsSync(heartbeat), false, 'a waiting request must not mutate persistent principal state');
   } finally { release(); await Promise.all([owner, waiting]); }
-  assert.ok(Date.parse(second) > Date.parse(first));
+  assert.equal(admitted, true);
+  assert.ok(readRuntime<{ heartbeat: string }>(heartbeat)?.heartbeat, 'successful admission announces principal liveness');
 });
 
 test('unsupported filesystem pin publication fails before invoking a writer', async t => {
