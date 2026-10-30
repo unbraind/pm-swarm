@@ -2,13 +2,19 @@ id: pm-swarm-resource-deadlock-witnesses
 title: Explain resource deadlocks with fenced request witnesses
 description: "Record explicit pending resource requests, project current holder/requester wait edges and return bounded SDK cycle components with reviewable manual release alternatives."
 type: Feature
-status: in_progress
+status: closed
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#38"
 created_at: "2026-10-29T07:28:14.800Z"
-updated_at: "2026-10-29T09:14:02.560Z"
+updated_at: "2026-10-30T20:36:41.386Z"
+closed_at: "2026-10-30T20:36:39.578Z"
+completed_at: "2026-10-29T09:49:40.000Z"
 author: codex-agent
 acceptance_criteria: A two-worker/two-resource deadlock yields the exact cycle; expired generations are excluded; detection revokes nothing; SDK graph cycle results match the projected requests.
+release: 2026.10.29
+resolution: "Delivered by PR #38 (d2e0e0e): Explain resource deadlocks with fenced wait witnesses"
+expected_result: A two-worker/two-resource deadlock yields the exact cycle; expired generations are excluded; detection revokes nothing; SDK graph cycle results match the projected requests.
+actual_result: "PR #38 merged at 2026-10-29T09:49:40Z as d2e0e0e; required CI passed on the merged head."
 comments[9]{created_at,author,text}:
   "2026-10-29T07:28:37.596Z",codex-agent,"Overlap recheck: core SDK owns fenced claims, native history and graph collectOrderingCycles; pm-graph exposes structural cycles and pm-gantt-chart scheduling cycles. Existing swarm reservations guard one resource and fair scheduling selects ready work. No package records multi-resource pending waits. New requests bind a live held resource generation to wanted resource identities; detection is observational and never changes leases. Reuse native SDK guards and append-only heads; workspace transactions alone do not exclude ordinary writers (pm-cli#1620)."
   "2026-10-29T07:45:09.550Z",codex-agent,"Implemented typed ResourceDeadlocks request/inspect/detect APIs and native swarm deadlocks command. Requests bind current anchor fences and exact native history revisions; previews and writes share the same path. SDK collectOrderingCycles supplies components. Focused cycle, expiry, withdrawal, revision replay and all three native mutation-boundary ABA cases pass. Public main snapshot 3ee1ad5: 32 items, 0 resources, 0 requests, 0 edges and 0 cycles; all tracker files/directories read-only, changed files 0, measured observation 11128 ms. Cold writable guard lists may create ignored metadata caches; read-only SDK fallback succeeds. Full release gates reserved for CI as instructed; 500-sequence model and packed consumer coverage in progress."
@@ -43,4 +49,5 @@ docs[4]{path,scope}:
   docs/resource-deadlocks-verification.md,project
   docs/resource-deadlocks.md,project
   README.md,project
+close_reason: "Delivered by PR #38 (d2e0e0e): Explain resource deadlocks with fenced wait witnesses"
 body: ""
