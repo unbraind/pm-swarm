@@ -3,15 +3,21 @@ title: Integrate settings and package quality gates
 description: ""
 type: Feature
 pm_format_version: 2
-status: in_progress
+status: closed
 priority: 2
 tags: []
 created_at: "2026-10-15T18:30:00.964Z"
-updated_at: "2026-10-29T02:22:38.507Z"
+updated_at: "2026-10-30T20:36:49.362Z"
+closed_at: "2026-10-30T20:36:45.783Z"
+completed_at: "2026-10-29T02:44:27.000Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
 parent: pm-swarm-07o2
+release: 2026.10.29
+resolution: "Delivered by PR #24 (3ee1ad5): Validate swarm settings and shared receipts; keep close native and recovery read-only"
+expected_result: Typed settings and matching flags with audited SDK persistence; host renderer; packed npm and Bun acceptance; full coverage and documentation; private path guard.
+actual_result: "PR #24 merged at 2026-10-29T02:44:27Z as 3ee1ad5; required CI passed on the merged head."
 comments[209]{created_at,author,text}:
   "2026-10-15T18:53:58.181Z",codex-agent,Implementation and real-repository regression evidence linked. Review remains with the orchestrator; this item stays in progress.
   "2026-10-15T19:36:03.614Z",codex-agent,"Round 1: update docs and run unchanged npm and Bun release gates in ordinary and CI-like isolated environments; retain pinned host and disabled release policy."
@@ -616,4 +622,5 @@ docs[7]{path,scope}:
   docs/receipt-and-generation-verification.md,project
   docs/settings-and-quality-gates.md,project
   README.md,project
+close_reason: "Delivered by PR #24 (3ee1ad5): Validate swarm settings and shared receipts; keep close native and recovery read-only"
 body: ""
