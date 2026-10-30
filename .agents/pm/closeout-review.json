@@ -1,0 +1,18 @@
+{
+  "needs_review": [
+    {
+      "item": "pm-swarm-aa9h",
+      "action": "needs_review",
+      "candidates": [
+        36
+      ],
+      "missing_evidence": [
+        {
+          "pr": 36,
+          "code": "required_checks_unverified",
+          "reason": "Required-check metadata unavailable; declare --required-checks to verify the required contexts."
+        }
+      ]
+    }
+  ]
+}
