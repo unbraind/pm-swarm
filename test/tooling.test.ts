@@ -194,6 +194,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     `/var${home}alice/x`, `/var${rootHome}/.ssh`, `--prefix=${home}alice`,
     // Round 3: URI schemes are case-insensitive, and a link ending before the path does not hide it.
     `FILE://${home}alice/private`, `File://LocalHost${home}x`, `[docs](https://example.com/c) and ${home}alice`,
+    // Round 4: a joined option after an assignment or list separator.
+    `CFLAGS=-I${home}alice/include`, `LDFLAGS=-Wl,-L${home}alice/lib`, `opts:-I${home}alice`,
     `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
     `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
     `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,

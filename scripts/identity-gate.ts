@@ -25,12 +25,13 @@ function gitOutput(root: string, args: readonly string[]): string {
 /**
  * Characters after which an absolute path can start: line start, a leading diff marker, whitespace, quotes and
  * backticks, opening brackets, assignment and list separators, emphasis, the `file://` / `file://localhost` URL
- * authorities in any letter case, and a single-letter command option the path is glued to (`-I`, `-L`, `-o`).
+ * authorities in any letter case, and a single-letter command option the path is glued to (`-I`, `-L`, `-o`), also
+ * when the option itself follows an assignment or list separator (`CFLAGS=-I…`, `-Wl,-L…`).
  *
  * A positive boundary list rather than an exclusion list: any other preceding character continues a relative
  * name, so a CJK folder name, `c++` or `docs` before a home or Users segment is not reported.
  */
-const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*]|[Ff][Ii][Ll][Ee]:\/\/|[Ff][Ii][Ll][Ee]:\/\/[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|(?:^|[\s"'` + "`" + String.raw`(\[])-[A-Za-z])`;
+const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*]|[Ff][Ii][Ll][Ee]:\/\/|[Ff][Ii][Ll][Ee]:\/\/[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|(?:^|[\s"'` + "`" + String.raw`(\[=:,;])-[A-Za-z])`;
 
 /**
  * Remote URLs (any scheme of two or more characters except `file:`, in any letter case, because URI schemes are
