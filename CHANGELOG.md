@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The identity gate now recognizes absolute home paths only at path boundaries, so prose and relative paths no longer block the GitHub issue sync ([pm-swarm-4q55](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4q55.toon))
+
 ## 2026.10.29 - 2026-10-29
 
 ### Added

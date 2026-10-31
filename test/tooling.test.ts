@@ -21,7 +21,7 @@ import { auditPublishAttestation, runIfMain } from "../scripts/verify-release-pu
 import { isMainInvocation } from "../scripts/main-invocation.ts";
 import { runCoverageGate } from "../scripts/coverage-gate.ts";
 import { runDocstringGate } from "../scripts/docstring-gate.ts";
-import { auditIdentities, runIdentityGate } from "../scripts/identity-gate.ts";
+import { auditIdentities, containsAbsoluteHomePath, runIdentityGate } from "../scripts/identity-gate.ts";
 import * as typeContracts from "../src/types.ts";
 
 import { gitEnvironment } from '../src/git-environment.ts';
@@ -178,6 +178,69 @@ test('identity policy rejects unapproved authors, committers and newly added hom
   fixtureGit(root, ['add', 'note.txt']);
   fixtureGit(root, ['commit', '-m', 'Remove fixture data']);
   assert.equal(auditIdentities(root).length, 3, 'Historical violations cannot be hidden by a later deletion');
+});
+
+test('home path detection refuses absolute homes and allows relative names and prose', () => {
+  // Built from parts so this file never contains a literal home path itself.
+  const home = '/' + 'home/'; const users = '/' + 'Users/'; const rootHome = '/' + 'root';
+  const backslash = String.fromCharCode(92); const profile = 'Us' + 'ers';
+  const mustRefuse = [
+    `${home}fixture/private`, `"${home}fixture"`, `(${home}fixture)`, `path=${home}fixture`, `file://${home}fixture`,
+    `[${home}fixture]`, `<code>${home}fixture`, `HOME=${home}fixture`, `a, ${home}fixture`, `**${home}fixture**`,
+    `+${home}fixture`, `-${home}fixture`,
+    // CodeRabbit on #48 round 2: glued options, repeated slashes, any-case Windows profiles, /var homes.
+    `cc -I${home}alice/include`, `ld -L${users}alice/lib`, `/${home}alice/private`, `see /${home}alice`,
+    `C:${backslash}${profile.toLowerCase()}${backslash}alice`, `c:/${profile.toUpperCase()}/alice/`,
+    `/var${home}alice/x`, `/var${rootHome}/.ssh`, `--prefix=${home}alice`,
+    // Round 3: URI schemes are case-insensitive, and a link ending before the path does not hide it.
+    `FILE://${home}alice/private`, `File://LocalHost${home}x`, `[docs](https://example.com/c) and ${home}alice`,
+    // Round 5: Unicode punctuation and spaces start a path, and a CSV path field after a URL is scanned.
+    `路径：${home}alice/private`, `说明，${home}alice/x`, `「${home}alice」`, `x\u3000${home}alice`,
+    `https://example.com/public,${home}alice/private`, `a;https://example.com/x;${users}alice/b`,
+    // Round 6: the root home before closing or Unicode punctuation.
+    `[${rootHome}]`, `路径：${rootHome}。`, `a ${rootHome}」`, `${rootHome}!`,
+    // Round 4: a joined option after an assignment or list separator.
+    `CFLAGS=-I${home}alice/include`, `LDFLAGS=-Wl,-L${home}alice/lib`, `opts:-I${home}alice`,
+    `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
+    `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
+    `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,
+  ];
+  const mustAllow = [
+    // The imported GitHub issue text that the previous pattern refused (pm-swarm#29).
+    'The exact mismatch/root cause has **not** been isolated',
+    'docs/root-cause.md', 'src/home/page.ts', 'my-project/Users/guide.md', 'the /rootfs mount', '/rooted tree',
+    '~/home/notes', 'v1.home/x', 'item-home/', 'root/cause', 'Users/fixture without a leading slash',
+    // Relative tokens whose last component character is not ASCII (CodeRabbit on #48), and remote URLs.
+    '文档/home/page.ts', 'docs/c++/home/page.ts', 'https://example.com/home/x', 'https://example.com/root/x',
+    // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
+    'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
+    'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // A dash or underscore continues the root-home segment (round 6).
+    '/root-cause', '/root_x',
+    // A comma inside a URL query stays masked; a dot continues a name (round 5).
+    'https://example.com/q?a=1,b=/home/x', 'a.b/home/x',
+    // A parenthesis is a valid URL path character, so it stays inside the masked remote URL (round 3).
+    'https://example.com/(/home/alice)', 'HTTPS://EXAMPLE.COM/login?next=/home/x',
+  ];
+  for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
+  for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);
+});
+
+test('home path detection stays linear on long scheme-like runs', () => {
+  // CodeRabbit on #48: an unbounded URL scheme retried at every word boundary made the scan quadratic (an 80k-character
+  // run of a+ took about 9 s). The bounded scheme keeps it to milliseconds; the limit leaves a wide margin for load.
+  const text = 'a+'.repeat(40_000);
+  const started = performance.now();
+  assert.equal(containsAbsoluteHomePath(text), false);
+  assert.ok(performance.now() - started < 1000, `scan took ${Math.round(performance.now() - started)} ms`);
+});
+
+test('identity policy admits prose that only resembles a root home path', () => {
+  const root = identityFixture('identity-prose');
+  writeFileSync(join(root, 'note.txt'), 'The exact mismatch/root cause has not been isolated; see docs/root-cause.md\n');
+  fixtureGit(root, ['add', 'note.txt']);
+  fixtureGit(root, ['commit', '-m', 'Record root-cause prose']);
+  assert.deepEqual(auditIdentities(root), []);
 });
 
 test('identity policy fails closed on invalid policy and unavailable baseline history', () => {

@@ -22,6 +22,61 @@ function gitOutput(root: string, args: readonly string[]): string {
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
+/**
+ * Characters after which an absolute path can start: line start, a leading diff marker, whitespace, quotes and
+ * backticks, opening brackets, assignment and list separators, emphasis, the `file://` / `file://localhost` URL
+ * authorities in any letter case, and a single-letter command option the path is glued to (`-I`, `-L`, `-o`), also
+ * when the option itself follows an assignment or list separator (`CFLAGS=-I…`, `-Wl,-L…`). Any Unicode opening
+ * punctuation, initial quote, space separator or other punctuation (a fullwidth colon or comma, an ideographic
+ * comma) also starts a path, except `.`, `/` and `\`, which continue a name. Letters in any script continue a name.
+ *
+ * A positive boundary list rather than an exclusion list: any other preceding character continues a relative
+ * name, so a CJK folder name, `c++` or `docs` before a home or Users segment is not reported.
+ */
+const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*]|[\p{Ps}\p{Pi}\p{Zs}]|(?![./\\])\p{Po}|[Ff][Ii][Ll][Ee]:\/\/|[Ff][Ii][Ll][Ee]:\/\/[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|(?:^|[\s"'` + "`" + String.raw`(\[=:,;])-[A-Za-z])`;
+
+/**
+ * Remote URLs (any scheme of two or more characters except `file:`, in any letter case, because URI schemes are
+ * case-insensitive), blanked before matching: their paths and query values (`https://example.com/login?next=/home/dashboard`)
+ * name remote resources, not this machine. A match ends at whitespace, quotes, angle or square brackets, braces
+ * or `)`, but not `(`, which is a valid path character; `)` still ends a Markdown link. A comma or semicolon that is
+ * followed by a slash ends the URL, so a separate path field after it (as in a CSV line) is still scanned. The
+ * scheme is capped at 32 characters, so each start position does bounded work and the scan stays linear on long
+ * scheme-like runs (an unbounded scheme retried at every word boundary was quadratic).
+ */
+const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]{1,31}:\/\/(?:[^\s"'`<>)[\]{},;]|[,;](?!\/))*/giu;
+
+/**
+ * Absolute home-directory paths: Linux and macOS user homes (also below a var directory, as on Fedora Silverblue)
+ * and the root home (also below var, as on macOS; it ends at a separator, whitespace, or closing or other
+ * punctuation, never at a dash or underscore), with any number of leading slashes, because POSIX resolves a
+ * doubled leading slash like a single one. Windows profiles match one or more separators and any letter case,
+ * because Windows paths are case-insensitive. The macOS Users form stays case-sensitive: a lowercase users segment
+ * in text is far more often a web route than a home directory.
+ */
+const ABSOLUTE_HOME_PATH = new RegExp(
+  `${PATH_START}\\/+(?:var\\/+)?(?:home|Users)\\/`
+  + `|${PATH_START}\\/+(?:var\\/+)?root(?=\\/|$|[\\s"'` + "`" + `),.;:\\]}>]|[\\p{Pe}\\p{Pf}\\p{Po}\\p{Zs}])`
+  + String.raw`|\b[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]`,
+  "u",
+);
+
+/**
+ * Detect an absolute home-directory path: a Linux or macOS user home, the root home, or a Windows user profile.
+ *
+ * Each form must start a path token (see PATH_START), remote URLs are ignored (see REMOTE_URL), and the root home
+ * must end its segment. So prose such as "mismatch/root cause", a root-cause document, a relative folder named home
+ * or Users, or a web redirect value is not reported. The GitHub issue sync imports arbitrary issue text, and a false
+ * positive fails every later gate run until the commit leaves the audited range; a false negative publishes a
+ * username.
+ *
+ * @param text - Text to scan; for patch lines, the line without its leading `+`.
+ * @returns Whether the text contains an absolute home-directory path.
+ */
+export function containsAbsoluteHomePath(text: string): boolean {
+  return ABSOLUTE_HOME_PATH.test(text.replace(REMOTE_URL, ' '));
+}
+
 /** Audit every post-baseline commit, including side branches, against tracked policy. */
 export function auditIdentities(root: string): string[] {
   const baseline = policyEntries(root, 'identity-baseline.txt');
@@ -37,7 +92,7 @@ export function auditIdentities(root: string): string[] {
     if (!approved.has(author)) violations.push(`${commit}: unapproved author identity`);
     if (!approved.has(committer)) violations.push(`${commit}: unapproved committer identity`);
     const patch = git(['show', '--format=', '--diff-merges=first-parent', '--no-ext-diff', '--no-textconv', '--unified=0', commit]);
-    if (patch.split('\n').some(line => line.startsWith('+') && !line.startsWith('+++') && /\/(?:home|Users)\/|\/(?:root)(?:\/|\b)|[A-Za-z]:[\\/]Users[\\/]/.test(line))) {
+    if (patch.split('\n').some(line => line.startsWith('+') && !line.startsWith('+++') && containsAbsoluteHomePath(line.slice(1)))) {
       violations.push(`${commit}: added absolute home path`);
     }
   }
