@@ -197,6 +197,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Round 5: Unicode punctuation and spaces start a path, and a CSV path field after a URL is scanned.
     `路径：${home}alice/private`, `说明，${home}alice/x`, `「${home}alice」`, `x\u3000${home}alice`,
     `https://example.com/public,${home}alice/private`, `a;https://example.com/x;${users}alice/b`,
+    // Round 6: the root home before closing or Unicode punctuation.
+    `[${rootHome}]`, `路径：${rootHome}。`, `a ${rootHome}」`, `${rootHome}!`,
     // Round 4: a joined option after an assignment or list separator.
     `CFLAGS=-I${home}alice/include`, `LDFLAGS=-Wl,-L${home}alice/lib`, `opts:-I${home}alice`,
     `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
@@ -213,6 +215,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
     'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
     'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // A dash or underscore continues the root-home segment (round 6).
+    '/root-cause', '/root_x',
     // A comma inside a URL query stays masked; a dot continues a name (round 5).
     'https://example.com/q?a=1,b=/home/x', 'a.b/home/x',
     // A parenthesis is a valid URL path character, so it stays inside the masked remote URL (round 3).
@@ -220,6 +224,15 @@ test('home path detection refuses absolute homes and allows relative names and p
   ];
   for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
   for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);
+});
+
+test('home path detection stays linear on long scheme-like runs', () => {
+  // CodeRabbit on #48: an unbounded URL scheme retried at every word boundary made the scan quadratic (an 80k-character
+  // run of a+ took about 9 s). The bounded scheme keeps it to milliseconds; the limit leaves a wide margin for load.
+  const text = 'a+'.repeat(40_000);
+  const started = performance.now();
+  assert.equal(containsAbsoluteHomePath(text), false);
+  assert.ok(performance.now() - started < 1000, `scan took ${Math.round(performance.now() - started)} ms`);
 });
 
 test('identity policy admits prose that only resembles a root home path', () => {

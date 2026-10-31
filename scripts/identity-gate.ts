@@ -40,20 +40,23 @@ const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*
  * case-insensitive), blanked before matching: their paths and query values (`https://example.com/login?next=/home/dashboard`)
  * name remote resources, not this machine. A match ends at whitespace, quotes, angle or square brackets, braces
  * or `)`, but not `(`, which is a valid path character; `)` still ends a Markdown link. A comma or semicolon that is
- * followed by a slash ends the URL, so a separate path field after it (as in a CSV line) is still scanned.
+ * followed by a slash ends the URL, so a separate path field after it (as in a CSV line) is still scanned. The
+ * scheme is capped at 32 characters, so each start position does bounded work and the scan stays linear on long
+ * scheme-like runs (an unbounded scheme retried at every word boundary was quadratic).
  */
-const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]+:\/\/(?:[^\s"'`<>)[\]{},;]|[,;](?!\/))*/giu;
+const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]{1,31}:\/\/(?:[^\s"'`<>)[\]{},;]|[,;](?!\/))*/giu;
 
 /**
  * Absolute home-directory paths: Linux and macOS user homes (also below a var directory, as on Fedora Silverblue)
- * and the root home (also below var, as on macOS), with any number of leading slashes, because POSIX resolves a
+ * and the root home (also below var, as on macOS; it ends at a separator, whitespace, or closing or other
+ * punctuation, never at a dash or underscore), with any number of leading slashes, because POSIX resolves a
  * doubled leading slash like a single one. Windows profiles match one or more separators and any letter case,
  * because Windows paths are case-insensitive. The macOS Users form stays case-sensitive: a lowercase users segment
  * in text is far more often a web route than a home directory.
  */
 const ABSOLUTE_HOME_PATH = new RegExp(
   `${PATH_START}\\/+(?:var\\/+)?(?:home|Users)\\/`
-  + `|${PATH_START}\\/+(?:var\\/+)?root(?=\\/|$|[\\s"'` + "`" + `),.;:])`
+  + `|${PATH_START}\\/+(?:var\\/+)?root(?=\\/|$|[\\s"'` + "`" + `),.;:\\]}>]|[\\p{Pe}\\p{Pf}\\p{Po}\\p{Zs}])`
   + String.raw`|\b[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]`,
   "u",
 );
