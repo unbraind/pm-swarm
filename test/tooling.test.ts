@@ -186,7 +186,9 @@ test('home path detection refuses absolute homes and allows relative names and p
   const backslash = String.fromCharCode(92); const profile = 'Us' + 'ers';
   const mustRefuse = [
     `${home}fixture/private`, `"${home}fixture"`, `(${home}fixture)`, `path=${home}fixture`, `file://${home}fixture`,
-    `+${home}fixture`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
+    `[${home}fixture]`, `<code>${home}fixture`, `HOME=${home}fixture`, `a, ${home}fixture`, `**${home}fixture**`,
+    `+${home}fixture`, `-${home}fixture`,
+    `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
     `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
     `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,
   ];
@@ -195,6 +197,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     'The exact mismatch/root cause has **not** been isolated',
     'docs/root-cause.md', 'src/home/page.ts', 'my-project/Users/guide.md', 'the /rootfs mount', '/rooted tree',
     '~/home/notes', 'v1.home/x', 'item-home/', 'root/cause', 'Users/fixture without a leading slash',
+    // Relative tokens whose last component character is not ASCII (CodeRabbit on #48), and remote URLs.
+    '文档/home/page.ts', 'docs/c++/home/page.ts', 'https://example.com/home/x', 'https://example.com/root/x',
   ];
   for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
   for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);

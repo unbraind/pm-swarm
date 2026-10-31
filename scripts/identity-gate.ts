@@ -23,19 +23,36 @@ function gitOutput(root: string, args: readonly string[]): string {
 }
 
 /**
+ * Characters after which an absolute path can start: line start, whitespace, quotes and backticks, opening
+ * brackets, assignment and list separators, emphasis, the `file://` / `file://localhost` URL authorities, and a
+ * leading diff marker, so a committed patch file that adds a home path is still caught.
+ *
+ * A positive boundary list rather than an exclusion list: any other preceding character continues a relative
+ * name. Excluding only ASCII word characters treated `文档/home/page.ts` and `docs/c++/home/page.ts` as absolute,
+ * and a `file://localhost` URL slipped through because its path slash follows a letter.
+ */
+const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*]|file:\/\/|file:\/\/localhost)`;
+
+/** Absolute home-directory paths: Linux and macOS user homes, the root home, and Windows user profiles. */
+const ABSOLUTE_HOME_PATH = new RegExp(
+  `${PATH_START}\\/(?:home|Users)\\/`
+  + `|${PATH_START}\\/root(?=\\/|$|[\\s"'` + "`" + `),.;:])`
+  + String.raw`|\b[A-Za-z]:[\\/]+Users[\\/]`,
+);
+
+/**
  * Detect an absolute home-directory path: a Linux or macOS user home, the root home, or a Windows user profile.
  *
- * Each form must start a path token. A home or Users directory segment preceded by a word character, dot, tilde
- * or hyphen continues a relative name (a source file under a folder named home, say), and the root home must end
- * its segment, so prose such as "mismatch/root cause" or a root-cause document is not reported. A Windows profile
- * may use doubled separators, as JSON-escaped history stores it. The GitHub issue sync imports arbitrary issue
- * text, and a false positive fails every later gate run until the commit leaves the audited range.
+ * Each form must start a path token (see PATH_START), and the root home must end its segment, so prose such as
+ * "mismatch/root cause", a root-cause document, or a relative folder named home or Users is not reported. A
+ * Windows profile may use doubled separators, as JSON-escaped history stores it. The GitHub issue sync imports
+ * arbitrary issue text, and a false positive fails every later gate run until the commit leaves the audited range.
  *
- * @param text - One added patch line.
- * @returns Whether the line contains an absolute home-directory path.
+ * @param text - Text to scan; for patch lines, the line without its leading `+`.
+ * @returns Whether the text contains an absolute home-directory path.
  */
 export function containsAbsoluteHomePath(text: string): boolean {
-  return /(?<![\w.~-])\/(?:home|Users)\/|(?<![\w.~-])\/root(?=\/|$|[\s"'`),.;:])|\b[A-Za-z]:[\\/]+Users[\\/]/.test(text);
+  return ABSOLUTE_HOME_PATH.test(text);
 }
 
 /** Audit every post-baseline commit, including side branches, against tracked policy. */
@@ -53,7 +70,7 @@ export function auditIdentities(root: string): string[] {
     if (!approved.has(author)) violations.push(`${commit}: unapproved author identity`);
     if (!approved.has(committer)) violations.push(`${commit}: unapproved committer identity`);
     const patch = git(['show', '--format=', '--diff-merges=first-parent', '--no-ext-diff', '--no-textconv', '--unified=0', commit]);
-    if (patch.split('\n').some(line => line.startsWith('+') && !line.startsWith('+++') && containsAbsoluteHomePath(line))) {
+    if (patch.split('\n').some(line => line.startsWith('+') && !line.startsWith('+++') && containsAbsoluteHomePath(line.slice(1)))) {
       violations.push(`${commit}: added absolute home path`);
     }
   }
