@@ -26,20 +26,23 @@ function gitOutput(root: string, args: readonly string[]): string {
  * Characters after which an absolute path can start: line start, a leading diff marker, whitespace, quotes and
  * backticks, opening brackets, assignment and list separators, emphasis, the `file://` / `file://localhost` URL
  * authorities in any letter case, and a single-letter command option the path is glued to (`-I`, `-L`, `-o`), also
- * when the option itself follows an assignment or list separator (`CFLAGS=-I…`, `-Wl,-L…`).
+ * when the option itself follows an assignment or list separator (`CFLAGS=-I…`, `-Wl,-L…`). Any Unicode opening
+ * punctuation, initial quote, space separator or other punctuation (a fullwidth colon or comma, an ideographic
+ * comma) also starts a path, except `.`, `/` and `\`, which continue a name. Letters in any script continue a name.
  *
  * A positive boundary list rather than an exclusion list: any other preceding character continues a relative
  * name, so a CJK folder name, `c++` or `docs` before a home or Users segment is not reported.
  */
-const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*]|[Ff][Ii][Ll][Ee]:\/\/|[Ff][Ii][Ll][Ee]:\/\/[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|(?:^|[\s"'` + "`" + String.raw`(\[=:,;])-[A-Za-z])`;
+const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*]|[\p{Ps}\p{Pi}\p{Zs}]|(?![./\\])\p{Po}|[Ff][Ii][Ll][Ee]:\/\/|[Ff][Ii][Ll][Ee]:\/\/[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt]|(?:^|[\s"'` + "`" + String.raw`(\[=:,;])-[A-Za-z])`;
 
 /**
  * Remote URLs (any scheme of two or more characters except `file:`, in any letter case, because URI schemes are
  * case-insensitive), blanked before matching: their paths and query values (`https://example.com/login?next=/home/dashboard`)
  * name remote resources, not this machine. A match ends at whitespace, quotes, angle or square brackets, braces
- * or `)`, but not `(`, which is a valid path character; `)` still ends a Markdown link.
+ * or `)`, but not `(`, which is a valid path character; `)` still ends a Markdown link. A comma or semicolon that is
+ * followed by a slash ends the URL, so a separate path field after it (as in a CSV line) is still scanned.
  */
-const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]+:\/\/[^\s"'`<>)[\]{}]*/gi;
+const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]+:\/\/(?:[^\s"'`<>)[\]{},;]|[,;](?!\/))*/giu;
 
 /**
  * Absolute home-directory paths: Linux and macOS user homes (also below a var directory, as on Fedora Silverblue)
@@ -52,6 +55,7 @@ const ABSOLUTE_HOME_PATH = new RegExp(
   `${PATH_START}\\/+(?:var\\/+)?(?:home|Users)\\/`
   + `|${PATH_START}\\/+(?:var\\/+)?root(?=\\/|$|[\\s"'` + "`" + `),.;:])`
   + String.raw`|\b[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]`,
+  "u",
 );
 
 /**

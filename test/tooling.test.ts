@@ -194,6 +194,9 @@ test('home path detection refuses absolute homes and allows relative names and p
     `/var${home}alice/x`, `/var${rootHome}/.ssh`, `--prefix=${home}alice`,
     // Round 3: URI schemes are case-insensitive, and a link ending before the path does not hide it.
     `FILE://${home}alice/private`, `File://LocalHost${home}x`, `[docs](https://example.com/c) and ${home}alice`,
+    // Round 5: Unicode punctuation and spaces start a path, and a CSV path field after a URL is scanned.
+    `路径：${home}alice/private`, `说明，${home}alice/x`, `「${home}alice」`, `x\u3000${home}alice`,
+    `https://example.com/public,${home}alice/private`, `a;https://example.com/x;${users}alice/b`,
     // Round 4: a joined option after an assignment or list separator.
     `CFLAGS=-I${home}alice/include`, `LDFLAGS=-Wl,-L${home}alice/lib`, `opts:-I${home}alice`,
     `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
@@ -210,6 +213,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
     'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
     'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // A comma inside a URL query stays masked; a dot continues a name (round 5).
+    'https://example.com/q?a=1,b=/home/x', 'a.b/home/x',
     // A parenthesis is a valid URL path character, so it stays inside the masked remote URL (round 3).
     'https://example.com/(/home/alice)', 'HTTPS://EXAMPLE.COM/login?next=/home/x',
   ];
