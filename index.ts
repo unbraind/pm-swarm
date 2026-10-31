@@ -40,7 +40,7 @@ export { settings, updateSettings, resolveSwarmSettings, swarmSettingsSection, S
 /** Expose portable lane contracts. */
 export type { Candidate, Lane, Prediction, Separation, SwarmSettings } from './src/types.ts';
 /** Activate the swarm command family and its extension fields. */
-export default defineExtension({ name: 'pm-swarm', version: "2026.10.29", description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
+export default defineExtension({ name: 'pm-swarm', version: "2026.10.31", description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
 
 /** Typed settings mutation, refusal and verification contracts. */
 export type { SettingsReceipt, SettingsMutationOptions, SettingsBoundary, SettingsRefusalCode } from './src/settings.ts';
