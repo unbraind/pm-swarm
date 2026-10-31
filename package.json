@@ -1,6 +1,6 @@
 {
   "name": "pm-swarm",
-  "version": "2026.10.29",
+  "version": "2026.10.31",
   "description": "Coordinate many agents on one shared tracker with heartbeats, fenced claims and context handoff; Git lanes optional",
   "repository": {
     "type": "git",
