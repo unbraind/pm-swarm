@@ -215,6 +215,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
     'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
     'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // Commas and slashes inside a URL query or fragment stay masked (round 7).
+    'https://example.com/search?paths=docs,/home/alice', 'https://example.com/p#frag,/home/x',
     // A dash or underscore continues the root-home segment (round 6).
     '/root-cause', '/root_x',
     // A comma inside a URL query stays masked; a dot continues a name (round 5).
