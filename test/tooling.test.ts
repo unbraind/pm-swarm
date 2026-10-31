@@ -188,6 +188,10 @@ test('home path detection refuses absolute homes and allows relative names and p
     `${home}fixture/private`, `"${home}fixture"`, `(${home}fixture)`, `path=${home}fixture`, `file://${home}fixture`,
     `[${home}fixture]`, `<code>${home}fixture`, `HOME=${home}fixture`, `a, ${home}fixture`, `**${home}fixture**`,
     `+${home}fixture`, `-${home}fixture`,
+    // CodeRabbit on #48 round 2: glued options, repeated slashes, any-case Windows profiles, /var homes.
+    `cc -I${home}alice/include`, `ld -L${users}alice/lib`, `/${home}alice/private`, `see /${home}alice`,
+    `C:${backslash}${profile.toLowerCase()}${backslash}alice`, `c:/${profile.toUpperCase()}/alice/`,
+    `/var${home}alice/x`, `/var${rootHome}/.ssh`, `--prefix=${home}alice`,
     `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
     `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
     `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,
@@ -199,6 +203,9 @@ test('home path detection refuses absolute homes and allows relative names and p
     '~/home/notes', 'v1.home/x', 'item-home/', 'root/cause', 'Users/fixture without a leading slash',
     // Relative tokens whose last component character is not ASCII (CodeRabbit on #48), and remote URLs.
     '文档/home/page.ts', 'docs/c++/home/page.ts', 'https://example.com/home/x', 'https://example.com/root/x',
+    // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
+    'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
+    'GET /users/me', 'docs/var/home/x', 're-/home/x',
   ];
   for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
   for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);
