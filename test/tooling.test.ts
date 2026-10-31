@@ -192,6 +192,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     `cc -I${home}alice/include`, `ld -L${users}alice/lib`, `/${home}alice/private`, `see /${home}alice`,
     `C:${backslash}${profile.toLowerCase()}${backslash}alice`, `c:/${profile.toUpperCase()}/alice/`,
     `/var${home}alice/x`, `/var${rootHome}/.ssh`, `--prefix=${home}alice`,
+    // Round 3: URI schemes are case-insensitive, and a link ending before the path does not hide it.
+    `FILE://${home}alice/private`, `File://LocalHost${home}x`, `[docs](https://example.com/c) and ${home}alice`,
     `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
     `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
     `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,
@@ -206,6 +208,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
     'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
     'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // A parenthesis is a valid URL path character, so it stays inside the masked remote URL (round 3).
+    'https://example.com/(/home/alice)', 'HTTPS://EXAMPLE.COM/login?next=/home/x',
   ];
   for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
   for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);
