@@ -21,7 +21,7 @@ import { auditPublishAttestation, runIfMain } from "../scripts/verify-release-pu
 import { isMainInvocation } from "../scripts/main-invocation.ts";
 import { runCoverageGate } from "../scripts/coverage-gate.ts";
 import { runDocstringGate } from "../scripts/docstring-gate.ts";
-import { auditIdentities, runIdentityGate } from "../scripts/identity-gate.ts";
+import { auditIdentities, containsAbsoluteHomePath, runIdentityGate } from "../scripts/identity-gate.ts";
 import * as typeContracts from "../src/types.ts";
 
 import { gitEnvironment } from '../src/git-environment.ts';
@@ -178,6 +178,34 @@ test('identity policy rejects unapproved authors, committers and newly added hom
   fixtureGit(root, ['add', 'note.txt']);
   fixtureGit(root, ['commit', '-m', 'Remove fixture data']);
   assert.equal(auditIdentities(root).length, 3, 'Historical violations cannot be hidden by a later deletion');
+});
+
+test('home path detection refuses absolute homes and allows relative names and prose', () => {
+  // Built from parts so this file never contains a literal home path itself.
+  const home = '/' + 'home/'; const users = '/' + 'Users/'; const rootHome = '/' + 'root';
+  const backslash = String.fromCharCode(92); const profile = 'Us' + 'ers';
+  const mustRefuse = [
+    `${home}fixture/private`, `"${home}fixture"`, `(${home}fixture)`, `path=${home}fixture`, `file://${home}fixture`,
+    `+${home}fixture`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
+    `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
+    `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,
+  ];
+  const mustAllow = [
+    // The imported GitHub issue text that the previous pattern refused (pm-swarm#29).
+    'The exact mismatch/root cause has **not** been isolated',
+    'docs/root-cause.md', 'src/home/page.ts', 'my-project/Users/guide.md', 'the /rootfs mount', '/rooted tree',
+    '~/home/notes', 'v1.home/x', 'item-home/', 'root/cause', 'Users/fixture without a leading slash',
+  ];
+  for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
+  for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);
+});
+
+test('identity policy admits prose that only resembles a root home path', () => {
+  const root = identityFixture('identity-prose');
+  writeFileSync(join(root, 'note.txt'), 'The exact mismatch/root cause has not been isolated; see docs/root-cause.md\n');
+  fixtureGit(root, ['add', 'note.txt']);
+  fixtureGit(root, ['commit', '-m', 'Record root-cause prose']);
+  assert.deepEqual(auditIdentities(root), []);
 });
 
 test('identity policy fails closed on invalid policy and unavailable baseline history', () => {

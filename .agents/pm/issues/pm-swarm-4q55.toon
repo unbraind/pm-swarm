@@ -1,0 +1,21 @@
+id: pm-swarm-4q55
+title: The identity gate refuses prose like mismatch/root cause as an absolute home path and blocks every GitHub issue sync
+description: "pm-swarm#29 (automated GitHub issue sync) failed identity:check on two commits. The imported issue text contains 'The exact mismatch/root cause has not been isolated', and the gate's root-home alternative (a word boundary instead of a path boundary) matched it. A false positive fails every later gate run until the commit leaves the audited range, so the sync stays blocked. The same pattern also missed Windows profiles written with doubled, JSON-escaped separators."
+type: Issue
+status: in_progress
+priority: 1
+tags[3]: ci,identity-gate,privacy
+created_at: "2026-10-31T15:23:59.815Z"
+updated_at: "2026-10-31T15:24:03.809Z"
+assignee: claude-orchestrator
+claim_principal: claude-orchestrator
+author: claude-orchestrator
+acceptance_criteria: "containsAbsoluteHomePath refuses absolute Linux, macOS, root-home and Windows profile paths (including doubled separators) and allows relative names and prose; both new tests fail with the old pattern; release:check passes; pm-swarm#29 passes after rebasing on the fix."
+comments[1]{created_at,author,text}:
+  "2026-10-31T15:24:03.809Z",claude-orchestrator,"Revert proof: with the previous pattern, 'home path detection refuses absolute homes and allows relative names and prose' and 'identity policy admits prose that only resembles a root home path' fail (5 pass / 2 fail); with the fix 7/7 pass. Test fixtures and this item's text build or describe home paths without writing one, so the commit passes its own gate. Same detector shape as pm-review's already-fixed gate, applied as an edit to pm-swarm's own file. The six other copies with the old pattern are tracked in the companion (pm-cli-website-hv91). Gates: 957/957 tests, coverage 100/100/100/100 over 37 files, docstrings 187."
+files[2]{path,scope}:
+  scripts/identity-gate.ts,project
+  test/tooling.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-name-pattern='home path|identity policy' test/tooling.test.ts,project,claude-orchestrator,"2026-10-31T15:24:03.014Z",local_mutation,fix/identity-gate-path-boundary
+body: ""

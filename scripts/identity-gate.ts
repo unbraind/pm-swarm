@@ -22,6 +22,22 @@ function gitOutput(root: string, args: readonly string[]): string {
   } finally { rmSync(directory, { recursive: true, force: true }); }
 }
 
+/**
+ * Detect an absolute home-directory path: a Linux or macOS user home, the root home, or a Windows user profile.
+ *
+ * Each form must start a path token. A home or Users directory segment preceded by a word character, dot, tilde
+ * or hyphen continues a relative name (a source file under a folder named home, say), and the root home must end
+ * its segment, so prose such as "mismatch/root cause" or a root-cause document is not reported. A Windows profile
+ * may use doubled separators, as JSON-escaped history stores it. The GitHub issue sync imports arbitrary issue
+ * text, and a false positive fails every later gate run until the commit leaves the audited range.
+ *
+ * @param text - One added patch line.
+ * @returns Whether the line contains an absolute home-directory path.
+ */
+export function containsAbsoluteHomePath(text: string): boolean {
+  return /(?<![\w.~-])\/(?:home|Users)\/|(?<![\w.~-])\/root(?=\/|$|[\s"'`),.;:])|\b[A-Za-z]:[\\/]+Users[\\/]/.test(text);
+}
+
 /** Audit every post-baseline commit, including side branches, against tracked policy. */
 export function auditIdentities(root: string): string[] {
   const baseline = policyEntries(root, 'identity-baseline.txt');
@@ -37,7 +53,7 @@ export function auditIdentities(root: string): string[] {
     if (!approved.has(author)) violations.push(`${commit}: unapproved author identity`);
     if (!approved.has(committer)) violations.push(`${commit}: unapproved committer identity`);
     const patch = git(['show', '--format=', '--diff-merges=first-parent', '--no-ext-diff', '--no-textconv', '--unified=0', commit]);
-    if (patch.split('\n').some(line => line.startsWith('+') && !line.startsWith('+++') && /\/(?:home|Users)\/|\/(?:root)(?:\/|\b)|[A-Za-z]:[\\/]Users[\\/]/.test(line))) {
+    if (patch.split('\n').some(line => line.startsWith('+') && !line.startsWith('+++') && containsAbsoluteHomePath(line))) {
       violations.push(`${commit}: added absolute home path`);
     }
   }

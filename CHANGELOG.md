@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- The identity gate refuses prose like mismatch/root cause as an absolute home path and blocks every GitHub issue sync ([pm-swarm-4q55](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4q55.toon))
+
 ## 2026.10.29 - 2026-10-29
 
 ### Added
