@@ -48,56 +48,86 @@ const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*
  */
 const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]{1,31}:\/\/(?:[^\s"'`<>)[\]{},;?#]|[,;](?!\/))*(?:[?#][^\s"'`<>)[\]{}]*)?/giu;
 
+
+
 /**
- * Absolute home-directory paths: Linux and macOS user homes (also below a var directory, as on Fedora Silverblue)
- * and the root home (also below var, as on macOS; it ends at a separator, whitespace, or closing or other
- * punctuation, never at a dash or underscore), with any number of leading slashes, because POSIX resolves a
- * doubled leading slash like a single one. Windows profiles match one or more separators and any letter case,
- * because Windows paths are case-insensitive. Its drive letter must not follow a letter, digit, mark or underscore in any
- * script, the same rule PATH_START applies. The macOS Users form stays case-sensitive: a lowercase users segment
- * in text is far more often a web route than a home directory.
+ * Characters that end a path token: whitespace, quotes and backticks, brackets, list separators, emphasis, and
+ * closing, final-quote, space or other punctuation, except the dot, slash, backslash and colon, which belong to names
+ * (a colon also keeps a drive letter inside a `file://` path).
  */
-const ABSOLUTE_HOME_PATH = new RegExp(
-  `${PATH_START}\\/+(?:var\\/+)?(?:home|Users)\\/`
-  + `|${PATH_START}\\/+(?:var\\/+)?root(?=\\/|$|[\\s"'` + "`" + `),.;:\\]}>]|[\\p{Pe}\\p{Pf}\\p{Po}\\p{Zs}])`
-  + String.raw`|(?<![\p{L}\p{N}\p{M}_])[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]`,
-  "u",
+const TOKEN_END = String.raw`[\s"'` + "`" + String.raw`<>()[\]{}|*,;]|[\p{Pe}\p{Pf}\p{Zs}]|(?![./\\:])\p{Po}`;
+
+/**
+ * A path token at a path start (see PATH_START), after an optional `file://` / `file://localhost` authority: either a
+ * POSIX path, which begins with a slash, or a Windows path, which begins with a drive letter and a separator.
+ */
+const PATH_TOKEN = new RegExp(
+  `${PATH_START}(?:[Ff][Ii][Ll][Ee]:\\/\\/(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])?)?`
+  + String.raw`((?:[A-Za-z]:[\\/]|\/)(?:(?!` + TOKEN_END + `).)*)`,
+  "gu",
 );
 
 /**
- * Lexically normalize dot segments so an absolute path that resolves into a home is matched in its resolved form:
- * single-dot segments, repeated slashes and a segment followed by `..` collapse, as path resolution would. A relative path stays
- * relative, because its first component still precedes the slash, and a leading `/..` resolves to the root. Each pass
- * is linear, and the loop ends when nothing changes or after 64 passes, so adversarial nesting cannot make the scan
- * superlinear; a chain nested deeper than 64 levels is not resolved.
+ * Resolve one path token the way path resolution would, in one linear pass: empty and `.` components drop, `..` pops
+ * one component and never goes above the root. A POSIX path splits only on slashes, so a backslash stays part of a
+ * name, as it is on POSIX. A Windows path (a drive-letter first component, also after a `file://` authority) splits
+ * on both separators.
+ *
+ * @param token - The path token, starting with a separator or a drive letter.
+ * @returns Whether it is a Windows path, its resolved components, and whether anything followed the last kept
+ * component (a separator, `.` or an emptied component), which marks a home directory itself as a directory.
  */
-function normalizeDotSegments(text: string): string {
-  const collapse = (value: string) => value.replace(/\/(?:\.\/)+/g, '/')
-    // The root's parent is the root: a leading `/..` at a path start resolves to `/`.
-    .replace(/(^|[\s"'`([{<>=:,;|*])(?:\/\.\.)+(?=\/)/gu, '$1');
-  let current = collapse(text);
-  for (let pass = 0; pass < 64; pass += 1) {
-    const next = collapse(current.replace(/\/[^/\s"'`<>()[\]{}]+\/\.\.(?=\/)/g, (match) => (match.slice(1, -3) === '..' ? match : '')));
-    if (next === current) break;
-    current = next;
+function resolvePath(token: string): { windows: boolean; parts: string[]; trailing: boolean } {
+  let windows = /^[A-Za-z]:[\\/]/.test(token);
+  let raw = windows ? token.slice(2).split(/[\\/]+/) : token.split("/");
+  const first = raw.findIndex((part) => part !== "");
+  if (!windows && first !== -1 && /^[A-Za-z]:$/.test(raw[first])) {
+    windows = true;
+    raw = raw.slice(first + 1).join("/").split(/[\\/]+/);
   }
-  return current;
+  const parts: string[] = [];
+  let trailing = false;
+  for (const part of raw) {
+    if (part === "" || part === ".") { trailing = parts.length > 0; continue; }
+    if (part === "..") { parts.pop(); trailing = parts.length > 0; continue; }
+    parts.push(part);
+    trailing = false;
+  }
+  return { windows, parts, trailing };
+}
+
+/**
+ * Whether resolved components name a home: a user home or a Windows profile (a home or Users directory, also below a
+ * var directory on POSIX, followed by a user or marked as a directory), or the root home. The macOS Users form is
+ * case-sensitive, because a lowercase users segment is usually a web route; the Windows profile matches any case. A
+ * root-home component may carry trailing dots or colons (a sentence end, a label) but not a dash, underscore or other
+ * name characters.
+ *
+ * @param path - The resolved path.
+ * @returns Whether the path is in a home directory.
+ */
+function namesHome({ windows, parts, trailing }: ReturnType<typeof resolvePath>): boolean {
+  const rest = !windows && parts[0] === "var" ? parts.slice(1) : parts;
+  const container = windows ? /^users$/i.test(rest[0] ?? "") : rest[0] === "home" || rest[0] === "Users";
+  if (container && (rest.length >= 2 || trailing)) return true;
+  return !windows && /^root[.:]*$/.test(rest[0] ?? "");
 }
 
 /**
  * Detect an absolute home-directory path: a Linux or macOS user home, the root home, or a Windows user profile.
  *
- * Each form must start a path token (see PATH_START), remote URLs are ignored (see REMOTE_URL), and the root home
- * must end its segment. So prose such as "mismatch/root cause", a root-cause document, a relative folder named home
- * or Users, or a web redirect value is not reported. The GitHub issue sync imports arbitrary issue text, and a false
- * positive fails every later gate run until the commit leaves the audited range; a false negative publishes a
- * username.
+ * Remote URLs are masked first (see REMOTE_URL). Every path token at a path start (see PATH_START and PATH_TOKEN)
+ * is then resolved component by component (see resolvePath) and checked (see namesHome), so dot segments, parent
+ * segments and repeated separators cannot hide a home, while relative names, prose and web routes are not reported.
+ * The GitHub issue sync imports arbitrary issue text, and a false positive fails every later gate run until the commit
+ * leaves the audited range; a false negative publishes a username.
  *
  * @param text - Text to scan; for patch lines, the line without its leading `+`.
  * @returns Whether the text contains an absolute home-directory path.
  */
 export function containsAbsoluteHomePath(text: string): boolean {
-  return ABSOLUTE_HOME_PATH.test(normalizeDotSegments(text.replace(REMOTE_URL, ' ')));
+  for (const match of text.replace(REMOTE_URL, " ").matchAll(PATH_TOKEN)) if (namesHome(resolvePath(match[1]))) return true;
+  return false;
 }
 
 /** Audit every post-baseline commit, including side branches, against tracked policy. */

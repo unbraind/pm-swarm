@@ -199,6 +199,14 @@ test('home path detection refuses absolute homes and allows relative names and p
     `https://example.com/public,${home}alice/private`, `a;https://example.com/x;${users}alice/b`,
     // Round 8: dot segments resolve before matching (absolute forms that resolve into a home).
     `/.${home}alice/private`, `/x/..${home}alice`, `/..${home}x`, `see /../..${home}a`, `/./${users.slice(1)}a/b`,
+    `/a/../..${home}x`,
+    // Round 9: paths resolve by components in one pass (no pass limit), on both separator grammars, after every path
+    // start: Windows parent and dot segments, a parent after a file authority or a fullwidth colon, deep nesting,
+    // a repeated separator before a parent, and a trailing separator that marks the home directory itself.
+    `C:${backslash}foo${backslash}..${backslash}${profile}${backslash}alice`, `C:${backslash}.${backslash}${profile}${backslash}alice`,
+    `C:${backslash.repeat(2)}foo${backslash.repeat(2)}..${backslash.repeat(2)}${profile}${backslash.repeat(2)}alice`,
+    `file:///..${home}alice`, `路径：/..${home}alice`, `/x//..${home}alice`, `file:///C:/${profile}/alice/x`, `file:///c:/${profile.toLowerCase()}/alice/x`, `file:///C:/${profile.toUpperCase()}/a/`, `see ${home} now`, `${home}.`,
+    '/' + Array.from({ length: 120 }, (_, index) => `d${index}`).join('/') + '/..'.repeat(120) + `${home}x`,
     // Round 6: the root home before closing or Unicode punctuation.
     `[${rootHome}]`, `路径：${rootHome}。`, `a ${rootHome}」`, `${rootHome}!`,
     // Round 4: a joined option after an assignment or list separator.
@@ -219,6 +227,13 @@ test('home path detection refuses absolute homes and allows relative names and p
     'GET /users/me', 'docs/var/home/x', 're-/home/x',
     // Round 8: relative dot-segment paths stay relative; a drive letter after a letter in any script continues a token.
     'docs/./home/x', 'a/../home/x', '../home/x', `文C:${backslash}${profile}${backslash}alice`,
+    // Round 9: a backslash is a name character in a POSIX path (escaped regex text), a bare home or Users directory
+    // without a separator is not a home, and the root home is a POSIX form only.
+    `/${backslash}/home${backslash}/[^/]+/`, `${backslash}home${backslash}x`, '/home', '/Users', '/', ' / ', `C:${backslash}root`, '/var/x',
+    `C:${backslash}`, 'file:///C:/', 'c:/',
+    `C:${backslash}${profile}x${backslash}a`,
+    // A parent segment directly after another parent segment is kept, so a relative chain stays relative.
+    'a/../../home/x',
     // Commas and slashes inside a URL query or fragment stay masked (round 7).
     'https://example.com/search?paths=docs,/home/alice', 'https://example.com/p#frag,/home/x',
     // A dash or underscore continues the root-home segment (round 6).
