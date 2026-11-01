@@ -235,6 +235,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // without a separator is not a home, and the root home is a POSIX form only.
     `/${backslash}/home${backslash}/[^/]+/`, `${backslash}home${backslash}x`, '/home', '/Users', '/', ' / ', `C:${backslash}root`, '/var/x',
     `C:${backslash}`, 'file:///C:/', 'c:/',
+    // Round 11: a remote URL with a scheme of any length stays masked.
+    `${'a'.repeat(33)}://host/login?next=${home}alice`,
     // Round 10: only a file URL carries a drive letter after its slash; in a plain POSIX path it is a directory name.
     '/C:/Users/alice', '/c:/users/a/b', `${backslash.repeat(2)}server${backslash}share${backslash}x`,
     `C:${backslash}${profile}x${backslash}a`,
@@ -256,10 +258,11 @@ test('home path detection refuses absolute homes and allows relative names and p
 test('home path detection stays linear on long scheme-like runs', () => {
   // CodeRabbit on #48: an unbounded URL scheme retried at every word boundary made the scan quadratic (an 80k-character
   // run of a+ took about 9 s). The bounded scheme keeps it to milliseconds; the limit leaves a wide margin for load.
-  const text = 'a+'.repeat(40_000);
-  const started = performance.now();
-  assert.equal(containsAbsoluteHomePath(text), false);
-  assert.ok(performance.now() - started < 1000, `scan took ${Math.round(performance.now() - started)} ms`);
+  for (const text of ['a+'.repeat(40_000), 'a'.repeat(400_000) + '://x', 'a://'.repeat(100_000)]) {
+    const started = performance.now();
+    assert.equal(containsAbsoluteHomePath(text), false);
+    assert.ok(performance.now() - started < 1000, `scan took ${Math.round(performance.now() - started)} ms`);
+  }
 });
 
 test('identity policy admits prose that only resembles a root home path', () => {

@@ -42,11 +42,12 @@ const PATH_START = String.raw`(?<=^|^[+-]|[\s"'` + "`" + String.raw`(\[{<>=:,;|*
  * or `)`, but not `(`, which is a valid path character; `)` still ends a Markdown link. In the authority and path,
  * a comma or semicolon followed by a slash ends the URL, so a separate path field after it (as in a CSV line) is
  * still scanned. Once a `?` or `#` starts the query or fragment, commas and slashes are URL characters and stay
- * masked; a CSV line whose URL field itself has a query is therefore read as one URL. The
- * scheme is capped at 32 characters, so each start position does bounded work and the scan stays linear on long
- * scheme-like runs (an unbounded scheme retried at every word boundary was quadratic).
+ * masked; a CSV line whose URL field itself has a query is therefore read as one URL. The match starts at `://` and
+ * only then looks back over the scheme, so a scheme of any length is recognized and each `://` scans back over its
+ * own scheme run once: the scan stays linear (an unbounded scheme retried at every word boundary was quadratic, and a
+ * length cap left longer schemes unmasked). Only the `://` part onwards is masked; a scheme contains no path.
  */
-const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]{1,31}:\/\/(?:[^\s"'`<>)[\]{},;?#]|[,;](?!\/))*(?:[?#][^\s"'`<>)[\]{}]*)?/giu;
+const REMOTE_URL = /:\/\/(?<=[a-z][a-z0-9+.-]+:\/\/)(?<!(?:^|[^a-z0-9+.-])file:\/\/)(?:[^\s"'`<>)[\]{},;?#]|[,;](?!\/))*(?:[?#][^\s"'`<>)[\]{}]*)?/giu;
 
 
 
