@@ -21,7 +21,7 @@ import { auditPublishAttestation, runIfMain } from "../scripts/verify-release-pu
 import { isMainInvocation } from "../scripts/main-invocation.ts";
 import { runCoverageGate } from "../scripts/coverage-gate.ts";
 import { runDocstringGate } from "../scripts/docstring-gate.ts";
-import { auditIdentities, runIdentityGate } from "../scripts/identity-gate.ts";
+import { auditIdentities, containsAbsoluteHomePath, runIdentityGate } from "../scripts/identity-gate.ts";
 import * as typeContracts from "../src/types.ts";
 
 import { gitEnvironment } from '../src/git-environment.ts';
@@ -178,6 +178,99 @@ test('identity policy rejects unapproved authors, committers and newly added hom
   fixtureGit(root, ['add', 'note.txt']);
   fixtureGit(root, ['commit', '-m', 'Remove fixture data']);
   assert.equal(auditIdentities(root).length, 3, 'Historical violations cannot be hidden by a later deletion');
+});
+
+test('home path detection refuses absolute homes and allows relative names and prose', () => {
+  // Built from parts so this file never contains a literal home path itself.
+  const home = '/' + 'home/'; const users = '/' + 'Users/'; const rootHome = '/' + 'root';
+  const backslash = String.fromCharCode(92); const profile = 'Us' + 'ers';
+  const mustRefuse = [
+    `${home}fixture/private`, `"${home}fixture"`, `(${home}fixture)`, `path=${home}fixture`, `file://${home}fixture`,
+    `[${home}fixture]`, `<code>${home}fixture`, `HOME=${home}fixture`, `a, ${home}fixture`, `**${home}fixture**`,
+    `+${home}fixture`, `-${home}fixture`,
+    // CodeRabbit on #48 round 2: glued options, repeated slashes, any-case Windows profiles, /var homes.
+    `cc -I${home}alice/include`, `ld -L${users}alice/lib`, `/${home}alice/private`, `see /${home}alice`,
+    `C:${backslash}${profile.toLowerCase()}${backslash}alice`, `c:/${profile.toUpperCase()}/alice/`,
+    `/var${home}alice/x`, `/var${rootHome}/.ssh`, `--prefix=${home}alice`,
+    // Round 3: URI schemes are case-insensitive, and a link ending before the path does not hide it.
+    `FILE://${home}alice/private`, `File://LocalHost${home}x`, `[docs](https://example.com/c) and ${home}alice`,
+    // Round 5: Unicode punctuation and spaces start a path, and a CSV path field after a URL is scanned.
+    `路径：${home}alice/private`, `说明，${home}alice/x`, `「${home}alice」`, `x\u3000${home}alice`,
+    `https://example.com/public,${home}alice/private`, `a;https://example.com/x;${users}alice/b`,
+    // Round 8: dot segments resolve before matching (absolute forms that resolve into a home).
+    `/.${home}alice/private`, `/x/..${home}alice`, `/..${home}x`, `see /../..${home}a`, `/./${users.slice(1)}a/b`,
+    `/a/../..${home}x`,
+    // Round 9: paths resolve by components in one pass (no pass limit), on both separator grammars, after every path
+    // start: Windows parent and dot segments, a parent after a file authority or a fullwidth colon, deep nesting,
+    // a repeated separator before a parent, and a trailing separator that marks the home directory itself.
+    `C:${backslash}foo${backslash}..${backslash}${profile}${backslash}alice`, `C:${backslash}.${backslash}${profile}${backslash}alice`,
+    `C:${backslash.repeat(2)}foo${backslash.repeat(2)}..${backslash.repeat(2)}${profile}${backslash.repeat(2)}alice`,
+    `file:///..${home}alice`, `路径：/..${home}alice`, `/x//..${home}alice`, `file:///C:/${profile}/alice/x`, `file:///c:/${profile.toLowerCase()}/alice/x`, `file:///C:/${profile.toUpperCase()}/a/`, `see ${home} now`, `${home}.`,
+    '/' + Array.from({ length: 120 }, (_, index) => `d${index}`).join('/') + '/..'.repeat(120) + `${home}x`,
+    // Round 10: Windows extended-length and device prefixes, also doubled as JSON escapes them.
+    `${backslash.repeat(2)}?${backslash}C:${backslash}${profile}${backslash}alice${backslash}private`,
+    `${backslash.repeat(2)}.${backslash}C:${backslash}${profile}${backslash}a${backslash}b`,
+    `${backslash.repeat(4)}?${backslash.repeat(2)}C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}a`,
+    // Round 6: the root home before closing or Unicode punctuation.
+    `[${rootHome}]`, `路径：${rootHome}。`, `a ${rootHome}」`, `${rootHome}!`,
+    // Round 4: a joined option after an assignment or list separator.
+    `CFLAGS=-I${home}alice/include`, `LDFLAGS=-Wl,-L${home}alice/lib`, `opts:-I${home}alice`,
+    `file://localhost${home}alice/private`, `file://localhost${rootHome}/.npmrc`, `${users}fixture/x`, `${rootHome}/.npmrc`, rootHome, `"${rootHome}"`, `cd ${rootHome}`,
+    `\`${rootHome}\``, `logs in ${rootHome}.`, `${rootHome}: denied`, `C:${backslash}${profile}${backslash}fixture`,
+    `c:/${profile}/fixture/`, `C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}fixture`,
+  ];
+  const mustAllow = [
+    // The imported GitHub issue text that the previous pattern refused (pm-swarm#29).
+    'The exact mismatch/root cause has **not** been isolated',
+    'docs/root-cause.md', 'src/home/page.ts', 'my-project/Users/guide.md', 'the /rootfs mount', '/rooted tree',
+    '~/home/notes', 'v1.home/x', 'item-home/', 'root/cause', 'Users/fixture without a leading slash',
+    // Relative tokens whose last component character is not ASCII (CodeRabbit on #48), and remote URLs.
+    '文档/home/page.ts', 'docs/c++/home/page.ts', 'https://example.com/home/x', 'https://example.com/root/x',
+    // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
+    'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
+    'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // Round 8: relative dot-segment paths stay relative; a drive letter after a letter in any script continues a token.
+    'docs/./home/x', 'a/../home/x', '../home/x', `文C:${backslash}${profile}${backslash}alice`,
+    // Round 9: a backslash is a name character in a POSIX path (escaped regex text), a bare home or Users directory
+    // without a separator is not a home, and the root home is a POSIX form only.
+    `/${backslash}/home${backslash}/[^/]+/`, `${backslash}home${backslash}x`, '/home', '/Users', '/', ' / ', `C:${backslash}root`, '/var/x',
+    `C:${backslash}`, 'file:///C:/', 'c:/',
+    // Round 11: a remote URL with a scheme of any length stays masked.
+    `${'a'.repeat(33)}://host/login?next=${home}alice`,
+    // Round 10: only a file URL carries a drive letter after its slash; in a plain POSIX path it is a directory name.
+    '/C:/Users/alice', '/c:/users/a/b', `${backslash.repeat(2)}server${backslash}share${backslash}x`,
+    `C:${backslash}${profile}x${backslash}a`,
+    // A parent segment directly after another parent segment is kept, so a relative chain stays relative.
+    'a/../../home/x',
+    // Commas and slashes inside a URL query or fragment stay masked (round 7).
+    'https://example.com/search?paths=docs,/home/alice', 'https://example.com/p#frag,/home/x',
+    // A dash or underscore continues the root-home segment (round 6).
+    '/root-cause', '/root_x',
+    // A comma inside a URL query stays masked; a dot continues a name (round 5).
+    'https://example.com/q?a=1,b=/home/x', 'a.b/home/x',
+    // A parenthesis is a valid URL path character, so it stays inside the masked remote URL (round 3).
+    'https://example.com/(/home/alice)', 'HTTPS://EXAMPLE.COM/login?next=/home/x',
+  ];
+  for (const text of mustRefuse) assert.equal(containsAbsoluteHomePath(text), true, `must refuse: ${text}`);
+  for (const text of mustAllow) assert.equal(containsAbsoluteHomePath(text), false, `must allow: ${text}`);
+});
+
+test('home path detection stays linear on long scheme-like runs', () => {
+  // CodeRabbit on #48: an unbounded URL scheme retried at every word boundary made the scan quadratic (an 80k-character
+  // run of a+ took about 9 s). The bounded scheme keeps it to milliseconds; the limit leaves a wide margin for load.
+  for (const text of ['a+'.repeat(40_000), 'a'.repeat(400_000) + '://x', 'a://'.repeat(100_000)]) {
+    const started = performance.now();
+    assert.equal(containsAbsoluteHomePath(text), false);
+    assert.ok(performance.now() - started < 1000, `scan took ${Math.round(performance.now() - started)} ms`);
+  }
+});
+
+test('identity policy admits prose that only resembles a root home path', () => {
+  const root = identityFixture('identity-prose');
+  writeFileSync(join(root, 'note.txt'), 'The exact mismatch/root cause has not been isolated; see docs/root-cause.md\n');
+  fixtureGit(root, ['add', 'note.txt']);
+  fixtureGit(root, ['commit', '-m', 'Record root-cause prose']);
+  assert.deepEqual(auditIdentities(root), []);
 });
 
 test('identity policy fails closed on invalid policy and unavailable baseline history', () => {
