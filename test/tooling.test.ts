@@ -197,6 +197,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Round 5: Unicode punctuation and spaces start a path, and a CSV path field after a URL is scanned.
     `路径：${home}alice/private`, `说明，${home}alice/x`, `「${home}alice」`, `x\u3000${home}alice`,
     `https://example.com/public,${home}alice/private`, `a;https://example.com/x;${users}alice/b`,
+    // Round 8: dot segments resolve before matching (absolute forms that resolve into a home).
+    `/.${home}alice/private`, `/x/..${home}alice`, `/..${home}x`, `see /../..${home}a`, `/./${users.slice(1)}a/b`,
     // Round 6: the root home before closing or Unicode punctuation.
     `[${rootHome}]`, `路径：${rootHome}。`, `a ${rootHome}」`, `${rootHome}!`,
     // Round 4: a joined option after an assignment or list separator.
@@ -215,6 +217,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // Remote URL paths and query values name remote resources (CodeRabbit on #48 round 2), and web routes.
     'https://example.com/login?next=/home/dashboard', 'https://example.com//home/x', 'git+ssh://host/home/x',
     'GET /users/me', 'docs/var/home/x', 're-/home/x',
+    // Round 8: relative dot-segment paths stay relative; a drive letter after a letter in any script continues a token.
+    'docs/./home/x', 'a/../home/x', '../home/x', `文C:${backslash}${profile}${backslash}alice`,
     // Commas and slashes inside a URL query or fragment stay masked (round 7).
     'https://example.com/search?paths=docs,/home/alice', 'https://example.com/p#frag,/home/x',
     // A dash or underscore continues the root-home segment (round 6).

@@ -53,15 +53,36 @@ const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]{1,31}:\/\/(?:[^\s"'`<>)[\]{},;?#
  * and the root home (also below var, as on macOS; it ends at a separator, whitespace, or closing or other
  * punctuation, never at a dash or underscore), with any number of leading slashes, because POSIX resolves a
  * doubled leading slash like a single one. Windows profiles match one or more separators and any letter case,
- * because Windows paths are case-insensitive. The macOS Users form stays case-sensitive: a lowercase users segment
+ * because Windows paths are case-insensitive. Its drive letter must not follow a letter, digit, mark or underscore in any
+ * script, the same rule PATH_START applies. The macOS Users form stays case-sensitive: a lowercase users segment
  * in text is far more often a web route than a home directory.
  */
 const ABSOLUTE_HOME_PATH = new RegExp(
   `${PATH_START}\\/+(?:var\\/+)?(?:home|Users)\\/`
   + `|${PATH_START}\\/+(?:var\\/+)?root(?=\\/|$|[\\s"'` + "`" + `),.;:\\]}>]|[\\p{Pe}\\p{Pf}\\p{Po}\\p{Zs}])`
-  + String.raw`|\b[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]`,
+  + String.raw`|(?<![\p{L}\p{N}\p{M}_])[A-Za-z]:[\\/]+[Uu][Ss][Ee][Rr][Ss][\\/]`,
   "u",
 );
+
+/**
+ * Lexically normalize dot segments so an absolute path that resolves into a home is matched in its resolved form:
+ * single-dot segments, repeated slashes and a segment followed by `..` collapse, as path resolution would. A relative path stays
+ * relative, because its first component still precedes the slash, and a leading `/..` resolves to the root. Each pass
+ * is linear, and the loop ends when nothing changes or after 64 passes, so adversarial nesting cannot make the scan
+ * superlinear; a chain nested deeper than 64 levels is not resolved.
+ */
+function normalizeDotSegments(text: string): string {
+  const collapse = (value: string) => value.replace(/\/(?:\.\/)+/g, '/')
+    // The root's parent is the root: a leading `/..` at a path start resolves to `/`.
+    .replace(/(^|[\s"'`([{<>=:,;|*])(?:\/\.\.)+(?=\/)/gu, '$1');
+  let current = collapse(text);
+  for (let pass = 0; pass < 64; pass += 1) {
+    const next = collapse(current.replace(/\/[^/\s"'`<>()[\]{}]+\/\.\.(?=\/)/g, (match) => (match.slice(1, -3) === '..' ? match : '')));
+    if (next === current) break;
+    current = next;
+  }
+  return current;
+}
 
 /**
  * Detect an absolute home-directory path: a Linux or macOS user home, the root home, or a Windows user profile.
@@ -76,7 +97,7 @@ const ABSOLUTE_HOME_PATH = new RegExp(
  * @returns Whether the text contains an absolute home-directory path.
  */
 export function containsAbsoluteHomePath(text: string): boolean {
-  return ABSOLUTE_HOME_PATH.test(text.replace(REMOTE_URL, ' '));
+  return ABSOLUTE_HOME_PATH.test(normalizeDotSegments(text.replace(REMOTE_URL, ' ')));
 }
 
 /** Audit every post-baseline commit, including side branches, against tracked policy. */
