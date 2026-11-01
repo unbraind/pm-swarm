@@ -207,6 +207,10 @@ test('home path detection refuses absolute homes and allows relative names and p
     `C:${backslash.repeat(2)}foo${backslash.repeat(2)}..${backslash.repeat(2)}${profile}${backslash.repeat(2)}alice`,
     `file:///..${home}alice`, `路径：/..${home}alice`, `/x//..${home}alice`, `file:///C:/${profile}/alice/x`, `file:///c:/${profile.toLowerCase()}/alice/x`, `file:///C:/${profile.toUpperCase()}/a/`, `see ${home} now`, `${home}.`,
     '/' + Array.from({ length: 120 }, (_, index) => `d${index}`).join('/') + '/..'.repeat(120) + `${home}x`,
+    // Round 10: Windows extended-length and device prefixes, also doubled as JSON escapes them.
+    `${backslash.repeat(2)}?${backslash}C:${backslash}${profile}${backslash}alice${backslash}private`,
+    `${backslash.repeat(2)}.${backslash}C:${backslash}${profile}${backslash}a${backslash}b`,
+    `${backslash.repeat(4)}?${backslash.repeat(2)}C:${backslash.repeat(2)}${profile}${backslash.repeat(2)}a`,
     // Round 6: the root home before closing or Unicode punctuation.
     `[${rootHome}]`, `路径：${rootHome}。`, `a ${rootHome}」`, `${rootHome}!`,
     // Round 4: a joined option after an assignment or list separator.
@@ -231,6 +235,8 @@ test('home path detection refuses absolute homes and allows relative names and p
     // without a separator is not a home, and the root home is a POSIX form only.
     `/${backslash}/home${backslash}/[^/]+/`, `${backslash}home${backslash}x`, '/home', '/Users', '/', ' / ', `C:${backslash}root`, '/var/x',
     `C:${backslash}`, 'file:///C:/', 'c:/',
+    // Round 10: only a file URL carries a drive letter after its slash; in a plain POSIX path it is a directory name.
+    '/C:/Users/alice', '/c:/users/a/b', `${backslash.repeat(2)}server${backslash}share${backslash}x`,
     `C:${backslash}${profile}x${backslash}a`,
     // A parent segment directly after another parent segment is kept, so a relative chain stays relative.
     'a/../../home/x',

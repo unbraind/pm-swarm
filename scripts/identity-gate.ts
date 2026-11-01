@@ -58,11 +58,13 @@ const REMOTE_URL = /\b(?!file:)[a-z][a-z0-9+.-]{1,31}:\/\/(?:[^\s"'`<>)[\]{},;?#
 const TOKEN_END = String.raw`[\s"'` + "`" + String.raw`<>()[\]{}|*,;]|[\p{Pe}\p{Pf}\p{Zs}]|(?![./\\:])\p{Po}`;
 
 /**
- * A path token at a path start (see PATH_START), after an optional `file://` / `file://localhost` authority: either a
- * POSIX path, which begins with a slash, or a Windows path, which begins with a drive letter and a separator.
+ * A path token at a path start (see PATH_START), after an optional `file://` / `file://localhost` authority (captured,
+ * because only a file URL may carry a drive letter after its slash) or a Windows extended-length or device prefix (two
+ * or more backslashes, `?` or `.`, a backslash; doubled as JSON escapes them): either a POSIX path, which begins with a
+ * slash, or a Windows path, which begins with a drive letter and a separator.
  */
 const PATH_TOKEN = new RegExp(
-  `${PATH_START}(?:[Ff][Ii][Ll][Ee]:\\/\\/(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])?)?`
+  `${PATH_START}(?:([Ff][Ii][Ll][Ee]:\\/\\/(?:[Ll][Oo][Cc][Aa][Ll][Hh][Oo][Ss][Tt])?)|\\\\{2,}[?.]\\\\+)?`
   + String.raw`((?:[A-Za-z]:[\\/]|\/)(?:(?!` + TOKEN_END + `).)*)`,
   "gu",
 );
@@ -74,14 +76,17 @@ const PATH_TOKEN = new RegExp(
  * on both separators.
  *
  * @param token - The path token, starting with a separator or a drive letter.
+ * @param fileUrl - Whether the token followed a `file://` authority, the only place a drive letter may follow a slash.
  * @returns Whether it is a Windows path, its resolved components, and whether anything followed the last kept
  * component (a separator, `.` or an emptied component), which marks a home directory itself as a directory.
  */
-function resolvePath(token: string): { windows: boolean; parts: string[]; trailing: boolean } {
+function resolvePath(token: string, fileUrl: boolean): { windows: boolean; parts: string[]; trailing: boolean } {
   let windows = /^[A-Za-z]:[\\/]/.test(token);
   let raw = windows ? token.slice(2).split(/[\\/]+/) : token.split("/");
   const first = raw.findIndex((part) => part !== "");
-  if (!windows && first !== -1 && /^[A-Za-z]:$/.test(raw[first])) {
+  // Only a file URL writes a drive letter after its leading slash; in a plain POSIX path a leading drive-like
+  // component is an ordinary directory name.
+  if (fileUrl && !windows && first !== -1 && /^[A-Za-z]:$/.test(raw[first])) {
     windows = true;
     raw = raw.slice(first + 1).join("/").split(/[\\/]+/);
   }
@@ -126,7 +131,7 @@ function namesHome({ windows, parts, trailing }: ReturnType<typeof resolvePath>)
  * @returns Whether the text contains an absolute home-directory path.
  */
 export function containsAbsoluteHomePath(text: string): boolean {
-  for (const match of text.replace(REMOTE_URL, " ").matchAll(PATH_TOKEN)) if (namesHome(resolvePath(match[1]))) return true;
+  for (const match of text.replace(REMOTE_URL, " ").matchAll(PATH_TOKEN)) if (namesHome(resolvePath(match[2], match[1] !== undefined))) return true;
   return false;
 }
 
