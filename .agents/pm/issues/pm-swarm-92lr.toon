@@ -1,0 +1,11 @@
+id: pm-swarm-92lr
+title: Release workflow retries forbidden rebase merges for 30 minutes and misdiagnoses the blocker
+description: "Tracks gh:unbraind/pm-swarm#51 (filed 2026-11-01, missed by the blind issue watch). release.yml on current main still hardcodes merge_method=rebase (line ~541) while the repository forbids rebase merges, so every release attempt collects deterministic HTTP 405 responses; the generic timeout diagnostic (~590) then attributes the 30-minute failure to missing checks/review instead of the unsupported merge method. Observed on release job 124879572560 (run 41308056337, 2026-11-01) with release PR #50 still open; the latest scheduled Daily Release run on main is that same failure. Fix: use a policy-compliant merge method (or read the allowed methods) and classify HTTP 405 as a terminal configuration error instead of retrying it."
+type: Issue
+status: open
+priority: 2
+tags[2]: "gh:unbraind/pm-swarm#51",release
+created_at: "2026-11-02T09:18:32.813Z"
+updated_at: "2026-11-02T09:18:32.813Z"
+author: pi-glm
+body: ""
