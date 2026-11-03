@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse } from '@babel/parser';
-import { acquireLock, acknowledgeLinkedTests, runLinkedTests, commitItemMutations, commitWorkspaceTransaction, mutateItem, readSettings } from '@unbrained/pm-cli/sdk';
+import { acquireLock, acknowledgeLinkedTests, runLinkedTests, commitItemMutations, commitWorkspaceTransaction, mutateItem, readSettings, scanMutationSecrets } from '@unbrained/pm-cli/sdk';
 import { trackerResourceBackend } from '../src/resource-tracker.ts';
 import { changedFiles } from '../src/git.ts';
 import { commitMutation, SettingsRefusal, updateSettings } from '../src/settings.ts';
@@ -187,3 +187,22 @@ for (const mode of ['shared', 'Git'] as const) {
     if ('swarm' in f) assert.equal(git(f.repo, ['branch', '--list', `swarm/${id}`]).length > 0, true);
   });
 }
+
+// pm-cli 2026.10.26 (GH-1583) detects most encoded home paths inside the SDK scanner, so
+// containsPrivatePath now returns before its own decoder runs for those inputs. These cases
+// drive the decoder and its nesting bound directly, with public text the SDK does not flag.
+test('canonical decoding reads every escape form and refuses nesting past its bound', () => {
+  assert.equal(canonicalize('\\u{50}\\u0055\\x42lic'), 'public');
+  const nest = (levels: number) => { let value = 'public'; for (let level = 0; level < levels; level++) value = encodeURIComponent(value).replace(/[a-z]/gi, character => `%${character.charCodeAt(0).toString(16)}`); return value; };
+  assert.equal(canonicalize(nest(16)), 'public');
+  assert.equal(canonicalize(nest(17)), null);
+  assert.equal(containsPrivatePath(nest(2)), false);
+  // The SDK scanner refuses deep percent nesting itself, so entity nesting is what reaches the package's own bound:
+  // the SDK passes it, the decoder cannot finish it, and the value is refused as uninspectable.
+  const entities = (levels: number) => `&#38;${'#38;'.repeat(levels - 1)}#112;ublic`;
+  assert.equal(canonicalize(entities(15)), 'public');
+  assert.equal(canonicalize(entities(16)), null);
+  assert.deepEqual(scanMutationSecrets(entities(16)).map(finding => finding.rule), [], 'the SDK must pass the value so the package bound decides');
+  assert.equal(containsPrivatePath(entities(16)), true);
+  assert.equal(containsPrivatePath(entities(15)), false);
+});

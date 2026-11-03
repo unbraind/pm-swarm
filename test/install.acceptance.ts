@@ -267,8 +267,8 @@ test('packed deadlock commands use the SDK supplied by global npm and Bun hosts'
     const pm = (...args: string[]) => JSON.parse(invoke(project, host, [...args, '--json'], pmEnv)) as Record<string, unknown>;
     pm('init', 'global-witness', '--defaults', '--agent-guidance', 'skip');
     pm('install', join(extracted, 'package'), '--project');
-    const anchor = String(pm('create', 'Task', 'Global anchor', '--tags', 'swarm-resource', '--parent', 'none').id);
-    const target = String(pm('create', 'Task', 'Global target', '--tags', 'swarm-resource', '--parent', 'none').id);
+    const anchor = String(pm('create', 'Task', 'Global anchor', '--tags', 'swarm-resource', '--unset', 'parent').id);
+    const target = String(pm('create', 'Task', 'Global target', '--tags', 'swarm-resource', '--unset', 'parent').id);
     const held = pm('swarm', 'resource', anchor, '--action', 'reserve');
     const current = pm('swarm', 'deadlocks', anchor);
     const declaration = ['swarm', 'deadlocks', anchor, '--action', 'request', '--resources', target, '--token', String(held.token), '--revision', String(current.revision)];

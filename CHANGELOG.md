@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Privacy oracle expectation is stale for pm-cli 2026.10.30 scanMutationSecrets ([pm-swarm-4msd](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4msd.toon))
+
+### Other
+
+- Migrate off parent:none SDK sentinel for pm-toolchain 2026.10.30 bump ([pm-swarm-1ii8](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-1ii8.toon))
+
 ## 2026.11.2 - 2026-11-02
 
 ### Fixed
