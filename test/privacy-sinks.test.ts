@@ -187,3 +187,16 @@ for (const mode of ['shared', 'Git'] as const) {
     if ('swarm' in f) assert.equal(git(f.repo, ['branch', '--list', `swarm/${id}`]).length > 0, true);
   });
 }
+
+// pm-cli 2026.10.26 (GH-1583) detects most encoded home paths inside the SDK scanner, so
+// containsPrivatePath now returns before its own decoder runs for those inputs. These cases
+// drive the decoder and its nesting bound directly, with public text the SDK does not flag.
+test('canonical decoding reads every escape form and refuses nesting past its bound', () => {
+  assert.equal(canonicalize('\\u{50}\\u0055\\x42lic'), 'public');
+  const nest = (levels: number) => { let value = 'public'; for (let level = 0; level < levels; level++) value = encodeURIComponent(value).replace(/[a-z]/gi, character => `%${character.charCodeAt(0).toString(16)}`); return value; };
+  assert.equal(canonicalize(nest(16)), 'public');
+  assert.equal(canonicalize(nest(17)), null);
+  // An undecodable public value is refused as uninspectable, even though the SDK scanner passes it.
+  assert.equal(containsPrivatePath(nest(17)), true);
+  assert.equal(containsPrivatePath(nest(2)), false);
+});
