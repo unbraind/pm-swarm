@@ -41,7 +41,7 @@ test('every mutating command cross rejected encoding and input position is byte-
   const resource = (await f.client.create({ type: 'Task', title: 'Resource', tags: 'swarm-resource' })).item.id;
   const resources = new ResourceReservations(trackerResourceBackend(f.shared.engine), 'shared-test');
   const reservation = await resources.reserve(resource);
-  const target = (await f.client.create({ type: 'Task', title: 'Pending resource target', tags: 'swarm-resource', parent: 'none' })).item.id;
+  const target = (await f.client.create({ type: 'Task', title: 'Pending resource target', tags: 'swarm-resource', unset: ['parent'] })).item.id;
   const requestRevision = (await new ResourceDeadlocks(f.shared.engine).inspect(resource)).revision;
   const { plan, view } = await ownedPlan(f);
   const inputs: Record<string, { args: string[]; options: Record<string, unknown> }> = {

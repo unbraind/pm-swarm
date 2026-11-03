@@ -11,7 +11,7 @@ import { declareService } from './privacy-mutations.ts';
 /** Seed previously supported native resource fields through the actual SDK. */
 async function nativeResource(f: Awaited<ReturnType<typeof sharedFixture>>, index: number, owner = `worker-${index}`, targets: string[] = []) {
   const id = `shared-test-slot-${index}`;
-  return (await f.client.create({ id, type: 'Task', title: 'Native slot', tags: RESOURCE_TAG, parent: 'none', assignee: owner, field: ['swarm_token=1', `swarm_resource_expires_at=${new Date(Date.now() + 3600000).toISOString()}`, `${RESOURCE_REQUEST_FIELD}=${JSON.stringify(parseResourceRequest({ version: 1, token: '1', resources: targets }))}`] })).item.id;
+  return (await f.client.create({ id, type: 'Task', title: 'Native slot', tags: RESOURCE_TAG, unset: ['parent'], assignee: owner, field: ['swarm_token=1', `swarm_resource_expires_at=${new Date(Date.now() + 3600000).toISOString()}`, `${RESOURCE_REQUEST_FIELD}=${JSON.stringify(parseResourceRequest({ version: 1, token: '1', resources: targets }))}`] })).item.id;
 }
 
 /** Bind independent holders and their real SDK witness engine once for race scenarios. */

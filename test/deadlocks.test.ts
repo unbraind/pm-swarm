@@ -16,7 +16,7 @@ async function pair(t: Parameters<typeof sharedFixture>[0]) {
   const reservations = engines.map(engine => new ResourceReservations(trackerResourceBackend(engine), engine.author));
   const resources: string[] = [];
   for (let i = 0; i < 2; i++) {
-    const id = (await f.client.create({ type: 'Task', id: `resource-${i}`, title: `Slot ${i}`, tags: RESOURCE_TAG, parent: 'none', assignee: 'none' })).item.id;
+    const id = (await f.client.create({ type: 'Task', id: `resource-${i}`, title: `Slot ${i}`, tags: RESOURCE_TAG, unset: ['parent', 'assignee'] })).item.id;
     resources.push(id); await reservations[i].reserve(id, 86400);
   }
   const witnesses = engines.map(engine => new ResourceDeadlocks(engine));
@@ -98,8 +98,8 @@ test('declaration refuses every SDK mutation interleaving boundary and preserves
 
 test('500 seeded operation sequences compare SDK read-back to an independent request model', { timeout: 1200000 }, async t => {
   const f = await pair(t); const [a, b] = f.resources; const w = f.witnesses[0];
-  const scope = (await f.client.create({ type: 'Feature', title: 'Native relationship scope', parent: 'none' })).item.id;
-  const otherScope = (await f.client.create({ type: 'Feature', title: 'Ambient focus scope', parent: 'none' })).item.id;
+  const scope = (await f.client.create({ type: 'Feature', title: 'Native relationship scope', unset: ['parent'] })).item.id;
+  const otherScope = (await f.client.create({ type: 'Feature', title: 'Ambient focus scope', unset: ['parent'] })).item.id;
   await f.client.update(a, { parent: scope, dep: [`id=${b},kind=related`], description: 'Preserved native description', body: 'Native body\r\nwith whitespace  \n' });
   let seed = 0x51ca7e; let model: string | undefined;
   const old: { revision: string; value: { version: 1; token: string; resources: string[] } }[] = [];

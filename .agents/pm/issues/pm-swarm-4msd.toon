@@ -1,0 +1,13 @@
+id: pm-swarm-4msd
+title: Privacy oracle expectation is stale for pm-cli 2026.10.30 scanMutationSecrets
+description: ""
+type: Issue
+status: open
+priority: 2
+tags[3]: dependencies,migration,sdk
+created_at: "2026-11-03T04:21:26.941Z"
+updated_at: "2026-11-03T05:40:41.940Z"
+author: pi-fleet-sdk-sentinel-1103
+comments[1]{created_at,author,text}:
+  "2026-11-03T05:40:41.940Z",pi-fleet-sdk-sentinel-1103,"Follow-up out of the sentinel migration: pm-cli 2026.10.30 scanMutationSecrets flags 41 privacy-corpus entries with rule absolute_home_path, but the privacy-oracle test asserts 10 (assert at the SDK privacy oracle test). Failure pre-exists on the pristine pm-toolchain Dependabot branch and blocks the coverage gate. Fixing the count expectation (or the scanner contract) is upstream scope, not part of the sentinel migration."
+body: ""

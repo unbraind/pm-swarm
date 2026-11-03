@@ -1,0 +1,19 @@
+id: pm-swarm-1ii8
+title: "Migrate off parent:none SDK sentinel for pm-toolchain 2026.10.30 bump"
+description: ""
+type: Chore
+status: in_progress
+priority: 2
+tags[4]: dependencies,"gh:unbraind/pm-swarm#43",migration,sdk
+created_at: "2026-11-03T03:00:51.427Z"
+updated_at: "2026-11-03T05:40:15.074Z"
+assignee: pi-fleet-sdk-sentinel-1103
+claim_principal: pi-fleet-sdk-sentinel-1103
+author: pi-fleet-sdk-sentinel-1103
+comments[3]{created_at,author,text}:
+  "2026-11-03T03:01:24.679Z",pi-fleet-sdk-sentinel-1103,"Migrated 7 test sentinel sites (SDK parent:'none'/'assignee:none' -> unset; CLI --parent none -> --unset parent). No production code passed sentinels, so no production bug. Unrelated ['read','write','none'] permission list left untouched."
+  "2026-11-03T04:21:29.604Z",pi-fleet-sdk-sentinel-1103,"npm test: 957/958 pass. Single failure pre-exists on the pristine Dependabot branch: test/privacy-admission.test.ts asserts scanMutationSecrets detects 10 privacy-corpus entries, but pm-cli 2026.10.30 detects 41. Not caused by the sentinel change; tracked as a separate follow-up item and left out of scope here."
+  "2026-11-03T05:40:15.073Z",pi-fleet-sdk-sentinel-1103,"Result: npm test 957/958 pass (one pre-existing privacy-oracle failure, unrelated to sentinels). release:check passes identity/typecheck/lint/duplication/build/docstring and coverage thresholds; it stops at the coverage gate because of that same single pre-existing test failure. Changelog regenerated (no diff: open items are not in released versions)."
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  npm test,project,pi-fleet-sdk-sentinel-1103,"2026-11-03T03:01:27.905Z",local_mutation,dependabot/npm_and_yarn/pm-toolchain-83955e8a70
+body: ""
