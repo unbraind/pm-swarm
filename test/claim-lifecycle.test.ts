@@ -14,7 +14,9 @@ for (const command of ['start', 'next', 'schedule'] as const) test(`shared ${com
     let count = 0; let injected = false;
     const restore = failRename(t, (_source, target) => {
       if (!target.includes('agent-')) return false;
-      injected = ++count === heartbeat; return injected;
+      const fail = ++count === heartbeat;
+      injected ||= fail;
+      return fail;
     }, 'Injected shared heartbeat failure');
     try {
       // Selection skips already assigned items, so exercise their explicit start path.

@@ -24,13 +24,24 @@ import { snapshot, unchanged } from './privacy-snapshot.ts';
 
 test('SDK privacy oracle results are measured for every encoding and normalized guards refuse all', () => {
   let detected = 0;
+  const undetected: string[] = [];
   for (const [name, value] of rejectedCorpus) {
-    if (privacyCorpus.some(([id]) => id === name) && scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) detected++;
+    if (privacyCorpus.some(([id]) => id === name)) {
+      if (scanMutationSecrets(value).some(finding => finding.rule === 'absolute_home_path')) detected++;
+      else undetected.push(name);
+    }
     assert.equal(containsPrivatePath(value), true, name);
     assert.throws(() => assertPrivatePathSafe({ nested: [value] }), SettingsRefusal, name);
     assert.throws(() => assertPrivatePathSafe({ [value]: 'public' }), SettingsRefusal, name);
   }
-  assert.equal(privacyCorpus.length, 50); assert.equal(detected, 10);
+  // pm-cli 2026.10.26 GH-1583 adds bounded decoding, Unicode folding and concrete
+  // path spellings. The 2026.10.30 pin detects 41/50, up from 10 on 2026.10.25.
+  // Shortcuts remain outside the concrete-home oracle; our guards still refuse all.
+  assert.equal(privacyCorpus.length, 50); assert.equal(detected, 41);
+  assert.deepEqual(undetected, [
+    'tilde-slash', 'tilde-named', 'tilde-backslash', 'home-variable', 'home-braced',
+    'userprofile-percent', 'userprofile-powershell', 'home-variable-bare', 'tilde-bare',
+  ]);
   for (const safe of ['public', ['password', 'synthetic'].join('='), '%ff public', 'https://example.test/public', join('src', 'settings', 'index.ts')]) assertPrivatePathSafe(safe);
 });
 
