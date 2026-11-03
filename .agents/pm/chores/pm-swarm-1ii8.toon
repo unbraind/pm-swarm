@@ -6,9 +6,7 @@ status: in_progress
 priority: 2
 tags[4]: dependencies,"gh:unbraind/pm-swarm#43",migration,sdk
 created_at: "2026-11-03T03:00:51.427Z"
-updated_at: "2026-11-03T05:40:15.074Z"
-assignee: pi-fleet-sdk-sentinel-1103
-claim_principal: pi-fleet-sdk-sentinel-1103
+updated_at: "2026-11-03T05:41:01.464Z"
 author: pi-fleet-sdk-sentinel-1103
 comments[3]{created_at,author,text}:
   "2026-11-03T03:01:24.679Z",pi-fleet-sdk-sentinel-1103,"Migrated 7 test sentinel sites (SDK parent:'none'/'assignee:none' -> unset; CLI --parent none -> --unset parent). No production code passed sentinels, so no production bug. Unrelated ['read','write','none'] permission list left untouched."
