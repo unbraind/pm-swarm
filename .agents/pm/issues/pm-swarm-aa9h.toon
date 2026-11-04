@@ -2,16 +2,24 @@ id: pm-swarm-aa9h
 title: "Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository"
 description: "The release job runs npm publish release-artifact/package.tgz. npm parses a bare dir/file.tgz spec as the GitHub shorthand owner/repo and runs git ls-remote ssh://git@github.com/release-artifact/package.tgz.git, which fails with Permission denied (publickey); after 3 attempts the job reports that nothing was published. Latest release run: https://github.com/unbraind/pm-swarm/actions/runs/40682734808 (failure). Fix: publish ./release-artifact/package.tgz so npm reads the verified local archive."
 type: Issue
-status: open
+status: closed
 priority: 0
 tags[3]: ci,npm,release
 created_at: "2026-10-28T15:21:54.132Z"
-updated_at: "2026-10-28T15:21:55.342Z"
+updated_at: "2026-11-04T18:57:22.426Z"
+closed_at: "2026-11-04T10:50:14.134Z"
+completed_at: "2026-11-04T10:50:14.134Z"
 author: claude-hub
 acceptance_criteria: release.yml publishes ./release-artifact/package.tgz; no other npm or bun command passes a bare relative tarball path; the next daily release publishes to npm with provenance
 severity: high
-comments[1]{created_at,author,text}:
+resolution: Implemented and merged in #36 (7feb492).
+expected_result: The change described by this item is on main.
+actual_result: "Merged in #36 as 7feb492; checks successful at head 84dcccd: CodeQL, codeql, test (22), test (26)."
+comments[3]{created_at,author,text}:
   "2026-10-28T15:21:55.342Z",claude-hub,"Evidence: the failed release job log shows 'npm error command git --no-replace-objects ls-remote ssh://git@github.com/release-artifact/package.tgz.git' and 'git@github.com: Permission denied (publickey)' on each of the 3 attempts (same failure in pm-evidence, pm-hypothesis, pm-jev, pm-lint, pm-memory, pm-review, pm-rlm and pm-swarm, which all carry the scaffold line). The other uses of release-artifact/package.tgz in release.yml are shell arguments (mv, sha256sum, openssl), not npm package specs. Fleet tracking: unbraind/pm-cli-companion item pm-cli-website-l9y4."
+  "2026-11-04T16:35:10.665Z",claude-hub,"Release evidence for the acceptance criteria (verified 2026-11-04): release.yml line 769 runs 'npm publish ./release-artifact/package.tgz --access public --provenance --ignore-scripts', and no other npm or bun command in .github/workflows passes a bare release-artifact path (the others are mv, cp, sha256sum, git bundle and openssl arguments). Tag v2026.10.28 is identical to the #36 merge commit 7feb492, and pm-swarm 2026.10.28 reached npm at 2026-10-28T17:25:44Z with an SLSA v1 provenance attestation (https://registry.npmjs.org/-/npm/v1/attestations/pm-swarm@2026.10.28). The later daily releases 2026.10.29, 2026.10.31, 2026.11.2 and 2026.11.3 also published with provenance."
+  "2026-11-04T18:57:22.426Z",claude-orchestrator,"Repository-wide evidence for the acceptance criterion (CodeRabbit #59, verified 2026-11-04 at a2b40c2): git grep over the whole tree, excluding CHANGELOG.md and .agents prose, finds exactly one npm/bun/npx/pnpm command that takes a .tgz path: .github/workflows/release.yml:769 'npm publish ./release-artifact/package.tgz' (explicitly relative). The only other package-manager call that installs a tarball is test/install.acceptance.ts:173, which passes join(repo, filename), an absolute path, so npm cannot read it as GitHub shorthand. Every other release-artifact/ reference is an mv, cp, sha256sum, openssl, git bundle/fetch argument or an upload path."
 files[1]{path,scope}:
   .github/workflows/release.yml,project
+close_reason: "Delivered by #36 \"Publish the verified release archive as a local file so daily releases reach npm\" (merged as 7feb492). Checks successful at the PR head 84dcccd: CodeQL, codeql, test (22), test (26)."
 body: ""

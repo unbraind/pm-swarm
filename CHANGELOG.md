@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository ([pm-swarm-aa9h](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-aa9h.toon))
+
 ## 2026.11.4 - 2026-11-04
 
 ### Fixed
