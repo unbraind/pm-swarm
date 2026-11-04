@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository ([pm-swarm-aa9h](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-aa9h.toon))
 - Privacy oracle expectation is stale for pm-cli 2026.10.30 scanMutationSecrets ([pm-swarm-4msd](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4msd.toon))
 
 ### Other
