@@ -102,6 +102,9 @@ test('a lost final compensation return is reported conservatively and retries wi
 test('legacy native claims close and compensate without inventing a supplied swarm token', async t => {
   const f = await sharedFixture(t); const id = await f.item(); await f.client.claim(id);
   await assert.rejects(withCloseObserver(boundary => { if (boundary === 'before_commit') throw new Error('Legacy claim interruption'); }, () => f.shared.close(id, 'Legacy completion')), { code: 'swarm_close_compensated' });
+  const stable = closeBytes(f, [id]);
+  await assert.rejects(f.shared.close(id, 'Legacy completion'), { code: 'swarm_close_compensated' });
+  assert.deepEqual(closeBytes(f, [id]), stable);
   const next = await f.shared.start(id); assert.equal(next.token, '1');
   await f.shared.close(id, 'New generation', next.token);
 });

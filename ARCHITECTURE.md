@@ -22,6 +22,8 @@ records its native restore version, pre-close item-byte digest, document hash
 and native history head. No document body or history message is copied into the
 intent. The final successful update also clears handoff/claim metadata and advances the
 decimal fencing generation, while the journal retains the original request token.
+Legacy native claims without a swarm token retain a null token in the intent;
+retries normalize the absent request token to the same null value.
 Native item updates retain every intent revision in native history;
 there are no extension-owned recovery side files or competing SDK journals.
 
