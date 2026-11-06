@@ -62,7 +62,6 @@ async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal):
   for (const member of ordered) {
     states = await inspectDomain(engine, journal);
     const state = states.get(member.id)!;
-    if (!state.changed) continue;
     if (state.restored) {
       await syncCloseMember(engine, member.id);
       if (member.id !== journal.id && !journal.restored.includes(member.id)) {

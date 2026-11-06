@@ -62,7 +62,9 @@ chain. Journal updates may change only owned completion fields and the native
 clock, and progress must advance monotonically.
 
 Before the first restore, the coordinator persists the complete affected member
-list, signed native proposals and post-close history heads. The audited workspace
+list, signed native proposals and post-close history heads. The frozen post-head
+set must equal the actual changed domain; an untouched member cannot be added
+to authorize a restore. The audited workspace
 proof cache is then retired; the complete proofs remain in native item history. Dependents restore in reverse order. Every
 restore and progress write syncs native item and history files plus parent
 directories. If a restore commits before its progress update, its immutable

@@ -146,9 +146,9 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
     }
     changed = true;
   }
-  if (journal.phase !== 'applying' && changed) {
+  if (journal.phase !== 'applying') {
     const post = journal.post.find(row => row.id === member.id);
-    if (post === undefined || post.head.length !== forwardEnd || post.head.hash !== hashHistoryStream(entries.slice(0, forwardEnd))) throw foreign();
+    if (changed ? post === undefined || post.head.length !== forwardEnd || post.head.hash !== hashHistoryStream(entries.slice(0, forwardEnd)) : post !== undefined) throw foreign();
   }
   const view = historical ?? { document: replayToCanonicalItemDocument(replayHistoryToTarget(entries, entries.length - 1), { schema }) };
   if (documentFingerprint(snapshot.item) !== documentFingerprint({ ...view.document.metadata, body: view.document.body }) || through === undefined && (restored || !changed) && await memberDigest(engine, member.id) !== member.digest) throw foreign();

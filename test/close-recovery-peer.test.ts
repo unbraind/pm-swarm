@@ -6,7 +6,7 @@ import type { CloseJournal } from '../src/close-journal.ts';
 import { CloseCompensation } from '../src/close-recovery.ts';
 import { withItemMutationObserver } from '../src/settings.ts';
 import { historyPeerProcess, peerBytes } from './history-aba-helpers.ts';
-import { closeBytes, closeProcess, recoveryFixture } from './close-recovery-helpers.ts';
+import { assertRefusedClosePreserves, closeBytes, closeProcess, recoveryFixture } from './close-recovery-helpers.ts';
 import { blockedDependent } from './close-native-helpers.ts';
 
 /** Keep a native dependency candidate blocked by an independent unresolved item. */
@@ -101,7 +101,5 @@ test('a peer edit to an untouched related candidate halts compensation without a
   const { f, id, token, ids } = await recoveryFixture(t, 1); const candidate = await stillBlockedCandidate(f, id);
   assert.equal(closeProcess(f, id, token, { kill: { boundary: 'before_commit' } }).signal, 'SIGKILL');
   const peer = f.cli('update', candidate, '--description', 'Independent candidate progress', '--json'); assert.equal(peer.status, 0, peer.stdout + peer.stderr);
-  const before = closeBytes(f, [...ids, candidate]);
-  assert.equal(closeProcess(f, id, token).outcome?.code, 'swarm_compensation_partial');
-  assert.deepEqual(closeBytes(f, [...ids, candidate]), before);
+  assertRefusedClosePreserves(f, id, token, [...ids, candidate]);
 });
