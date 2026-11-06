@@ -16,6 +16,8 @@ Neither an author name nor a fencing token is an authentication credential.
 | Legacy or unowned history | Require explicit inspection | Return `swarm_close_recovery_unsupported` |
 
 The coordinator is the primary item's registered `swarm_close_intent` string.
+Canonical target identity is checked before considering any earlier generation
+retired, so a copied receipt cannot authorize fresh work on another item.
 Its immutable plan contains a random, SDK-validated `compensation_id`, canonical
 primary ID, author, token, note and complete admitted member list. Each member
 records its native restore version, pre-close item-byte digest, document hash

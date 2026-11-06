@@ -59,9 +59,10 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
   const canonicalId = String(item.id); const selected = token ?? tokens.get(canonicalId);
   refuseLegacyMarker(engine, item);
   const discovered = await discoverCloseJournal(engine, canonicalId, item[CLOSE_INTENT]);
+  if (discovered !== undefined && discovered.id !== canonicalId) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
   const retired = discovered !== undefined && await retiredCloseGeneration(engine, discovered, item);
   const journal = retired ? undefined : discovered;
-  if (journal !== undefined && (journal.id !== canonicalId || journal.author !== engine.author || journal.note.trim() !== note || journal.token !== (selected ?? null))) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
+  if (journal !== undefined && (journal.author !== engine.author || journal.note.trim() !== note || journal.token !== (selected ?? null))) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
   if (journal?.phase === 'committed') return replayCommittedClose(engine, journal);
   if (journal !== undefined && (item[CLOSE_INTENT] === undefined || parseCloseJournal(engine, item[CLOSE_INTENT]).compensation_id !== journal.compensation_id)) return replayCompensatedClose(engine, journal);
   if (journal === undefined) {

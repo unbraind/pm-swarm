@@ -12,12 +12,15 @@ import { appendCopiedClosePhase, assertRefusedClosePreserves, closeBytes, closeP
 import { blockedDependent } from './close-native-helpers.ts';
 
 test('a valid journal copied from another native target cannot return its saved success', async t => {
-  const { f, id, token } = await recoveryFixture(t, 0); const other = await f.item(); const held = await f.shared.start(other);
-  await f.shared.close(other, 'Same public completion', held.token);
-  const foreign = String((await f.client.get(other)).item[CLOSE_INTENT]);
-  await f.client.update(id, { field: [`${CLOSE_INTENT}=${foreign}`] }); const before = closeBytes(f, [id, other]);
-  await assert.rejects(f.shared.close(id, 'Same public completion', token), { code: 'swarm_close_recovery_unsupported' });
-  assert.deepEqual(closeBytes(f, [id, other]), before);
+  for (const generation of ['same', 'newer']) await t.test(generation, async child => {
+    const { f, id, token } = await recoveryFixture(child, 0); const other = await f.item(); const held = await f.shared.start(other);
+    await f.shared.close(other, 'Same public completion', held.token);
+    const foreign = String((await f.client.get(other)).item[CLOSE_INTENT]);
+    const selected = generation === 'newer' ? String(BigInt(token) + 1n) : token;
+    await f.client.update(id, { field: [`${CLOSE_INTENT}=${foreign}`, `swarm_token=${selected}`] }); const before = closeBytes(f, [id, other]);
+    await assert.rejects(f.shared.close(id, 'Same public completion', selected), { code: 'swarm_close_recovery_unsupported' });
+    assert.deepEqual(closeBytes(f, [id, other]), before);
+  });
 });
 
 test('a frozen affected list cannot invent an untouched related member', async t => {
