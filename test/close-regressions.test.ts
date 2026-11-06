@@ -41,7 +41,7 @@ test('short IDs use native canonical resolution before history when local inspec
   const before = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'); const short = id.split('-').at(-1)!;
   assert.deepEqual(await f.shared.close(short, 'Public native completion', claim.token), { id, closed: true });
   const after = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'); assert.ok(after.startsWith(before));
-  assert.equal(after.trim().split('\n').length, before.trim().split('\n').length + 1);
+  assert.equal(after.trim().split('\n').length, before.trim().split('\n').length + 3, 'intent, native close and committed receipt');
   const stable = durableSnapshot(f.pmRoot);
   await assert.rejects(f.shared.close(short, 'Retry under a different note', claim.token), error => error instanceof SettingsRefusal && error.code === 'swarm_close_recovery_unsupported');
   assert.equal(durableSnapshot(f.pmRoot), stable);

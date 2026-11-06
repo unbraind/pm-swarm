@@ -143,9 +143,9 @@ if(['update','close'].includes(context.op)) globalThis[Symbol.for('pm-swarm.test
   writeFileSync(join(f.pmRoot, 'extensions/pm-swarm/entry.js'), entry);
   const id = await f.item(['src/public.ts']); const receipt = await f.shared.start(id); events.length = 0;
   await f.shared.close(id, 'Public completion', receipt.token);
-  assert.deepEqual(events, ['close'], 'Swarm delegates exactly one primary native close');
+  assert.deepEqual(events, ['update', 'close', 'update'], 'Intent and completion surround exactly one admitted primary native close');
   const item = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, receipt.token);
+  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, String(BigInt(receipt.token) + 1n));
 });
 
 test('compound native writes preserve later peer state and truthfully report an already committed prefix', async t => {

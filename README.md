@@ -25,7 +25,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
-| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Delegate one fenced native close; interrupted recovery refuses |
+| close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fenced native close with durable crash compensation |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
 | resource | `pm swarm resource resource-id --action reserve --ttl 300 --agent worker` | Exclusive non-file resource lease; status, renew, publish and release share the same tracker fence |
 | land | `pm swarm land` | Search real sequential merges; `--execute` runs linked tests and merges locally |
@@ -119,19 +119,29 @@ package copies share request scope. A second SDK module identity produces
 `swarm_sdk_mismatch`: share the host SDK installation and restart after removing
 the nested dependency. Full internal reads retain large bodies and annotations.
 Close resolves IDs through native `get()` before history selection and delegates
-one fresh native close with full-document and history admission. It performs no
-swarm metadata update, transaction replay or automatic restore. Any earlier native
-close (including reopened items), terminal state, legacy markers and interrupted
-native returns produce
-`swarm_close_recovery_unsupported`, naming the canonical item and native/legacy
-journal entry for explicit inspection. Native lifecycle fields and dependent
-warnings remain core-owned. Every failure after the observed native commit,
-including final heartbeat and lease cleanup, returns the typed recovery refusal
-and its item/journal remedy. Unexpected storage failures before that commit use
-`swarm_close_not_committed`. Local refusals precede native read bookkeeping; the
-authoritative admission repeats those same checks after capturing its history head. See [native close](docs/native-close.md).
-[Issue 34](https://github.com/unbraind/pm-swarm/issues/34) owns durable multi-item
-recovery; it is outside this PR's implementation.
+one fenced native close with full-document and native-history admission. Before
+calling core, it persists a `swarm_close_intent` field containing a unique recovery
+identity and immutable member restore targets. Core still owns dependent
+unblocking, Plan policy, blocker-field removal and warning tokens.
+
+Retry an interrupted close with its original author, note and token. A saved
+`committed` receipt replays without another item write. An interrupted forward call
+compensates its certified native mutations: dependents first, blocker last.
+`swarm_close_compensated` means exact pre-close item bytes were restored while
+all audit history remains. Repeated recovery adds no duplicate restores. A new
+claim generation can then begin another completion attempt. Replay requires the
+matching native primary close entry as well as signed receipts; a peer-created
+key and journal alone cannot certify completion or dependent compensation.
+Legacy null-token completion preserves its token. Compensation cleanup attempts
+every held native lease even if an earlier release fails.
+
+`swarm_compensation_partial` lists restored and pending members when a peer or
+storage failure prevents safe recovery. Preserve the peer's bytes and audit
+entries; inspect native history before reconciling. Unowned native closes and
+legacy transaction markers still return `swarm_close_recovery_unsupported`.
+The intent, progress and native receipts live entirely in registered SDK fields
+and append-only native history. See [ARCHITECTURE](ARCHITECTURE.md) and the
+[native close protocol](docs/native-close.md) for the state machine and limits.
 
 Coordination leases keep renewing during validation, while persistent principal
 liveness is announced after a successful write or completion. Use

@@ -279,12 +279,11 @@ SDK and marks only this package request for transactional document admission.
 The source inventory parses every authored client call, SDK settings
 mutation, portable backend transaction and imported linked-test writer; an added
 or unguarded site fails the test until it joins the inventory and admission path.
-The inventory requires the item-specific helper and snapshot at all twelve item
-writers; the remaining six writers use the generic helper.
-The current inventory has **23 sites**: seventeen item mutations (claim, update,
-release, file links and comments), audited settings, linked-test acknowledgement,
-linked-test execution, the shared portable resource transaction and two SDK
-coordination lock acquisitions. All four resource actions share that transaction, whose freshly decided change is also
+The inventory requires the item-specific helper and snapshot at every item
+writer; coordination and non-item writers use the generic helper.
+The current inventory includes close, progress-update and restore writers, plus
+the SDK locks used for final dependency verification. The executable inventory
+in `test/privacy-sinks.test.ts` fixes the expected set and exercises every sink. All four resource actions share that transaction, whose freshly decided change is also
 admitted inside the backend callback.
 
 The registered SDK `beforeMutation` hook sees the **complete proposed
@@ -322,30 +321,24 @@ retry. Persistent contention returns the typed conflict without a false receipt.
 
 The native `onWrite` hook advances a request snapshot only when both documents
 exactly match its admitted, actually committed successor. Unrelated lock/cache
-notifications and peer documents cannot advance it. For compound close, the scope encloses one SDK workspace transaction. The generic
-`swarm_partial_commit` diagnostic remains for callers composing unjournaled
-native operations; journaled close propagates SDK interruption/compensation
-semantics instead.
+notifications and peer documents cannot advance it. Each close journal update,
+native lifecycle call and restore uses a separate complete-document scope with
+its own captured native history head. The generic `swarm_partial_commit` diagnostic
+remains for callers composing unjournaled native operations.
 
-`commitWorkspaceTransaction` owns the ordered native metadata update and close
-steps. `deriveMutationTransactionId` binds the exact canonical item, actor,
-original token and note; `validateWorkspaceTransactionIdentity` validates that
-identity before reading the SDK-owned journal. The mutable
-`swarm_close_transaction` field is only a lookup hint, never ownership proof.
-The package reads the documented SDK journal location through `readFileIfExists`
-because the pinned SDK has no typed journal-inspection export (tracked in
-[pm-cli#1597](https://github.com/unbraind/pm-cli/issues/1597)). The SDK remains
-the sole journal writer, lock owner, resume coordinator and compensation runner.
-
-Package step data binds a stable native SDK version to the SHA-256 of its whole
-document. Public `readHistoryEntries` and `getItemAt` reconstruct the exact
-ordered native update, close and reverse restore versions. Every unrelated field
-and the body must match; extra mutations, changed results, invalid journal plans
-and unreadable history refuse with `swarm_document_changed`. Free-text history
-messages are never read as ownership evidence. The check runs in preflight,
-after the bound-client read, and inside each native item lock before persistence.
-A peer edit cannot become a fresh rollback baseline, including a same-author
-update that copies an earlier message. Every later retry preserves that edit.
+The registered `swarm_close_intent` field and native item history own close intent
+and member progress. A unique SDK-validated compensation identity binds native
+episode attribution to the precise forward call or restore target. Forward
+ownership additionally requires an Ed25519-signed exact native proposal, recorded
+by the admission hook through the bound SDK workspace audit writer before item
+persistence. Caller-declared episodes alone never authorize compensation. Recovery checks
+native history prefixes, operation kinds, record identities and complete documents;
+messages, authors and copied markers are insufficient. Before restoring anything,
+it persists the immutable member list and post-close heads, then restores dependents
+before the primary. A lost progress update is recovered from the exact native
+restore receipt. Peer changes produce `swarm_compensation_partial` and preserve
+all peer bytes and audit entries. See [ARCHITECTURE](../ARCHITECTURE.md) for the
+state machine, fsync boundaries and final dependency-lock check.
 
 All start acquisitions retain their actual SDK receipt before post-write
 heartbeat publication. Git `start`, `next` and `schedule` keep one cleanup scope
@@ -358,16 +351,14 @@ claims are retained. Shared-tracker selection follows the same acquisition rule.
 Runtime publication uses exclusive temporary creation and removes only its own
 temporary, even when rename or post-pin request cleanup fails.
 
-Non-Git tests interrupt all seven forward coordinator boundaries, including
-between each native mutation and its journal record. A fresh CLI process resumes
-every case with exactly one update and one close, generation two, no lost fields,
-and byte-identical history on committed replay. Ordinary failure after the update
-restores the original fields through the SDK and a retry completes once. Four
-additional interruptions in compensation recover without duplicate restoration
-or lost completion. Seven
-private-peer transitions preserve exact peer history. Changed completion markers,
-generations and owners return a typed conflict. Close has no
-`swarm_partial_commit` path.
+Non-Git tests kill real processes at every instrumented native close and
+compensation boundary with one to three dependents. Recovery certifies exact
+original item bytes, retained audit history and no duplicate restores. Peer edits,
+ABA histories and copied identities refuse before overwriting foreign state.
+A completed receipt can return `swarm_partial_commit` when its response or
+required durability confirmation is unavailable. Retry its original author,
+note and token to verify and replay that saved receipt; an interrupted forward
+prefix instead compensates before another claim generation can start.
 
 Settings admission checks the complete fresh raw source document, substituting
 only its owned proposed subtree, as well as the SDK-normalized returned patch.

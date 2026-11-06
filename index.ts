@@ -50,5 +50,9 @@ export { projectReceipt, admitReceipt, assertReceiptSafe } from './src/receipts.
 /** Trusted request-local diagnostics for testing the handoff into native item writer locks. */
 export { ITEM_MUTATION_BOUNDARIES, withItemMutationObserver } from './src/settings.ts';
 
-/** Close replay is deliberately unsupported and never repairs native state automatically. */
+/** Legacy or unowned native history remains ineligible for automatic recovery. */
 export { CloseRecoveryUnsupported } from './src/close.ts';
+/** Native-field close recovery receipts and request-local crash diagnostics. */
+export { CloseCompensation } from './src/close-recovery.ts';
+/** Registered intent and native-boundary observer used by embedded hosts and packed acceptance. */
+export { CLOSE_INTENT, withCloseObserver } from './src/close-journal.ts';
