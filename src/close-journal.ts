@@ -100,7 +100,7 @@ export async function discoverCloseJournal(engine: Swarm, id: string, current: u
   return present;
 }
 /** Checked current member, including independently certified completed restoration. */
-export interface CloseInspection { item: Record<string, unknown>; history: ItemHistoryHead; changed: boolean; restored: boolean }
+export interface CloseInspection { item: Record<string, unknown>; history: ItemHistoryHead; changed: boolean; restored: boolean; forwarded: boolean }
 /** Verify an uninterrupted native receipt chain; copied prose, author equality and ABA never suffice. */
 async function inspectMember(engine: Swarm, journal: CloseJournal, member: CloseMember, proofs: readonly SignedCloseProposal[], through?: number): Promise<CloseInspection> {
   const current = through === undefined ? await clientMutationSnapshot(engine.pmRoot, engine.client, member.id) : undefined;
@@ -122,8 +122,9 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
       const recorded = parseCloseJournal(engine, view.document.metadata[CLOSE_INTENT]);
       const allowedFields = new Set([`/metadata/${CLOSE_INTENT}`, '/metadata/updated_at']);
       if (recorded.phase === 'committed') {
-        if (!validCloseResult(recorded)) throw foreign();
-        for (const field of ['swarm_token', 'swarm_handoff', 'swarm_claimed_at']) allowedFields.add(`/metadata/${field}`);
+        if (!forwarded || !validCloseResult(recorded)) throw foreign();
+        if (recorded.token !== null) allowedFields.add('/metadata/swarm_token');
+        for (const field of ['swarm_handoff', 'swarm_claimed_at']) allowedFields.add(`/metadata/${field}`);
         if (view.document.metadata.swarm_handoff !== undefined || view.document.metadata.swarm_claimed_at !== undefined || recorded.token !== null && view.document.metadata.swarm_token !== String(BigInt(recorded.token) + 1n)) throw foreign();
       }
       if (plan(recorded) !== plan(journal) || entry.agent_episode?.id !== closeEpisode(recorded, 'journal', recorded) || entry.patch.some(patch => !allowedFields.has(patch.path))) throw foreign();
@@ -152,7 +153,7 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
   }
   const view = historical ?? { document: replayToCanonicalItemDocument(replayHistoryToTarget(entries, entries.length - 1), { schema }) };
   if (documentFingerprint(snapshot.item) !== documentFingerprint({ ...view.document.metadata, body: view.document.body }) || through === undefined && (restored || !changed) && await memberDigest(engine, member.id) !== member.digest) throw foreign();
-  return { item: snapshot.item, history: snapshot.historyHead, changed, restored };
+  return { item: snapshot.item, history: snapshot.historyHead, changed, restored, forwarded };
 }
 /** Verify one member with a freshly authenticated native proposal snapshot. */
 export async function inspectCloseMember(engine: Swarm, journal: CloseJournal, member: CloseMember, through?: number): Promise<CloseInspection> {
@@ -165,6 +166,7 @@ export async function inspectCloseMembers(engine: Swarm, journal: CloseJournal):
     try { states.set(member.id, await inspectMember(engine, journal, member, proofs)); }
     catch { pending.push(member.id); }
   }
+  if (!states.get(journal.id)?.forwarded) for (const [id, state] of states) if (id !== journal.id && state.forwarded) pending.push(id);
   return { states, pending };
 }
 /** A newer claim retires only a historically certified committed close or final primary restore. */

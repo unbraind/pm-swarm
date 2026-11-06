@@ -24,7 +24,8 @@ before terminal status and current ownership checks because native close may
 already have removed the assignee. A committed result replays its saved warning
 receipt without waiting for an operation pin, completing any lost native proof-cache
 retirement first. Its final guarded native update
-clears handoff/claim metadata and advances the generation; the intent retains
+clears handoff/claim metadata and advances a fenced generation once; legacy
+null-token completion preserves the prior token. The intent retains
 the original request token for replay. An interrupted forward call compensates dependents before the primary,
 then returns `swarm_close_compensated`. The exact pre-close item bytes, including
 native timestamps, are restored with append-only compensation history.
@@ -52,6 +53,10 @@ are frozen into native item history and their workspace cache is retired. Recove
 operation kind, immutable record hashes, exact restore target and progress order.
 The original fresh invocation separately signs the complete final result and its
 warnings; copying a `committed` phase cannot certify a partial native prefix.
+A peer-supplied public key proves consistency only: committed replay requires
+a matching native primary close entry after the intent. Related forward updates
+cannot authorize compensation without that independent native origin.
+Cleanup attempts every held native lease even when another release rejects.
 An unrelated same-author close and later writes copying messages or identities
 cannot be adopted. A lost warning/result receipt is never manufactured.
 

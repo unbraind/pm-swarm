@@ -1,11 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, renameSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { getHistoryPath, getItemPath, runWithAgentSessionContext } from '@unbrained/pm-cli/sdk';
 import { sharedFixture } from './shared-helpers.ts';
 import { blockedDependent } from './close-native-helpers.ts';
-import { CLOSE_INTENT, closeEpisode } from '../src/close-journal.ts';
+import { CLOSE_INTENT, captureCloseMember, closeEpisode, withCloseObserver } from '../src/close-journal.ts';
+import { applyClose, prepareClose } from '../src/close-recovery.ts';
+import { loadCloseProposals, signCloseResult, validCloseResult } from '../src/close-proofs.ts';
+import { withSwarmLease } from '../src/lease.ts';
+import { readItemHistoryHead } from '../src/settings.ts';
 import type { CloseJournal } from '../src/close-journal.ts';
 
 /** Capture actual bytes and immutable audit prefixes for all native close members. */
@@ -49,4 +53,21 @@ export function assertRefusedClosePreserves(f: Awaited<ReturnType<typeof sharedF
 /** Append an adversarial copied phase through the real SDK, without replacing a native mutation. */
 export async function appendCopiedClosePhase(f: Awaited<ReturnType<typeof sharedFixture>>, journal: CloseJournal, options: { field?: string[]; unset?: string[] } = {}): Promise<void> {
   await runWithAgentSessionContext({ episode: { id: closeEpisode(journal, 'journal', journal) } }, () => f.client.update(journal.id, { force: true, field: [`${CLOSE_INTENT}=${JSON.stringify(journal)}`, ...(options.field ?? [])], unset: options.unset }));
+}
+
+/** Sign a real native close template after retaining its history through an interrupted final header. */
+export async function signedNativeCompletion(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, token: string | undefined, ids: string[]): Promise<CloseJournal> {
+  const engine = f.shared.engine;
+  const prepared = await prepareClose(engine, id, 'Public native completion', token, await captureCloseMember(engine, id));
+  const history = getHistoryPath(f.pmRoot, id); const retained = `${history}.retained`; let moved = false;
+  try {
+    await assert.rejects(withSwarmLease(f.pmRoot, engine.author, lease => withCloseObserver(boundary => {
+      if (boundary !== 'before_commit') return; renameSync(history, retained); moved = true; throw new Error('Storage outage before completion');
+    }, () => applyClose(engine, lease, prepared))), { code: 'swarm_compensation_partial' });
+  } finally { if (moved) renameSync(retained, history); }
+  assert.equal(moved, true);
+  const post = await Promise.all(ids.map(async member => ({ id: member, head: await readItemHistoryHead(f.pmRoot, member) })));
+  let completed: CloseJournal = { ...prepared.journal, phase: 'committed', warnings: [], post, proofs: await loadCloseProposals(engine, prepared.journal) };
+  completed = { ...completed, result_signature: signCloseResult(completed, prepared.signer) }; assert.equal(validCloseResult(completed), true);
+  return completed;
 }

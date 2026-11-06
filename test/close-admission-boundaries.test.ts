@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
-import { renameSync } from 'node:fs';
 import { test } from 'node:test';
-import { getHistoryPath } from '@unbrained/pm-cli/sdk';
-import { CLOSE_INTENT, captureCloseMember, inspectCloseMember, withCloseObserver } from '../src/close-journal.ts';
+import { CLOSE_INTENT, inspectCloseMember } from '../src/close-journal.ts';
 import type { CloseJournal } from '../src/close-journal.ts';
-import { applyClose, prepareClose } from '../src/close-recovery.ts';
-import { loadCloseProposals, signCloseResult, validCloseResult } from '../src/close-proofs.ts';
-import { withSwarmLease } from '../src/lease.ts';
+import { loadCloseProposals } from '../src/close-proofs.ts';
 import { readItemHistoryHead } from '../src/settings.ts';
-import { appendCopiedClosePhase, assertRefusedClosePreserves, closeBytes, closeProcess, recoveryFixture } from './close-recovery-helpers.ts';
+import { appendCopiedClosePhase, assertRefusedClosePreserves, closeBytes, closeProcess, recoveryFixture, signedNativeCompletion } from './close-recovery-helpers.ts';
 import { blockedDependent } from './close-native-helpers.ts';
 
 test('a valid journal copied from another native target cannot return its saved success', async t => {
@@ -39,18 +35,8 @@ test('a frozen affected list cannot invent an untouched related member', async t
 
 test('a signed native completion still requires exact ownership cleanup and generation advance', async t => {
   for (const kind of ['handoff', 'claim timestamp', 'token']) await t.test(kind, async child => {
-    const { f, id, token, ids } = await recoveryFixture(child, 1); const engine = f.shared.engine;
-    const prepared = await prepareClose(engine, id, 'Public native completion', token, await captureCloseMember(engine, id));
-    const history = getHistoryPath(f.pmRoot, id); const retained = `${history}.retained`; let moved = false;
-    try {
-      await assert.rejects(withSwarmLease(f.pmRoot, engine.author, lease => withCloseObserver(boundary => {
-        if (boundary !== 'before_commit') return; renameSync(history, retained); moved = true; throw new Error('Storage outage before completion');
-      }, () => applyClose(engine, lease, prepared))), { code: 'swarm_compensation_partial' });
-    } finally { if (moved) renameSync(retained, history); }
-    assert.equal(moved, true);
-    const post = await Promise.all(ids.map(async member => ({ id: member, head: await readItemHistoryHead(f.pmRoot, member) })));
-    let completed: CloseJournal = { ...prepared.journal, phase: 'committed', warnings: [], post, proofs: await loadCloseProposals(engine, prepared.journal) };
-    completed = { ...completed, result_signature: signCloseResult(completed, prepared.signer) }; assert.equal(validCloseResult(completed), true);
+    const { f, id, token, ids } = await recoveryFixture(child, 1);
+    const completed = await signedNativeCompletion(f, id, token, ids);
     const field = [`swarm_token=${kind === 'token' ? token : BigInt(token) + 1n}`, ...(kind === 'handoff' ? ['swarm_handoff=Retained public transfer'] : [])];
     const unset = ['swarm_handoff', 'swarm_claimed_at'].filter(name => !(kind === 'handoff' && name === 'swarm_handoff' || kind === 'claim timestamp' && name === 'swarm_claimed_at'));
     await appendCopiedClosePhase(f, completed, { field, unset }); const before = closeBytes(f, ids);

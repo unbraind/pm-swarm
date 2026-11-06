@@ -129,7 +129,11 @@ Retry an interrupted close with its original author, note and token. A saved
 compensates its certified native mutations: dependents first, blocker last.
 `swarm_close_compensated` means exact pre-close item bytes were restored while
 all audit history remains. Repeated recovery adds no duplicate restores. A new
-claim generation can then begin another completion attempt.
+claim generation can then begin another completion attempt. Replay requires the
+matching native primary close entry as well as signed receipts; a peer-created
+key and journal alone cannot certify completion or dependent compensation.
+Legacy null-token completion preserves its token. Compensation cleanup attempts
+every held native lease even if an earlier release fails.
 
 `swarm_compensation_partial` lists restored and pending members when a peer or
 storage failure prevents safe recovery. Preserve the peer's bytes and audit

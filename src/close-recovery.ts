@@ -72,7 +72,7 @@ async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal):
       continue;
     }
     closeBoundary('before_restore', member.id);
-    const held: Awaited<ReturnType<typeof acquireLockLease>>[] = [];
+    const held: Awaited<ReturnType<typeof acquireLockLease>>[] = []; const failures: unknown[] = [];
     try {
       if (member.id === journal.id) {
         for (const target of journal.post.filter(row => row.id !== journal.id).sort((left, right) => left.id.localeCompare(right.id))) held.push(await commitMutation({ id: target.id, author: engine.author }, admitted => acquireLockLease(engine.pmRoot, admitted.id, 1800, admitted.author, false, false, 0)));
@@ -83,7 +83,9 @@ async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal):
       };
       for (const lock of held) { const next = commit; commit = () => lock.fence(next); }
       await commit();
-    } finally { for (const lock of held.reverse()) await lock.release(); }
+    } catch (error) { failures.push(error); }
+    for (const lock of held.reverse()) { try { await lock.release(); } catch (error) { failures.push(error); } }
+    if (failures.length > 0) throw new AggregateError(failures, 'Native compensation or lock cleanup failed');
     await syncCloseMember(engine, member.id);
     closeBoundary('restored', member.id);
     // The primary restore removes the field. Its immutable native receipt is the final completion record.
@@ -149,7 +151,7 @@ export async function replayCompensatedClose(engine: Swarm, journal: CloseJourna
 export async function applyClose(engine: Swarm, lease: Lease, prepared: Awaited<ReturnType<typeof prepareClose>>): Promise<{ id: string; closed: true; warnings?: string[] }> {
   let journal = prepared.journal;
   const original = prepared.snapshots.get(journal.id)!;
-  await saveJournal(engine, lease, journal, { item: original.item, history: original.historyHead, changed: false, restored: false });
+  await saveJournal(engine, lease, journal, { item: original.item, history: original.historyHead, changed: false, restored: false, forwarded: false });
   try {
     closeBoundary('intent', journal.id);
     const primary = await inspectCloseMember(engine, journal, journal.members[0]);

@@ -53,8 +53,13 @@ hashes, then persists that public proof through the bound SDK's audited
 native lifecycle successor is predicted or replaced. The private key remains in
 memory and is never serialized. The original invocation also signs the complete
 terminal result, including its frozen post-heads, proposals and returned warnings.
-Recovery rejects a copied `committed` phase without that signature; it cannot
-turn a partial native prefix into invented successful completion.
+Recovery rejects a copied `committed` phase without that signature. A signature
+proves consistency with the recorded key, not the authority of a peer-supplied key.
+Successful replay independently requires a canonical native primary `close` entry
+matching its exact proposal and history prefix; journal updates or manually
+terminal metadata cannot supply that origin. Related forward mutations cannot
+authorize compensation before that primary native close exists. Intent-only
+interruption remains recoverable without inventing a forward lifecycle.
 
 Recovery verifies those signatures against the original intent and matches the
 exact native history entry, including its ordinal and complete before-prefix.
@@ -63,13 +68,15 @@ another same-author call, supplies no valid signed native proposal. Restoration
 additionally binds the member, original version/digest and frozen post-close
 history head; copied later restore entries cannot replace that uninterrupted
 chain. Journal updates may change only owned completion fields and the native
-clock, and progress must advance monotonically.
+clock, and progress must advance monotonically. A committed legacy null-token
+close preserves the prior token exactly; a fenced close advances its token once.
 
 Before the first restore, the coordinator persists the complete affected member
 list, signed native proposals and post-close history heads. The frozen post-head
 set must equal the actual changed domain; an untouched member cannot be added
 to authorize a restore. The audited workspace
-proof cache is then retired; the complete proofs remain in native item history. Dependents restore in reverse order. Every
+proof cache is then retired; the complete proofs remain in native item history. Dependents restore in reverse order. Cleanup attempts every held native lease
+even when an earlier release rejects, retaining aggregate failure evidence. Every
 restore and progress write syncs native item and history files plus parent
 directories. If a restore commits before its progress update, its immutable
 native receipt supplies the missing progress on retry. If the final primary
