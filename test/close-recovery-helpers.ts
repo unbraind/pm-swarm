@@ -14,7 +14,10 @@ export function closeBytes(f: Awaited<ReturnType<typeof sharedFixture>>, ids: st
 }
 /** Run an actual OS process with an optional SIGKILL or ordinary failure at a diagnostic boundary. */
 export function closeProcess(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, token: string, options: { kill?: number | { boundary: string; occurrence?: number }; fail?: string; author?: string; note?: string } = {}) {
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./close-recovery-worker.ts', import.meta.url)), JSON.stringify({ repo: f.repo, pmRoot: f.pmRoot, id, token, ...options })], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 90000 });
+  // In-process SDK controls measure authored recovery coverage. SIGKILL workers cannot flush V8 coverage;
+  // collecting duplicate SDK-wide dumps on their retries makes the complete crash matrix needlessly costly.
+  const environment = { ...f.env }; delete environment.NODE_V8_COVERAGE;
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./close-recovery-worker.ts', import.meta.url)), JSON.stringify({ repo: f.repo, pmRoot: f.pmRoot, id, token, ...options })], { cwd: f.repo, env: environment, encoding: 'utf8', timeout: 90000 });
   assert.equal(result.error, undefined);
   const rows = result.stdout.trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as { boundary?: string; id?: string; code?: string; result?: unknown });
   return { ...result, rows, boundaries: rows.filter(row => row.boundary !== undefined).map(row => row.boundary!), outcome: rows.at(-1) };
