@@ -19,18 +19,19 @@ import { rejectedCorpus } from './privacy-corpus.ts';
 const WRITE_SITES = [
   'deadlocks.ts:update',
   'swarm.ts:mutateItem',
-  'lease.ts:acquireLock', 'swarm.ts:acquireLock',
+  'lease.ts:acquireLock', 'swarm.ts:acquireLock', 'close-recovery.ts:acquireLockLease',
   'progress.ts:comments', 'resource-tracker.ts:update', 'resource-tracker.ts:update',
   'resources.ts:transact',
   'settings.ts:mutateWorkspaceSettings',
+  'close-proofs.ts:mutateWorkspaceSettings',
   'shared-tracker.ts:update', 'shared-tracker.ts:files', 'shared-tracker.ts:release', 'shared-tracker.ts:update',
-  'close.ts:close',
+  'close-recovery.ts:close', 'close-recovery.ts:update', 'close-recovery.ts:restore',
   'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:files', 'swarm.ts:acknowledgeLinkedTests', 'swarm.ts:release',
   'test-runner.ts:runLinkedTests',
 ].sort();
 
 /** Every native item mutation must carry an SDK history precondition, including no-op Git cleanup. */
-const HISTORY_SITES = ['deadlocks.ts:update', 'close.ts:close', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
+const HISTORY_SITES = ['deadlocks.ts:update', 'close-recovery.ts:close', 'close-recovery.ts:update', 'close-recovery.ts:restore', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
 
 /** Minimal parser shape keeps inventory traversal independent of compiler internals. */
 interface AstNode { type: string; name?: string; property?: AstNode; object?: AstNode; callee?: AstNode; id?: AstNode; key?: AstNode; arguments?: AstNode[]; params?: AstNode[]; start?: number; end?: number }
@@ -51,7 +52,7 @@ function writeInventory(): string[] {
         const receiver = expression.type === 'MemberExpression' ? text(expression.object) : '';
         const writer = (/(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete'].includes(method) && !(method === 'run' && text(node.arguments?.[0]) === "'test'" && /list:\s*true/.test(text(node.arguments?.[1]))))
           || (receiver === 'sdk' && method !== 'isItemNotFoundError') || (receiver.endsWith('.backend') && method === 'transact')
-          || ['acquireLock', 'acknowledgeLinkedTests', 'runLinkedTests', 'commitItemMutations', 'commitWorkspaceTransaction', 'commitItemCompletion', 'mutateItem'].includes(method);
+          || ['acquireLock', 'acquireLockLease', 'acknowledgeLinkedTests', 'runLinkedTests', 'commitItemMutations', 'commitWorkspaceTransaction', 'commitItemCompletion', 'mutateItem'].includes(method);
         if (writer) {
           sites.push(`${file}:${method}`);
           let index = parents.length - 1;
@@ -108,6 +109,7 @@ test('each enumerated sink refuses private values from CLI git settings files an
     await unchanged(f.pmRoot, async () => {
       switch (method) {
         case 'mutateItem': return commitMutation({ id, author: value }, admitted => mutateItem({ ...admitted, pmRoot: f.pmRoot, settings, op: 'update', mutate: document => { document.metadata.description = admitted.author; return { changedFields: ['description'] }; } }));
+        case 'acquireLockLease':
         case 'acquireLock': return commitMutation({ resource: 'privacy-probe', author: value }, async admitted => { const release = await acquireLock(f.pmRoot, admitted.resource, 30, admitted.author); await release(); });
         case 'commitItemMutations': return commitMutation({ author: value, transactionId: 'privacy-probe', mutations: [{ op: 'close' as const, id, reason: value }] }, admitted => commitItemMutations({ ...admitted, pmRoot: f.pmRoot }));
         case 'commitWorkspaceTransaction': return commitMutation({ author: value, transactionId: 'privacy-probe' }, admitted => commitWorkspaceTransaction({ ...admitted, pmRoot: f.pmRoot, steps: [{ id: 'probe', async inspect() { return { state: 'pending' }; }, async apply() { return null; }, async compensate() {} }] }));

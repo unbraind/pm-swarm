@@ -10,7 +10,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { decodeToon } from '@unbrained/pm-cli/sdk/testing';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
-import { requireBun } from './install-helpers.ts';
+import { requireBun, packedNonGitConsumer } from './install-helpers.ts';
+import { assertPackedCrashRecovery } from './packed-close-recovery.ts';
 import { processExit } from './process-helpers.ts';
 import { assertPackedCloseOwnership } from './packed-ownership-helpers.ts';
 import { assertTrackerInvocations, assertIncomingHandoffRefusals } from './invocation-helpers.ts';
@@ -151,31 +152,7 @@ test('built artifact has zero runtime dependencies beyond Node and the pm SDK', 
 
 /** Exercise the actual tarball on a plain tracker through Node and native Bun. */
 for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball runs every command on a fresh non-git tracker`, { timeout: 600000 }, async t => {
-  const bun = requireBun();
-  const packageRoot = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-shared-install-'));
-  t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
-  const repo = join(scratch, 'project \u03a9 space'); mkdirSync(repo);
-  const pmRoot = join(repo, '.agents/pm');
-  const host = join(repo, 'node_modules/.bin/pm');
-  const env = gitEnvironment({ ...process.env, HOME: scratch, GIT_CEILING_DIRECTORIES: scratch, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', PM_PATH: pmRoot, PM_SOURCE_WORKSPACE_ROOT: repo, PM_SOURCE_PM_PATH: pmRoot, PM_GLOBAL_PATH: join(scratch, 'global-pm'), PM_AUTHOR: 'packed-worker', NPM_CONFIG_USERCONFIG: '/dev/null', npm_config_userconfig: '/dev/null' });
-  /** Run the real pinned host and reject extension activation or command failures. */
-  const invoke = (runtime: string, args: string[]) => {
-    const result = spawnSync(runtime, [host, '--path', pmRoot, ...args, '--json'], { cwd: repo, env, encoding: 'utf8' });
-    assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.doesNotMatch(result.stdout + result.stderr, /Extension activation failures/);
-    return JSON.parse(result.stdout) as Record<string, unknown>;
-  };
-  const packed = spawnSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: packageRoot, encoding: 'utf8' });
-  assert.equal(packed.status, 0, packed.stderr);
-  const filename = (JSON.parse(packed.stdout) as { filename: string }[])[0].filename;
-  const tarball = join(repo, filename); writeFileSync(tarball, readFileSync(join(scratch, filename)));
-  writeFileSync(join(repo, 'package.json'), '{"name":"swarm-plain-consumer","private":true,"type":"module"}\n');
-  const installed = spawnSync(manager, [manager === 'npm' ? 'install' : 'add', '--ignore-scripts', '@unbrained/pm-cli@2026.10.23', tarball], { cwd: repo, env, encoding: 'utf8' });
-  assert.equal(installed.status, 0, installed.stdout + installed.stderr);
-  invoke(process.execPath, ['init', 'packed-shared', '--defaults', '--agent-guidance', 'skip']);
-  invoke(process.execPath, ['install', `./${filename}`, '--project']);
-  const nodeBin = join(scratch, 'node-only'); mkdirSync(nodeBin); symlinkSync(process.execPath, join(nodeBin, 'node'));
-  env.PATH = nodeBin;
+  const { bun, repo, pmRoot, host, env, invoke } = await packedNonGitConsumer(t, manager);
   invoke(process.execPath, ['swarm', 'settings', '--progress-orchestrator', 'coordinator', '--apply']);
   for (const runtime of [manager === 'npm' ? process.execPath : bun]) {
     assert.equal(assertTrackerInvocations({ runtime, host, project: repo, pmRoot, environment: env }), 12);
@@ -278,4 +255,10 @@ test('packed deadlock commands use the SDK supplied by global npm and Bun hosts'
     assert.deepEqual(readFileSync(tarball), bytes, 'The accepted artifact changed between consumers');
   }
   console.log(JSON.stringify({ global_hosts: 2, artifact_shasum: packed[0].shasum, same_artifact: true }));
+});
+
+/** Crash recovery has its own consumer so its matrix does not extend the command-smoke deadline. */
+for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} recovers every native compensation member boundary`, { timeout: 600000 }, async t => {
+  const { bun, repo, env } = await packedNonGitConsumer(t, manager);
+  assertPackedCrashRecovery(manager === 'npm' ? process.execPath : bun, repo, env);
 });

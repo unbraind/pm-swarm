@@ -46,7 +46,7 @@ test('handoff atomically publishes owner, higher fence, note and receiver contex
   await f.shared.next(); await assert.rejects(f.shared.close(id, ''), /requires/);
   assert.deepEqual(await f.shared.close(id, 'Verified'), { id, closed: true });
   const final = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(final.status, 'closed'); assert.equal(final.assignee, undefined); assert.equal(final.swarm_token, back.token);
+  assert.equal(final.status, 'closed'); assert.equal(final.assignee, undefined); assert.equal(final.swarm_token, String(BigInt(back.token) + 1n));
   assert.equal((await f.shared.next()).selected, null);
 });
 

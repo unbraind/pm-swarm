@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
+import { open } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { getSettingsPath, readFileIfExists, PmClient, stableValueEquals, getHistoryPath, readHistorySnapshot, hashHistoryStream, resolveHistoryTarget } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import type { BeforeMutationHook, ExtensionCommandSdk, OnWriteHook } from '@unbrained/pm-cli/sdk/authoring';
@@ -8,7 +10,7 @@ import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded' | 'swarm_close_recovery_unsupported' | 'swarm_close_not_committed';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded' | 'swarm_close_recovery_unsupported' | 'swarm_close_not_committed' | 'swarm_close_compensated' | 'swarm_compensation_partial';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */
@@ -41,7 +43,7 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
 /** One admitted document and its verified native successors travel through the host commit. */
-interface ItemAdmissionScope { related?: Map<string, ItemAdmissionScope>; id: string; expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; history?: ItemHistoryHead; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
+interface ItemAdmissionScope { related?: Map<string, ItemAdmissionScope>; id: string; expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; history?: ItemHistoryHead; beforeWrite?: () => Promise<void>; onPrepared?: (before: ItemDocument, after: ItemDocument, operation: string, history: ItemHistoryHead) => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -102,17 +104,17 @@ export async function assertItemHistoryHead(pmRoot: string, id: string, expected
   if (current.length !== expected.length || current.hash !== expected.hash) throw new SettingsRefusal('swarm_superseded', 'Native item history advanced or changed after the checked snapshot. Preserve the peer claim and Git resources; refresh its history before retrying.', 'history');
 }
 /** Require a full snapshot for every item writer and retain its guard scope through the SDK's item lock. */
-export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { history: ItemHistoryHead } & { related?: ReadonlyMap<string, { item: Record<string, unknown>; history: ItemHistoryHead }>; transaction?: boolean; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }): Promise<Result> {
+export function commitItemMutation<Payload extends { id: string; options: unknown; item: Record<string, unknown> }, Result>(payload: Payload, commit: (admitted: Payload) => Promise<Result>, options: { history: ItemHistoryHead } & { related?: ReadonlyMap<string, { item: Record<string, unknown>; history: ItemHistoryHead }>; transaction?: boolean; generation?: { token: unknown }; beforeWrite?: () => Promise<void>; onPrepared?: ItemAdmissionScope['onPrepared']; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }): Promise<Result> {
   if (typeof payload.item !== 'object' || payload.item === null || Array.isArray(payload.item)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the complete current item document before attempting this mutation.', 'document');
   assertPrivatePathSafe(payload.item, 'document');
   if (options.history === undefined || !Number.isSafeInteger(options.history.length) || typeof options.history.hash !== 'string') throw new SettingsRefusal('swarm_input_invalid', 'Supply the native history head captured before reading the complete decision document; never refresh it at commit time.', 'history');
   assertSdkInstance();
   const id = String(payload.item.id); const expected = documentFingerprint(payload.item);
-  const related = options.related === undefined ? undefined : new Map([...options.related].map(([id, value]) => [id, { id, expected: documentFingerprint(value.item), history: value.history, committed: 0, onCommitted: options.onCommitted }]));
+  const related = options.related === undefined ? undefined : new Map([...options.related].map(([id, value]) => [id, { id, expected: documentFingerprint(value.item), history: value.history, committed: 0, onPrepared: options.onPrepared, onCommitted: options.onCommitted }]));
   const checkpoint = ADMISSION.observers.getStore();
   return commitMutation(payload, async admitted => {
     const history = options.history;
-    const scope: ItemAdmissionScope = { id, expected, related, committed: 0, generation: options.generation, history, beforeWrite: options.beforeWrite, onCommitted: options.onCommitted };
+    const scope: ItemAdmissionScope = { id, expected, related, committed: 0, generation: options.generation, history, beforeWrite: options.beforeWrite, onPrepared: options.onPrepared, onCommitted: options.onCommitted };
     await checkpoint?.('admitted');
     return ADMISSION.scopes.run(scope, async () => {
       await checkpoint?.('scoped');
@@ -142,6 +144,7 @@ export const guardItemDocument: BeforeMutationHook = async context => {
     assertPrivatePathSafe(context.after, 'document');
     if (context.before === null || documentFingerprint({ ...context.before.metadata, body: context.before.body }) !== scope.expected) throw new SettingsRefusal('swarm_document_changed', 'The item changed after admission; refresh its complete document, re-evaluate ownership and retry with the current receipt.', 'document');
     await scope.beforeWrite?.();
+    if (context.after !== null) await scope.onPrepared?.(context.before, context.after, context.operation, scope.history!);
     scope.pending = context.after === null ? undefined : documentFingerprint({ ...context.after.metadata, body: context.after.body });
     return { allow: true };
   }
@@ -171,15 +174,21 @@ export function commitMutation<Value, Result>(payload: Value, commit: (admitted:
   return commit(payload);
 }
 /** Read the extension subtree through public SDK file APIs, never a second settings writer. */
-async function rawDocument(pmRoot: string): Promise<Record<string, unknown>> {
+export async function rawDocument(pmRoot: string): Promise<Record<string, unknown>> {
   let document: unknown;
   try { document = JSON.parse(await readFileIfExists(getSettingsPath(pmRoot)) ?? '{}'); }
   catch { throw new SettingsRefusal('swarm_settings_invalid', 'Repair the settings JSON document and retry swarm settings.'); }
   if (typeof document !== 'object' || document === null || Array.isArray(document)) throw new SettingsRefusal('swarm_settings_invalid', 'Use an object for the settings document.');
   return document as Record<string, unknown>;
 }
+/** Flush SDK-owned artifacts and their parent directory entries without changing any file content. */
+export async function syncNativeArtifacts(paths: readonly string[]): Promise<void> {
+  for (const path of [...paths, ...new Set(paths.map(path => dirname(path)))]) {
+    const handle = await open(path, 'r'); try { await handle.sync(); } finally { await handle.close(); }
+  }
+}
 /** Validate only the owned section's shape while preserving all foreign document fields. */
-function sectionOf(document: Record<string, unknown>): Record<string, unknown> {
+export function sectionOf(document: Record<string, unknown>): Record<string, unknown> {
   const section = document.swarm;
   if (section === undefined) return {};
   if (typeof section !== 'object' || section === null || Array.isArray(section)) throw new SettingsRefusal('swarm_settings_invalid', 'Use an object for the swarm settings section.');

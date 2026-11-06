@@ -33,12 +33,10 @@ complete document fingerprints normalize read projections on both sides. Private
 content is validated on the complete resulting document and history payload before
 writes and before shared rendering. Operator tracker coordinates remain inputs.
 
-The source inventory in `test/privacy-sinks.test.ts` enumerates **21 SDK/backend
-writers**, including **15 item writers**, and checks their shared admission and
-native history preconditions. New writers must join the inventory. There is no
-swarm close workspace transaction, phase reconstruction, primary compensation or
-dependent restore. [Native close](native-close.md) explains the read-only
-`swarm_close_recovery_unsupported` contract and its deferred Feature.
+The source inventory in `test/privacy-sinks.test.ts` enumerates every SDK/backend
+writer and checks shared admission and native history preconditions. New writers
+must join that inventory. [Native close](native-close.md) explains the native-field
+intent, certified compensation receipts and peer-preserving recovery state machine.
 
 Tests use real native SDK operations in one non-Git tracker. They inject peer
 release/claim/restore sequences at admission boundaries, preserve byte-identical

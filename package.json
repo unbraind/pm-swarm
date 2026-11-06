@@ -17,6 +17,7 @@
     "dist/",
     "manifest.json",
     "README.md",
+    "ARCHITECTURE.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
@@ -106,6 +107,7 @@
     },
     "docs": [
       "README.md",
+      "ARCHITECTURE.md",
       "CHANGELOG.md"
     ],
     "examples": [

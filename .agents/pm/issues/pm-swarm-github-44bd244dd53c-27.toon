@@ -2,12 +2,22 @@ id: pm-swarm-github-44bd244dd53c-27
 title: "PR #24: valid close after handoff/reclaim fails with swarm_document_changed"
 description: "GH issue #27: https://github.com/unbraind/pm-swarm/issues/27 · author @unbraind · created 2026-10-26T21:31:07Z · updated 2026-10-26T22:40:33Z"
 type: Issue
-status: open
+status: in_progress
 priority: 2
 tags[2]: "gh:unbraind/pm-swarm#27","github_author:unbraind"
 created_at: "2026-10-26T21:31:07Z"
-updated_at: "2026-10-27T09:05:39.098Z"
+updated_at: "2026-11-06T09:59:06.730Z"
+assignee: codex-sol
+claim_principal: codex-sol
 author: pm-github
+comments[3]{created_at,author,text}:
+  "2026-11-06T09:12:44.818Z",codex-sol,"Read the complete linked issues and current implementation. Verify the existing handoff successor guard with real processes; implement native-history-bound durable close intent and per-member recovery through the pinned SDK, with crash and peer-interleaving regressions. No SDK dependency bump or release workflow change planned."
+  "2026-11-06T09:16:52.404Z",codex-sol,"Current main passes the 19 fencing and fair-scheduling tests, including all four original issue scenarios. The original admitted-document successor fix already exists; preserve it and add real-process close-after-transfer coverage. Recovery remains absent: fresh native delegation rejects interrupted and previously closed work. The new protocol stores intent and progress in a registered native item field, not extension side files; SDK-native episode attribution, exact target digests and monotonic history certify forward and reverse writes."
+  "2026-11-06T09:59:06.730Z",codex-sol,"The original swarm_document_changed scenarios passed on current main before edits. New OS-process handoff and reclaim regressions then exposed remaining acceptance failures: successful native delegation retained handoff/claim metadata and did not advance the generation. Both new scenarios failed before the final-journal cleanup change. The same guarded SDK update now commits the durable success receipt, removes swarm_handoff/swarm_claimed_at and advances the decimal generation; recovery remains bound to the original request token. Stale owners and genuine concurrent history advances still refuse."
+files[3]{path,scope}:
+  src/close-journal.ts,project
+  src/close-recovery.ts,project
+  test/close-transfer-process.test.ts,project
 github_close_reason: ""
 github_closed_at: ""
 github_created_at: "2026-10-26T21:31:07Z"

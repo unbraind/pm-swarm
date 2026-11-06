@@ -14,14 +14,14 @@ import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt } 
 import { SharedTracker, Swarm, ResourceReservations, trackerResourceBackend, withItemMutationObserver } from 'pm-swarm';
 const client = new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:'packed-worker'});
 const shared = new SharedTracker(new Swarm(process.cwd(),process.env.PM_PATH,client,'packed-worker'));
-const id=(await client.create({type:'Task',title:'Packed unsupported close recovery'})).item.id;
+const id=(await client.create({type:'Task',title:'Packed durable close recovery'})).item.id;
 const claim=await shared.start(id);const nativeClose=client.close.bind(client);let stopped=false;
 client.close=new Proxy(nativeClose,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);stopped=true;throw new Error('Lost native close return');}});
-try{await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_close_recovery_unsupported');}finally{client.close=nativeClose;}
+try{await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_close_compensated');}finally{client.close=nativeClose;}
 assert.equal(stopped,true);await client.update(id,{title:'Packed peer survives'});
 const before=[getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8'));
 for(let retry=0;retry<3;retry++){
-  await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_close_recovery_unsupported');
+  await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_compensation_partial');
   assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8')),before);
 }
 const failedId=(await client.create({type:'Task',title:'Packed lost return'})).item.id;
@@ -66,7 +66,7 @@ const lifecycleClaim=await shared.start(blocker);await client.update(blocker,{bl
 await shared.close(blocker,'Packed native completion',lifecycleClaim.token);
 assert.equal((await client.get(blocker)).item.blocked_reason,undefined);assert.equal((await client.get(dependent)).item.status,'open');
 const lifecycleHistory=readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8');
-await assert.rejects(shared.close(blocker,'Packed native completion',lifecycleClaim.token),error=>error.code==='swarm_close_recovery_unsupported');
+assert.equal((await shared.close(blocker,'Packed native completion',lifecycleClaim.token)).closed,true);
 assert.equal(readFileSync(getHistoryPath(process.env.PM_PATH,blocker),'utf8'),lifecycleHistory);
 const closing=(await client.create({type:'Task',title:'Packed forward close ABA'})).item.id;const closingClaim=await shared.start(closing);
 let closePeer=false;let closeBytes=[];
@@ -90,9 +90,9 @@ client.get=new Proxy(get,{async apply(target,receiver,args){const result=await R
 }return result;}});
 try{await assert.rejects(shared.handoff(paired,'receiver','Packed paired handoff',pairedClaim.token),error=>error.code==='swarm_superseded');}finally{client.get=get;}
 assert.equal(snapshotPeer,true);assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8')),snapshotBytes);
-console.log(JSON.stringify({unsupported_close_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_delegation:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1}));
+console.log(JSON.stringify({durable_close_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_delegation:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1}));
 `);
   const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { unsupported_close_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_delegation: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1 });
+  assert.deepEqual(JSON.parse(result.stdout), { durable_close_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_delegation: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1 });
 }
