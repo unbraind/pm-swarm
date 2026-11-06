@@ -27,7 +27,7 @@ test('native persisted intent validation rejects malformed plans and progress wi
     (value: CloseJournal) => { value.warnings = undefined; },
     (value: CloseJournal) => { value.note = ['', 'home', 'private', 'note'].join('/'); },
     ...[
-      ['id', 42], ['note', false], ['token', {}], ['phase', 'unknown'], ['members', {}], ['post', null], ['restored', null], ['warnings', [false]],
+      ['id', 42], ['note', false], ['token', {}], ['phase', 'unknown'], ['members', {}], ['post', null], ['restored', null], ['warnings', [false]], ['result_signature', 17], ['result_signature', 'invalid'],
     ].map(([key, invalid]) => (value: CloseJournal) => { Reflect.set(value, String(key), invalid); }),
     (value: CloseJournal) => { value.members[0].id = 'different-primary'; },
     (value: CloseJournal) => { value.members[1].head.hash = 'wrong'; },

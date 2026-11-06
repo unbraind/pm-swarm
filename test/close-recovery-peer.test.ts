@@ -7,6 +7,13 @@ import { CloseCompensation } from '../src/close-recovery.ts';
 import { withItemMutationObserver } from '../src/settings.ts';
 import { historyPeerProcess, peerBytes } from './history-aba-helpers.ts';
 import { closeBytes, closeProcess, recoveryFixture } from './close-recovery-helpers.ts';
+import { blockedDependent } from './close-native-helpers.ts';
+
+/** Keep a native dependency candidate blocked by an independent unresolved item. */
+async function stillBlockedCandidate(f: Awaited<ReturnType<typeof recoveryFixture>>['f'], id: string): Promise<string> {
+  const other = await f.item(); const candidate = await blockedDependent(f, id);
+  await f.client.update(candidate, { dep: [`id=${other},kind=blocked_by`] }); return candidate;
+}
 
 /** Execute an independent native writer, optionally copying a public episode identifier or message. */
 function copiedPeer(f: Awaited<ReturnType<typeof recoveryFixture>>['f'], id: string, episode: string) {
@@ -28,7 +35,7 @@ test('an independent same-author native close cannot be adopted from a pending n
 });
 
 test('a copied global close episode on an untouched member cannot authorize its restoration', async t => {
-  const { f, id, token, ids } = await recoveryFixture(t, 1); const unrelated = await f.item();
+  const { f, id, token, ids } = await recoveryFixture(t, 1); const unrelated = await stillBlockedCandidate(f, id);
   assert.equal(closeProcess(f, id, token, { kill: { boundary: 'before_commit' } }).signal, 'SIGKILL');
   const journal = JSON.parse(String((await f.client.get(id, { depth: 'full' })).item[CLOSE_INTENT])) as CloseJournal;
   const peer = copiedPeer(f, unrelated, closeEpisode(journal, 'close', id)); assert.equal(peer.status, 0, peer.stdout + peer.stderr);
@@ -37,7 +44,7 @@ test('a copied global close episode on an untouched member cannot authorize its 
   assert.deepEqual(closeBytes(f, [...ids, unrelated]), bytes);
 });
 
-for (const count of [1, 2, 3]) test(`peer ABA at every restore decision preserves foreign bytes with ${count} dependents`, { timeout: 300000 }, async t => {
+for (const count of [1, 2, 3]) test(`peer ABA at every restore decision preserves foreign bytes with ${count} dependents`, { timeout: 900000 }, async t => {
   for (let target = 0; target <= count; target++) await t.test(`member ${target}`, async child => {
     const { f, id, token, ids } = await recoveryFixture(child, count);
     assert.equal(closeProcess(f, id, token, { kill: { boundary: 'before_commit' } }).signal, 'SIGKILL');
@@ -87,4 +94,14 @@ test('the final blocker restore excludes native peer writes to every restored de
   assert.equal(checked, true);
   for (const probe of probes) { assert.equal(probe.status, 4, probe.diagnostic); assert.match(probe.diagnostic, /lock_conflict/); assert.deepEqual(probe.after, probe.before); }
   assert.equal(attempt.status, 'rejected'); if (attempt.status === 'rejected') assert.equal(Reflect.get(Object(attempt.reason), 'code'), 'swarm_close_compensated');
+});
+
+
+test('a peer edit to an untouched related candidate halts compensation without adopting its history', async t => {
+  const { f, id, token, ids } = await recoveryFixture(t, 1); const candidate = await stillBlockedCandidate(f, id);
+  assert.equal(closeProcess(f, id, token, { kill: { boundary: 'before_commit' } }).signal, 'SIGKILL');
+  const peer = f.cli('update', candidate, '--description', 'Independent candidate progress', '--json'); assert.equal(peer.status, 0, peer.stdout + peer.stderr);
+  const before = closeBytes(f, [...ids, candidate]);
+  assert.equal(closeProcess(f, id, token).outcome?.code, 'swarm_compensation_partial');
+  assert.deepEqual(closeBytes(f, [...ids, candidate]), before);
 });

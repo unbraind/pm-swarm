@@ -10,7 +10,7 @@ import { retryLock } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 
 /** Stable settings and output refusal categories, independent of local coordinates. */
-export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded' | 'swarm_close_recovery_unsupported' | 'swarm_close_not_committed' | 'swarm_close_compensated' | 'swarm_compensation_partial';
+export type SettingsRefusalCode = 'swarm_settings_invalid' | 'swarm_private_path' | 'swarm_input_invalid' | 'swarm_sdk_mismatch' | 'swarm_document_changed' | 'swarm_partial_commit' | 'swarm_superseded' | 'swarm_close_recovery_unsupported' | 'swarm_close_not_committed' | 'swarm_close_compensated' | 'swarm_compensation_partial' | 'swarm_prewrite_failed';
 /** Invalid configuration carries an actionable remedy without echoing its value. */
 export class SettingsRefusal extends Error {
   /** Stable machine-readable refusal category. */
@@ -127,6 +127,14 @@ export function commitItemMutation<Payload extends { id: string; options: unknow
     });
   });
 }
+/** Preserve portable public refusals across package copies and sanitize opaque preparation errors. */
+function nativePrewriteRefusal(error: unknown): SettingsRefusal {
+  try {
+    const { code, remedy, field } = (error ?? {}) as Partial<SettingsRefusal>;
+    if (typeof code === 'string' && /^swarm_[a-z_]+$/.test(code) && typeof remedy === 'string' && remedy.trim().length > 0 && (field === undefined || typeof field === 'string') && !containsPrivatePath(JSON.stringify({ code, remedy, field }))) return new SettingsRefusal(code, remedy, field);
+  } catch { /* Opaque error accessors are not safe diagnostics. */ }
+  return new SettingsRefusal('swarm_prewrite_failed', 'A native pre-write step failed. Preserve native history, restore storage access and retry the original request.', 'document');
+}
 /** Admit the SDK's complete proposed document under its native writer lock before item/history persistence. */
 export const guardItemDocument: BeforeMutationHook = async context => {
   const primary = ADMISSION.scopes.getStore();
@@ -149,7 +157,8 @@ export const guardItemDocument: BeforeMutationHook = async context => {
     return { allow: true };
   }
   catch (error) {
-    const refusal = error as SettingsRefusal; scope.refusal = { code: refusal.code, remedy: refusal.remedy, field: refusal.field };
+    const refusal = nativePrewriteRefusal(error);
+    scope.refusal = { code: refusal.code, remedy: refusal.remedy, field: refusal.field };
     return { allow: false, code: refusal.code, message: refusal.message, remediation: refusal.remedy };
   }
 };
@@ -181,9 +190,16 @@ export async function rawDocument(pmRoot: string): Promise<Record<string, unknow
   if (typeof document !== 'object' || document === null || Array.isArray(document)) throw new SettingsRefusal('swarm_settings_invalid', 'Use an object for the settings document.');
   return document as Record<string, unknown>;
 }
-/** Flush SDK-owned artifacts and their parent directory entries without changing any file content. */
+/** Flush native files and POSIX parent-directory entries without changing their content. */
 export async function syncNativeArtifacts(paths: readonly string[]): Promise<void> {
-  for (const path of [...paths, ...new Set(paths.map(path => dirname(path)))]) {
+  const windows = process.platform === 'win32';
+  for (const path of paths) {
+    const handle = await open(path, windows ? 'r+' : 'r'); try { await handle.sync(); } finally { await handle.close(); }
+  }
+  // Node exposes no supported Windows directory flush. Files are flushed through writable handles;
+  // the Windows contract covers process crashes, without a power-loss directory durability claim.
+  if (windows) return;
+  for (const path of new Set(paths.map(path => dirname(path)))) {
     const handle = await open(path, 'r'); try { await handle.sync(); } finally { await handle.close(); }
   }
 }

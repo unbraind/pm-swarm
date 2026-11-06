@@ -1,12 +1,12 @@
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
-import { acquireLockLease, deriveMutationTransactionId, runWithAgentSessionContext, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
+import { acquireLockLease, indexBlockedByIds, deriveMutationTransactionId, runWithAgentSessionContext, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
 import type { Swarm } from './swarm.ts';
 import type { Lease } from './lease.ts';
 import { commitItemMutation, commitMutation, SettingsRefusal } from './settings.ts';
 import type { CloseInspection, CloseJournal, CloseMember } from './close-journal.ts';
-import { CLOSE_INTENT, captureCloseMember, closeBoundary, closeEpisode, discoverCloseJournal, inspectCloseMember, syncCloseMember } from './close-journal.ts';
-import { loadCloseProposals, recordCloseProposal, retireCloseProposals } from './close-proofs.ts';
+import { CLOSE_INTENT, captureCloseMember, closeBoundary, closeEpisode, discoverCloseJournal, inspectCloseMember, inspectCloseMembers, syncCloseMember } from './close-journal.ts';
+import { loadCloseProposals, recordCloseProposal, retireCloseProposals, signCloseResult } from './close-proofs.ts';
 
 /** Typed recovery outcome retains member-level progress without exposing documents or storage coordinates. */
 export class CloseCompensation extends SettingsRefusal {
@@ -32,11 +32,7 @@ async function saveJournal(engine: Swarm, lease: Lease, journal: CloseJournal, p
 }
 /** Check every member before a recovery write; retain exact certified heads for the actual native lock. */
 async function inspectDomain(engine: Swarm, journal: CloseJournal): Promise<Map<string, CloseInspection>> {
-  const states = new Map<string, CloseInspection>(); const pending: string[] = [];
-  for (const member of journal.members) {
-    try { states.set(member.id, await inspectCloseMember(engine, journal, member)); }
-    catch { pending.push(member.id); }
-  }
+  const { states, pending } = await inspectCloseMembers(engine, journal);
   if (pending.length > 0) throw new CloseCompensation([...states].filter(([, state]) => state.restored).map(([id]) => id), journal.members.filter(member => pending.includes(member.id) || states.get(member.id)?.changed && !states.get(member.id)?.restored).map(member => member.id));
   return states;
 }
@@ -49,7 +45,7 @@ async function completedCompensation(engine: Swarm, states: ReadonlyMap<string, 
 /** Restore dependents first and the primary last; native restore receipts survive a lost progress write. */
 async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal): Promise<never> {
   // Uncommitted success warnings may have failed privacy admission; compensation never republishes them.
-  const { warnings: _uncommittedWarnings, ...recoverable } = journal; journal = recoverable;
+  const { warnings: _uncommittedWarnings, result_signature: _uncommittedSignature, ...recoverable } = journal; journal = recoverable;
   const recoveredProofs = await loadCloseProposals(engine, journal);
   journal = { ...journal, proofs: recoveredProofs };
   let states = await inspectDomain(engine, journal);
@@ -61,7 +57,8 @@ async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal):
   }
   await retireCloseProposals(engine, journal); closeBoundary('proofs_retired', journal.id);
   closeBoundary('compensating', journal.id);
-  const ordered = [...journal.members.slice(1).reverse(), journal.members[0]];
+  const affected = new Set(journal.post.map(member => member.id));
+  const ordered = [...journal.members.slice(1).filter(member => affected.has(member.id)).reverse(), journal.members[0]];
   for (const member of ordered) {
     states = await inspectDomain(engine, journal);
     const state = states.get(member.id)!;
@@ -119,18 +116,19 @@ export async function compensateClose(engine: Swarm, lease: Lease, journal: Clos
 /** Immutable plan captured through native reads; native close alone decides which dependents to mutate. */
 export async function prepareClose(engine: Swarm, id: string, note: string, token: unknown, primary: Awaited<ReturnType<typeof captureCloseMember>>): Promise<{ journal: CloseJournal; snapshots: Map<string, Awaited<ReturnType<typeof captureCloseMember>>>; signer: KeyObject }> {
   const snapshots = new Map([[id, primary]]);
-  for (const row of (await engine.corpus()).items) if (row.id !== id) {
+  const corpus = (await engine.corpus()).items; const blockers = indexBlockedByIds(corpus);
+  for (const row of corpus) if (row.id !== id && blockers.get(row.id.trim().toLowerCase())?.includes(id.trim().toLowerCase())) {
     try { snapshots.set(row.id, await captureCloseMember(engine, row.id, false)); }
     catch { /* Native close retains its own warning semantics for unadmitted foreign rows. */ }
   }
   const compensation_id = deriveMutationTransactionId(randomUUID());
   validateWorkspaceTransactionIdentity({ pmRoot: engine.pmRoot, author: engine.author, transactionId: compensation_id });
   const members: CloseMember[] = [...snapshots.values()].map(snapshot => snapshot.member);
-  for (const member of members) await syncCloseMember(engine, member.id);
+  await syncCloseMember(engine, id);
   const keys = generateKeyPairSync('ed25519');
   return { journal: { protocol: 'swarm-close/v3', compensation_id, id, author: engine.author, token: token === undefined ? null : String(token), note, members, phase: 'applying', post: [], restored: [], public_key: keys.publicKey.export({ type: 'spki', format: 'der' }).toString('hex'), proofs: [] }, snapshots, signer: keys.privateKey };
 }
-/** Completed receipts are read-only and must not wait behind an abandoned post-commit operation pin. */
+/** Replay certified completion before abandoned pins, retiring only its remaining native proof cache. */
 export async function replayCommittedClose(engine: Swarm, journal: CloseJournal): Promise<{ id: string; closed: true; warnings?: string[] }> {
   try {
     const states = await inspectDomain(engine, journal);
@@ -159,7 +157,7 @@ export async function applyClose(engine: Swarm, lease: Lease, prepared: Awaited<
     const related = new Map([...prepared.snapshots].filter(([id]) => id !== journal.id).map(([id, snapshot]) => [id, { item: snapshot.item, history: snapshot.historyHead }]));
     closeBoundary('before_close', journal.id);
     const result = await lease.write(() => runWithAgentSessionContext({ episode: { id: closeEpisode(journal, 'close', journal.id) } }, () => commitItemMutation({ id: journal.id, item: primary.item, note: journal.note, options: { author: engine.author, message: 'Swarm native close' } }, admitted => engine.client.close(admitted.id, admitted.note, admitted.options), { history: primary.history, related,
-      onPrepared: async (before, after, operation, history) => { closeBoundary('before_proposal', String(after.metadata.id)); await recordCloseProposal(engine, journal, prepared.signer, before, after, operation, history); closeBoundary('proposal', String(after.metadata.id)); },
+      onPrepared: async (before, after, operation, history) => { closeBoundary('before_proposal', String(after.metadata.id)); await syncCloseMember(engine, String(after.metadata.id)); await recordCloseProposal(engine, journal, prepared.signer, before, after, operation, history); closeBoundary('proposal', String(after.metadata.id)); },
       onCommitted: (_before, after) => closeBoundary('native', String(after.metadata.id)) })), { announce: false });
     closeBoundary('closed', journal.id);
     const committedProofs = await loadCloseProposals(engine, journal);
@@ -168,6 +166,7 @@ export async function applyClose(engine: Swarm, lease: Lease, prepared: Awaited<
     for (const [id, state] of states) if (state.changed) await syncCloseMember(engine, id);
     closeBoundary('close_synced', journal.id);
     journal = { ...journal, phase: 'committed', warnings: result.warnings, post: [...states].filter(([, state]) => state.changed).map(([id, state]) => ({ id, head: state.history })) };
+    journal = { ...journal, result_signature: signCloseResult(journal, prepared.signer) };
     closeBoundary('before_commit', journal.id);
     await saveJournal(engine, lease, journal, states.get(journal.id)!);
     await retireCloseProposals(engine, journal); closeBoundary('proofs_retired', journal.id);

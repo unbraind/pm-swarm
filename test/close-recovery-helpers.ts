@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { getHistoryPath, getItemPath } from '@unbrained/pm-cli/sdk';
+import { getHistoryPath, getItemPath, runWithAgentSessionContext } from '@unbrained/pm-cli/sdk';
 import { sharedFixture } from './shared-helpers.ts';
 import { blockedDependent } from './close-native-helpers.ts';
-import { CLOSE_INTENT } from '../src/close-journal.ts';
+import { CLOSE_INTENT, closeEpisode } from '../src/close-journal.ts';
 import type { CloseJournal } from '../src/close-journal.ts';
 
 /** Capture actual bytes and immutable audit prefixes for all native close members. */
@@ -14,10 +14,7 @@ export function closeBytes(f: Awaited<ReturnType<typeof sharedFixture>>, ids: st
 }
 /** Run an actual OS process with an optional SIGKILL or ordinary failure at a diagnostic boundary. */
 export function closeProcess(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, token: string, options: { kill?: number | { boundary: string; occurrence?: number }; fail?: string; author?: string; note?: string } = {}) {
-  // In-process SDK controls measure authored recovery coverage. SIGKILL workers cannot flush V8 coverage;
-  // collecting duplicate SDK-wide dumps on their retries makes the complete crash matrix needlessly costly.
-  const environment = { ...f.env }; delete environment.NODE_V8_COVERAGE;
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./close-recovery-worker.ts', import.meta.url)), JSON.stringify({ repo: f.repo, pmRoot: f.pmRoot, id, token, ...options })], { cwd: f.repo, env: environment, encoding: 'utf8', timeout: 90000 });
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./close-recovery-worker.ts', import.meta.url)), JSON.stringify({ repo: f.repo, pmRoot: f.pmRoot, id, token, ...options })], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 300000 });
   assert.equal(result.error, undefined);
   const rows = result.stdout.trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as { boundary?: string; id?: string; code?: string; result?: unknown });
   return { ...result, rows, boundaries: rows.filter(row => row.boundary !== undefined).map(row => row.boundary!), outcome: rows.at(-1) };
@@ -47,4 +44,9 @@ export function assertRefusedClosePreserves(f: Awaited<ReturnType<typeof sharedF
   const original = closeBytes(f, ids); const attempt = closeProcess(f, id, token);
   assert.equal(attempt.outcome?.code, 'swarm_compensation_partial', attempt.stdout + attempt.stderr);
   assert.deepEqual(closeBytes(f, ids), original);
+}
+
+/** Append an adversarial copied phase through the real SDK, without replacing a native mutation. */
+export async function appendCopiedClosePhase(f: Awaited<ReturnType<typeof sharedFixture>>, journal: CloseJournal, options: { field?: string[]; unset?: string[] } = {}): Promise<void> {
+  await runWithAgentSessionContext({ episode: { id: closeEpisode(journal, 'journal', journal) } }, () => f.client.update(journal.id, { force: true, field: [`${CLOSE_INTENT}=${JSON.stringify(journal)}`, ...(options.field ?? [])], unset: options.unset }));
 }

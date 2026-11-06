@@ -11,7 +11,7 @@ import { compensateClose, prepareClose, replayCompensatedClose } from '../src/cl
 import { loadCloseProposals } from '../src/close-proofs.ts';
 import { withSwarmLease } from '../src/lease.ts';
 import { Swarm } from '../src/swarm.ts';
-import { assertCompensated, closeBytes, closeProcess, pendingClose as pending, recoveryFixture } from './close-recovery-helpers.ts';
+import { appendCopiedClosePhase, assertCompensated, closeBytes, closeProcess, pendingClose as pending, recoveryFixture } from './close-recovery-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { blockedDependent } from './close-native-helpers.ts';
 
@@ -27,7 +27,7 @@ for (const kind of ['foreign primary field', 'invented progress', 'uncleared han
   if (kind === 'foreign primary field') await f.client.update(id, { force: true, title: 'Independent primary edit' });
   else {
     const forged: CloseJournal = { ...journal, proofs: await loadCloseProposals(f.shared.engine, journal), phase: kind === 'uncleared handoff' ? 'committed' : 'compensating', restored: kind === 'invented progress' ? [ids[1]] : [], warnings: [] };
-    await runWithAgentSessionContext({ episode: { id: closeEpisode(forged, 'journal', forged) } }, () => f.client.update(id, { force: true, field: [`${CLOSE_INTENT}=${JSON.stringify(forged)}`] }));
+    await appendCopiedClosePhase(f, forged);
   }
   const peer = closeBytes(f, ids);
   assert.equal(closeProcess(f, id, token).outcome?.code, 'swarm_compensation_partial');

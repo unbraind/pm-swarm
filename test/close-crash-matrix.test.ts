@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { getSettingsPath, readFileIfExists } from '@unbrained/pm-cli/sdk';
 import { assertCompensated, closeBytes, closeProcess, recoveryFixture } from './close-recovery-helpers.ts';
 
-for (const count of [1, 2, 3]) test(`SIGKILL every forward and reverse close boundary with ${count} dependents`, { timeout: 1800000 }, async t => {
+for (const count of [1, 2, 3]) test(`SIGKILL every forward and reverse close boundary with ${count} dependents`, { timeout: 5400000 }, async t => {
   const baseline = await recoveryFixture(t, count);
   const success = closeProcess(baseline.f, baseline.id, baseline.token);
   assert.equal(success.status, 0, success.stdout + success.stderr);

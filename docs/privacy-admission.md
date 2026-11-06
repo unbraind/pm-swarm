@@ -351,16 +351,14 @@ claims are retained. Shared-tracker selection follows the same acquisition rule.
 Runtime publication uses exclusive temporary creation and removes only its own
 temporary, even when rename or post-pin request cleanup fails.
 
-Non-Git tests interrupt all seven forward coordinator boundaries, including
-between each native mutation and its journal record. A fresh CLI process resumes
-every case with exactly one update and one close, generation two, no lost fields,
-and byte-identical history on committed replay. Ordinary failure after the update
-restores the original fields through the SDK and a retry completes once. Four
-additional interruptions in compensation recover without duplicate restoration
-or lost completion. Seven
-private-peer transitions preserve exact peer history. Changed completion markers,
-generations and owners return a typed conflict. Close has no
-`swarm_partial_commit` path.
+Non-Git tests kill real processes at every instrumented native close and
+compensation boundary with one to three dependents. Recovery certifies exact
+original item bytes, retained audit history and no duplicate restores. Peer edits,
+ABA histories and copied identities refuse before overwriting foreign state.
+A completed receipt can return `swarm_partial_commit` when its response or
+required durability confirmation is unavailable. Retry its original author,
+note and token to verify and replay that saved receipt; an interrupted forward
+prefix instead compensates before another claim generation can start.
 
 Settings admission checks the complete fresh raw source document, substituting
 only its owned proposed subtree, as well as the SDK-normalized returned patch.

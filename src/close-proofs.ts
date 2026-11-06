@@ -13,13 +13,27 @@ export interface CloseProposal { compensation_id: string; id: string; operation:
 export interface SignedCloseProposal { proposal: CloseProposal; signature: string }
 /** Bind each signature to the protocol, target, native revision and exact proposed document. */
 function proposalBytes(proposal: CloseProposal): Buffer { return Buffer.from(JSON.stringify(['swarm-native-proposal/v1', proposal.compensation_id, proposal.id, proposal.operation, proposal.before.length, proposal.before.hash, proposal.before_hash, proposal.after_hash])); }
-/** A caller-declared episode cannot manufacture an Ed25519 proof for a different native mutation. */
-export function validCloseProposal(journal: CloseJournal, proof: SignedCloseProposal): boolean {
+/** Verify one domain-separated signed payload against the immutable original public key. */
+function verifiedPayload(journal: CloseJournal, bytes: Buffer, signature: unknown): boolean {
   try {
-    return proof.proposal.compensation_id === journal.compensation_id && /^[a-f0-9]{128}$/.test(proof.signature)
-      && verify(null, proposalBytes(proof.proposal), createPublicKey({ key: Buffer.from(journal.public_key, 'hex'), format: 'der', type: 'spki' }), Buffer.from(proof.signature, 'hex'));
+    return typeof signature === 'string' && /^[a-f0-9]{128}$/.test(signature)
+      && verify(null, bytes, createPublicKey({ key: Buffer.from(journal.public_key, 'hex'), format: 'der', type: 'spki' }), Buffer.from(signature, 'hex'));
   } catch { return false; }
 }
+/** A caller-declared episode cannot manufacture an Ed25519 proof for a different native mutation. */
+export function validCloseProposal(journal: CloseJournal, proof: SignedCloseProposal): boolean {
+  try { return proof.proposal.compensation_id === journal.compensation_id && verifiedPayload(journal, proposalBytes(proof.proposal), proof.signature); }
+  catch { return false; }
+}
+/** Bind the terminal result to every immutable plan, actual post-head, proposal and returned warning. */
+function resultBytes(journal: CloseJournal): Buffer {
+  const { result_signature: _signature, ...record } = journal;
+  return Buffer.from(JSON.stringify(['swarm-close-result/v1', record]));
+}
+/** Only the fresh invocation that observed the complete native return can certify successful completion. */
+export function signCloseResult(journal: CloseJournal, key: KeyObject): string { return sign(null, resultBytes(journal), key).toString('hex'); }
+/** Copied phases and caller episodes never substitute for the original invocation's result signature. */
+export function validCloseResult(journal: CloseJournal): boolean { return journal.phase === 'committed' && verifiedPayload(journal, resultBytes(journal), journal.result_signature); }
 /** Read only the owned audited ledger, preserving all other settings and concurrent close identities. */
 function proofStore(raw: Record<string, unknown>): { section: Record<string, unknown>; records: Map<string, SignedCloseProposal[]> } {
   const section = sectionOf(raw);

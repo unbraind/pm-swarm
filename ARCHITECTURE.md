@@ -25,11 +25,18 @@ decimal fencing generation, while the journal retains the original request token
 Native item updates retain every intent revision in native history;
 there are no extension-owned recovery side files or competing SDK journals.
 
-The admitted corpus is a conservative member superset. Native close decides the
+The public SDK `indexBlockedByIds` supplies a conservative dependency candidate
+superset, including scalar, typed and reverse `blocks` edges. Unrelated corpus
+rows are excluded. Native close alone applies status and lifecycle policy. Only the primary is synced
+before intent; actual native targets are synced under their item writer lock before
+proposal persistence. Compensation iterates only the frozen affected members and
+authenticates proposals once per domain read. Native close decides the
 actual lifecycle domain, including Plan behavior and dependent auto-unblocking.
 Actual history receipts identify which admitted members changed. Unreadable
 foreign members remain unadmitted and native warnings report affected failures.
 New or changed dependents that were not admitted cannot bypass the item guard.
+A peer edit to any admitted related candidate stops compensation, even when
+native close had not yet mutated that candidate. Unrelated rows remain independent.
 
 Every native call has a distinct SDK episode, but caller-declared episodes alone
 are never proof of ownership. A fresh close creates an ephemeral Ed25519 signer
@@ -40,7 +47,10 @@ canonical target, operation, compensation identity, before-head and document
 hashes, then persists that public proof through the bound SDK's audited
 `swarm.close_proofs` workspace settings subtree. Neither the document nor its
 native lifecycle successor is predicted or replaced. The private key remains in
-memory and is never serialized.
+memory and is never serialized. The original invocation also signs the complete
+terminal result, including its frozen post-heads, proposals and returned warnings.
+Recovery rejects a copied `committed` phase without that signature; it cannot
+turn a partial native prefix into invented successful completion.
 
 Recovery verifies those signatures against the original intent and matches the
 exact native history entry, including its ordinal and complete before-prefix.
@@ -57,8 +67,9 @@ proof cache is then retired; the complete proofs remain in native item history. 
 restore and progress write syncs native item and history files plus parent
 directories. If a restore commits before its progress update, its immutable
 native receipt supplies the missing progress on retry. If the final primary
-restore removes the intent field, retained native history still supplies the
-plan and final receipt. Item bytes, including timestamps, return exactly to the
+restore removes the intent field or restores an older committed intent, retained
+native history still supplies the newest plan and final receipt. Discovery skips
+restore-entry values so an older restored field cannot mask newer compensation. Item bytes, including timestamps, return exactly to the
 pre-close version; successful history events and refusal evidence are retained.
 
 Every restore compares its captured history head under that member's native
@@ -66,7 +77,9 @@ writer lock. The final primary restore also holds native locks on the restored
 dependents while rechecking the domain, so a peer cannot race dependency state
 between the final decision and reopening the blocker. Peer edits stop recovery;
 compensation never overwrites them. A later claim with a larger token may begin
-fresh work only after the earlier primary restore is independently certified.
+fresh work after the earlier primary restore or committed-close receipt is
+independently certified. Reopening a committed item therefore permits a fresh
+completion under its new claim.
 
 A warning receipt that fails privacy admission is not copied into compensation; the original native audit remains intact.
 A lost native return has no reliable warning receipt. Recovery compensates that
@@ -81,3 +94,9 @@ Validation uses real non-Git trackers, OS-process SIGKILL at forward and reverse
 boundaries with one to three dependents, independent peer ABA writers, copied
 identity controls, exact native-byte oracles, and packed npm/Bun consumers.
 Coverage and privacy admission thresholds remain unchanged.
+
+On POSIX filesystems, barriers sync native files and parent directories. On Windows,
+files use writable handles for `FlushFileBuffers`; this Node API does not supply a
+POSIX directory barrier. Windows recovery addresses process crashes; power-loss
+durability of directory entries is not claimed. See the documented
+[Windows file flush contract](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers).

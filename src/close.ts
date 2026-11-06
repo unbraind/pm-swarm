@@ -1,7 +1,7 @@
 import { relative, sep } from 'node:path';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, validateWorkspaceTransactionIdentity, getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
-import { CLOSE_INTENT, captureCloseMember, discoverCloseJournal, retiredCloseGeneration } from './close-journal.ts';
+import { CLOSE_INTENT, captureCloseMember, discoverCloseJournal, parseCloseJournal, retiredCloseGeneration } from './close-journal.ts';
 import { applyClose, prepareClose, compensateClose, replayCommittedClose, replayCompensatedClose } from './close-recovery.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
 import { assertPrivatePathSafe, rawDocument, SettingsRefusal } from './settings.ts';
@@ -63,7 +63,7 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
   const journal = retired ? undefined : discovered;
   if (journal !== undefined && (journal.id !== canonicalId || journal.author !== engine.author || journal.note.trim() !== note || journal.token !== (selected ?? null))) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
   if (journal?.phase === 'committed') return replayCommittedClose(engine, journal);
-  if (journal !== undefined && item[CLOSE_INTENT] === undefined) return replayCompensatedClose(engine, journal);
+  if (journal !== undefined && (item[CLOSE_INTENT] === undefined || parseCloseJournal(engine, item[CLOSE_INTENT]).compensation_id !== journal.compensation_id)) return replayCompensatedClose(engine, journal);
   if (journal === undefined) {
     admitCloseProofSettings(await rawDocument(engine.pmRoot));
     admitCloseDocument(engine, item, selected, tokens, statuses);
@@ -74,9 +74,11 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
   let committed = false;
   try {
     return await withSwarmLease(engine.pmRoot, engine.author, async lease => {
-      const result = journal === undefined ? await applyClose(engine, lease, await prepareClose(engine, canonicalId, note, item.swarm_token, admission))
-        : await compensateClose(engine, lease, journal);
-      committed = true; tokens.delete(canonicalId); return result;
+      if (journal !== undefined) return compensateClose(engine, lease, journal);
+      const result = await applyClose(engine, lease, await prepareClose(engine, canonicalId, note, item.swarm_token, admission));
+      committed = true;
+      tokens.delete(canonicalId);
+      return result;
     });
   } catch (error) {
     if (committed) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`, true);

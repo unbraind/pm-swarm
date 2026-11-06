@@ -10,7 +10,8 @@ The close protocol and transition table are specified in
 [ARCHITECTURE](../ARCHITECTURE.md). The primary item's registered
 `swarm_close_intent` holds the immutable plan, unique compensation identity and
 monotonic progress. All persistence uses the bound SDK; native files and parent
-directories are synced before the next recovery step. No package side journal
+directories are synced before the next recovery step on POSIX; Windows file-flush
+and power-loss limits are documented in ARCHITECTURE. No package side journal
 or independently edited SDK transaction journal exists.
 
 Fresh close delegates lifecycle policy to native core. It preserves Plan policy,
@@ -49,6 +50,8 @@ commit. Only the public key is retained in the intent; the private key exists
 only during fresh forward execution. Before compensation, all signed receipts
 are frozen into native item history and their workspace cache is retired. Recovery verifies native stream prefixes,
 operation kind, immutable record hashes, exact restore target and progress order.
+The original fresh invocation separately signs the complete final result and its
+warnings; copying a `committed` phase cannot certify a partial native prefix.
 An unrelated same-author close and later writes copying messages or identities
 cannot be adopted. A lost warning/result receipt is never manufactured.
 

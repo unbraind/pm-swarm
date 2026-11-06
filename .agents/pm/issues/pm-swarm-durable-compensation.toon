@@ -6,7 +6,7 @@ status: in_progress
 priority: 2
 tags[3]: compensation,durability,"gh:unbraind/pm-swarm#32"
 created_at: "2026-10-27T18:09:19.394Z"
-updated_at: "2026-11-06T10:26:18.046Z"
+updated_at: "2026-11-06T13:49:08.467Z"
 assignee: codex-sol
 claim_principal: codex-sol
 author: codex-agent
@@ -14,11 +14,12 @@ acceptance_criteria: "Persist a unique compensation_id and complete immutable me
 parent: pm-swarm-y972
 dependencies[1]{id,kind,created_at,author,source_kind,author_source}:
   pm-swarm-durable-close-recovery,related,"2026-10-27T20:13:20.515Z",codex-agent,"cli:update:dep",detected
-comments[4]{created_at,author,text}:
+comments[5]{created_at,author,text}:
   "2026-10-27T18:43:49.460Z",codex-agent,"Current PR deliberately performs zero dependent restores. Native close, auto-unblocking and warnings remain core-owned; only primary-only compensation can resume automatically. This follow-up owns the unique member compensation identity, complete domain and durable per-member checkpoints. The acceptance requires the full after-each-member SIGKILL matrix; the current pre-restore SIGKILL preservation tests are not claimed as that expanded recovery evidence. Pinned SDK remains the version adopted from main."
   "2026-11-02T09:18:34.227Z",pi-glm,"Triage 2026-11-02 (missed-watch sweep): still valid and correctly tracked here as the narrower member-progress subtask of gh:unbraind/pm-swarm#34's owner (pm-swarm-durable-close-recovery). PR #24 merged the reduced design (fresh native close only; journal replay refuses swarm_close_recovery_unsupported), so the durable per-member compensation/resume protocol this item owns remains undelivered. No duplicate item created."
   "2026-11-06T09:12:51.945Z",codex-sol,"Read the complete linked issues and current implementation. Verify the existing handoff successor guard with real processes; implement native-history-bound durable close intent and per-member recovery through the pinned SDK, with crash and peer-interleaving regressions. No SDK dependency bump or release workflow change planned."
   "2026-11-06T09:37:13.843Z",codex-sol,"First complete real-process SIGKILL matrix passed 57/57 tests: forward and reverse boundaries with one, two and three dependents, exact pre-close native bytes including timestamps, append-only audit streams and stable repeated recovery. The independent peer suite passed 14/14, including release/claim/restore ABA after every member decision and copied native identities between restores. Implementation persists immutable intent, post-close heads and restored progress in the registered swarm_close_intent field; no package journal files or SDK journal rewrites. Final gates and behavioral revert proofs remain pending."
+  "2026-11-06T13:49:08.466Z",codex-sol,"The linked runner passes all one-to-three-dependent lost-return and lost-restore-progress scenarios with exact raw pre-close bytes and append-only native history. Copied phase markers cannot forge successful completion: the fresh invocation signs its full result; a real process killed after the primary commit reproduces the forged-result attack before the guard, and the guard revert fails. Related peer edits stop before compensation writes; final primary restore retains native dependent fences. Packed npm and Bun recovery passed all 24 member-boundary SIGKILL cases."
 files[4]{path,scope}:
   src/close-recovery.ts,project
   src/close.ts,project

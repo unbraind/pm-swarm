@@ -20,7 +20,7 @@ It never refreshes a baseline after reading a decision document.
 | Plan witness | Bound native identity plus the same admission; revision conflicts re-evaluate from a fresh decision |
 | Acquired-claim release | Exact native acquisition version, observed own successors and current history head |
 | Git cleanup | The native item lock spans the head check and branch/worktree deletion |
-| Fresh close | One native close with primary and related-item admission; no automatic recovery |
+| Fresh close | Durable native-field intent, primary and related-item admission, and history-certified compensation |
 
 Cleanup may advance only through successors this invocation observed from native
 commit hooks. Unobserved history, copied messages or restored preimages never
