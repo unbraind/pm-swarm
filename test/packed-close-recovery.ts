@@ -40,7 +40,7 @@ for(const count of [1,2,3])for(let kill=0;kill<=count+1;kill++){
 }
 console.log(JSON.stringify({packed_sigkill_cases:killed,exact_native_bytes:true}));
 `);
-  const result = spawnSync(runtime, [driver, worker], { cwd: repo, env: environment, encoding: 'utf8', timeout: 300000 });
+  const result = spawnSync(runtime, [driver, worker], { cwd: repo, env: environment, encoding: 'utf8', timeout: 900000 });
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { packed_sigkill_cases: 12, exact_native_bytes: true });

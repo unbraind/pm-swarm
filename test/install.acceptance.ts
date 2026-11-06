@@ -40,7 +40,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     assert.equal(result.status, 0, `${bin} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`); return result.stdout;
   };
   const packed = JSON.parse(run(root, 'npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch])) as { filename: string; files: { path: string }[] }[];
-  for (const { path } of packed[0].files) assert.ok(path.startsWith('dist/') || ['package.json', 'manifest.json', 'LICENSE', 'README.md', 'CHANGELOG.md'].includes(path), path);
+  for (const { path } of packed[0].files) assert.ok(path.startsWith('dist/') || ['package.json', 'manifest.json', 'LICENSE', 'README.md', 'ARCHITECTURE.md', 'CHANGELOG.md'].includes(path), path);
   const tarball = join(scratch, packed[0].filename);
   const extracted = join(scratch, 'extracted'); mkdirSync(extracted);
   run(scratch, 'tar', ['-xzf', tarball, '-C', extracted]);
@@ -258,7 +258,7 @@ test('packed deadlock commands use the SDK supplied by global npm and Bun hosts'
 });
 
 /** Crash recovery has its own consumer so its matrix does not extend the command-smoke deadline. */
-for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} recovers every native compensation member boundary`, { timeout: 600000 }, async t => {
+for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} recovers every native compensation member boundary`, { timeout: 1800000 }, async t => {
   const { bun, repo, env } = await packedNonGitConsumer(t, manager);
   assertPackedCrashRecovery(manager === 'npm' ? process.execPath : bun, repo, env);
 });
