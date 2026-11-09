@@ -16,12 +16,16 @@ import type { CloseJournal } from '../src/close-journal.ts';
 export function closeBytes(f: Awaited<ReturnType<typeof sharedFixture>>, ids: string[]) {
   return { items: ids.map(id => readFileSync(getItemPath(f.pmRoot, 'Task', id), 'utf8')), histories: ids.map(id => readFileSync(getHistoryPath(f.pmRoot, id), 'utf8')) };
 }
+/** Locate the typed outcome row by its code or result field, never by output order. */
+export function closeOutcomeRow(rows: { boundary?: string; id?: string; code?: string; result?: unknown }[]): { boundary?: string; id?: string; code?: string; result?: unknown } | undefined {
+  return rows.filter(row => row.code !== undefined || row.result !== undefined).at(-1) ?? rows.at(-1);
+}
 /** Run an actual OS process with an optional SIGKILL or ordinary failure at a diagnostic boundary. */
 export function closeProcess(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, token: string, options: { kill?: number | { boundary: string; occurrence?: number }; fail?: string; author?: string; note?: string } = {}) {
   const result = spawnSync(process.execPath, [fileURLToPath(new URL('./close-recovery-worker.ts', import.meta.url)), JSON.stringify({ repo: f.repo, pmRoot: f.pmRoot, id, token, ...options })], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 300000 });
   assert.equal(result.error, undefined);
   const rows = result.stdout.trim().split('\n').filter(Boolean).map(line => JSON.parse(line) as { boundary?: string; id?: string; code?: string; result?: unknown });
-  return { ...result, rows, boundaries: rows.filter(row => row.boundary !== undefined).map(row => row.boundary!), outcome: rows.at(-1) };
+  return { ...result, rows, boundaries: rows.filter(row => row.boundary !== undefined).map(row => row.boundary!), outcome: closeOutcomeRow(rows) };
 }
 /** Prepare one non-Git tracker through the same real SDK path used by the supported workflow. */
 export async function recoveryFixture(t: Parameters<typeof sharedFixture>[0], count: number) {

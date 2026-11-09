@@ -8,7 +8,7 @@ Neither an author name nor a fencing token is an authentication credential.
 | Durable state | Next action | Result after an interrupted process |
 | --- | --- | --- |
 | No intent | Resolve canonical ID, check complete document, ownership and history | A new request performs fresh admission |
-| `applying` intent | Delegate to native close, admit actual successors and warnings | Compensate the certified committed prefix |
+| `applying` intent | Fresh request delegates to native close, admitting actual successors and warnings; retrying the pending episode compensates it instead of delegating another native close | Compensate the certified committed prefix |
 | `committed` intent | Replay the saved native warning/result receipt | No duplicate close or unblock |
 | `compensating` intent | Restore pending dependents, then the primary | Skip certified restores and continue |
 | Primary restored | Its native restore receipt certifies compensation | Return `swarm_close_compensated` without writes |

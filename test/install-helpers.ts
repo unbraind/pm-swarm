@@ -9,12 +9,20 @@ import { gitEnvironment } from '../src/git-environment.ts';
 
 /** Require a working Bun executable before starting packed consumer setup. */
 export function requireBun(): string {
-  const probe = spawnSync('bun', ['-e', 'process.stdout.write(process.execPath)'], { encoding: 'utf8' });
+  const probe = spawnSync('bun', ['-e', 'process.stdout.write(process.execPath)'], { encoding: 'utf8', timeout: 300000 });
   const message = 'packed acceptance requires Bun on PATH';
   assert.equal(probe.error, undefined, message);
   assert.equal(probe.status, 0, message);
   const bun = probe.stdout.trim(); assert.ok(bun, message);
   return bun;
+}
+
+/** Resolve the supported host install spec from the declared peer dependency floor, so tests cannot drift from it. */
+export function supportedHostSpec(): string {
+  const range = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { peerDependencies: Record<string, string> }).peerDependencies['@unbrained/pm-cli'];
+  const floor = range.startsWith('>=') ? range.slice(2) : range;
+  assert.ok(/^\d+\.\d+\.\d+/.test(floor), `unsupported @unbrained/pm-cli peer dependency range: ${range}`);
+  return `@unbrained/pm-cli@${floor}`;
 }
 
 /** Install one captured tarball with the supported host floor into an isolated non-Git consumer. */
@@ -29,17 +37,17 @@ export async function packedNonGitConsumer(t: TestContext, manager: "npm" | "bun
   for (const key of Object.keys(env)) if (/TOKEN|SECRET|PASSWORD|API_KEY/.test(key) || key === 'NPM_MEDIA_SERVER') delete env[key];
   /** Run the real pinned host and reject extension activation or command failures. */
   const invoke = (runtime: string, args: string[]) => {
-    const result = spawnSync(runtime, [host, '--path', pmRoot, ...args, '--json'], { cwd: repo, env, encoding: 'utf8' });
+    const result = spawnSync(runtime, [host, '--path', pmRoot, ...args, '--json'], { cwd: repo, env, encoding: 'utf8', timeout: 300000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.doesNotMatch(result.stdout + result.stderr, /Extension activation failures/);
     return JSON.parse(result.stdout) as Record<string, unknown>;
   };
-  const packed = spawnSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: packageRoot, env, encoding: 'utf8' });
+  const packed = spawnSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: packageRoot, env, encoding: 'utf8', timeout: 300000 });
   assert.equal(packed.status, 0, packed.stderr);
   const filename = (JSON.parse(packed.stdout) as { filename: string }[])[0].filename;
   const tarball = join(repo, filename); writeFileSync(tarball, readFileSync(join(scratch, filename)));
   writeFileSync(join(repo, 'package.json'), '{"name":"swarm-plain-consumer","private":true,"type":"module"}\n');
-  const installed = spawnSync(manager, [manager === 'npm' ? 'install' : 'add', '--ignore-scripts', '@unbrained/pm-cli@2026.10.23', tarball], { cwd: repo, env, encoding: 'utf8' });
+  const installed = spawnSync(manager, [manager === 'npm' ? 'install' : 'add', '--ignore-scripts', supportedHostSpec(), tarball], { cwd: repo, env, encoding: 'utf8', timeout: 600000 });
   assert.equal(installed.status, 0, installed.stdout + installed.stderr);
   invoke(process.execPath, ['init', 'packed-shared', '--defaults', '--agent-guidance', 'skip']);
   invoke(process.execPath, ['install', `./${filename}`, '--project']);

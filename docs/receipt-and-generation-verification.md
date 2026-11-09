@@ -38,9 +38,12 @@ Git; returning no changed fields writes no item or history event. The outer
 lease releases last. Git configuration removal additionally uses the fixed-value
 compare-and-set form, while branch deletion retains its expected object id.
 A peer generation yields typed `swarm_superseded` with a preservation remedy.
-Close now delegates only fresh native operations. Interrupted or previously
-closed work refuses with `swarm_close_recovery_unsupported`; there is no automatic
-restore or free-text ownership inference. See [native close](native-close.md).
+Close delegates one fresh native operation per request; retrying an interrupted
+close with the exact original author, token and note automatically compensates
+it and returns `swarm_close_compensated`, so compensation restores are supported
+behavior. Unowned or mismatched episodes, legacy markers and prior native closes
+from another request still refuse with `swarm_close_recovery_unsupported`; there
+is no free-text ownership inference. See [native close](native-close.md).
 
 The deterministic generation seed is `0xf37c9a21`; generated counters exceed the
 safe-number ceiling and remain exact strings. Adversarial coverage includes:

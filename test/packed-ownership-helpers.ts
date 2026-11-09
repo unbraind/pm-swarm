@@ -36,7 +36,7 @@ for(const resource of [false,true]){
   const bytes=()=>[getItemPath(process.env.PM_PATH,'Task',peerId),getHistoryPath(process.env.PM_PATH,peerId)].map(path=>readFileSync(path,'utf8'));
   client.update=new Proxy(update,{async apply(target,receiver,args){
     const result=await Reflect.apply(target,receiver,args);
-    if(!interrupted){interrupted=true;const peer=spawnSync(process.execPath,[process.argv[2],'update',peerId,'--field','swarm_token=9','--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(peer.status,0,peer.stdout+peer.stderr);peerBytes=bytes();throw new Error('Lost packed generation return');}return result;
+    if(!interrupted){interrupted=true;const peer=spawnSync(process.execPath,[process.argv[2],'update',peerId,'--field','swarm_token=9','--author','packed-worker','--json'],{encoding:'utf8',timeout:120000});assert.equal(peer.status,0,peer.stdout+peer.stderr);peerBytes=bytes();throw new Error('Lost packed generation return');}return result;
   }});
   try{const reservations=new ResourceReservations(trackerResourceBackend(shared.engine),'packed-worker');await assert.rejects(resource?reservations.reserve(peerId):shared.start(peerId),error=>error.code==='swarm_superseded');}finally{client.update=update;}
   assert.equal(interrupted,true);assert.deepEqual(bytes(),peerBytes);const current=(await client.get(peerId)).item;assert.equal(current.assignee,'packed-worker');assert.equal(current.swarm_token,'9');preserved++;
@@ -53,7 +53,7 @@ for(const resource of [false,true]){
       const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,peerId),peerId);
       const before=await getItemAt(peerId,history.at(-1).ts,{pmRoot:process.env.PM_PATH});const original=bytes()[0];
       for(const args of [['release',peerId],['claim',peerId,'--force'],['restore',peerId,String(before.as_of_version),'--force']]){
-        const result=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);
+        const result=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8',timeout:120000});assert.equal(result.status,0,result.stdout+result.stderr);
       }
       assert.equal(bytes()[0],original);assert.ok((await readHistoryEntries(getHistoryPath(process.env.PM_PATH,peerId),peerId)).length>history.length);peerBytes=bytes();
     },()=>resource?new ResourceReservations(trackerResourceBackend(shared.engine),'packed-worker').reserve(peerId):shared.start(peerId))]);
@@ -75,7 +75,7 @@ const [closeAttempt]=await Promise.allSettled([withItemMutationObserver(async bo
   const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,closing),closing);
   const before=await getItemAt(closing,history.at(-1).ts,{pmRoot:process.env.PM_PATH});
   for(const args of [['release',closing],['claim',closing,'--force'],['restore',closing,String(before.as_of_version),'--force']]){
-    const result=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(result.status,0,result.stdout+result.stderr);
+    const result=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8',timeout:120000});assert.equal(result.status,0,result.stdout+result.stderr);
   }
   closeBytes=[getItemPath(process.env.PM_PATH,'Task',closing),getHistoryPath(process.env.PM_PATH,closing)].map(path=>readFileSync(path,'utf8'));
 },()=>shared.close(closing,'Packed stale completion',closingClaim.token))]);
@@ -85,14 +85,14 @@ const paired=(await client.create({type:'Task',title:'Packed snapshot window'}))
 const get=client.get.bind(client);let snapshotPeer=false;let snapshotBytes=[];
 client.get=new Proxy(get,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);if(!snapshotPeer&&args[1]?.fields!=='id'){
   snapshotPeer=true;const history=await readHistoryEntries(getHistoryPath(process.env.PM_PATH,paired),paired);const version=(await getItemAt(paired,history.at(-1).ts,{pmRoot:process.env.PM_PATH})).as_of_version;
-  for(const args of [['release',paired],['claim',paired,'--force'],['restore',paired,String(version),'--force']]){const peer=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8'});assert.equal(peer.status,0,peer.stdout+peer.stderr);}
+  for(const args of [['release',paired],['claim',paired,'--force'],['restore',paired,String(version),'--force']]){const peer=spawnSync(process.execPath,[process.argv[2],...args,'--author','packed-worker','--json'],{encoding:'utf8',timeout:120000});assert.equal(peer.status,0,peer.stdout+peer.stderr);}
   snapshotBytes=[getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8'));
 }return result;}});
 try{await assert.rejects(shared.handoff(paired,'receiver','Packed paired handoff',pairedClaim.token),error=>error.code==='swarm_superseded');}finally{client.get=get;}
 assert.equal(snapshotPeer,true);assert.deepEqual([getItemPath(process.env.PM_PATH,'Task',paired),getHistoryPath(process.env.PM_PATH,paired)].map(path=>readFileSync(path,'utf8')),snapshotBytes);
 console.log(JSON.stringify({durable_close_retries:3,peer_edits_lost:0,lost_return_claims_released:1,superseded_claims_preserved:preserved,native_history_aba_preserved:historyPreserved,native_close_delegation:1,forward_close_aba_preserved:1,snapshot_window_aba_preserved:1}));
 `);
-  const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8' });
+  const result = spawnSync(runtime, [script, host], { cwd: repo, env: { ...env, PM_PATH: pmRoot }, encoding: 'utf8', timeout: 900000 });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.deepEqual(JSON.parse(result.stdout), { durable_close_retries: 3, peer_edits_lost: 0, lost_return_claims_released: 1, superseded_claims_preserved: 2, native_history_aba_preserved: 2, native_close_delegation: 1, forward_close_aba_preserved: 1, snapshot_window_aba_preserved: 1 });
 }

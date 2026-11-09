@@ -1,9 +1,18 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { supportedHostSpec } from './install-helpers.ts';
+
+test('the packed host install spec is derived from the declared peer dependency floor', () => {
+  const manifest = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { peerDependencies: Record<string, string> };
+  const range = manifest.peerDependencies['@unbrained/pm-cli'];
+  const floor = range.startsWith('>=') ? range.slice(2) : range;
+  assert.match(supportedHostSpec(), /^@unbrained\/pm-cli@\d+\.\d+\.\d+/, 'the spec must name an exact installable host version');
+  assert.equal(supportedHostSpec(), `@unbrained/pm-cli@${floor}`, 'a hard-coded or stale host literal drifts from the declared floor');
+});
 
 for (const kind of ['missing', 'failed', 'empty', 'working'] as const) {
   test(`packed acceptance Bun prerequisite handles ${kind} executable`, t => {

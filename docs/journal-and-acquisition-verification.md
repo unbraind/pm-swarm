@@ -27,21 +27,25 @@ only that owned temporary; request cleanup remains inside the pin cleanup scope.
 Verification-worktree cleanup encloses creation and still removes its owned
 temporary directory when worktree removal fails.
 
-## Fresh close only
+## Close admission and automatic recovery
 
-The former `swarm-close/v2` coordinator, phase reconstruction and compensation
-implementation are retired from this PR. Commit `0157465` preserves the prototype
+The former `swarm-close/v2` coordinator, phase reconstruction and prototype
+compensation implementation are retired from that PR. Commit `0157465` preserves the prototype
 for the related [durable recovery Feature](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-durable-close-recovery.toon)
 and [issue 34](https://github.com/unbraind/pm-swarm/issues/34). Its previous test
 counts and recovery claims are historical evidence, not the current contract.
 
-Current close delegates one fresh native operation, retaining lifecycle changes
-and warnings from core. A prior native close, terminal state, legacy marker or
-interrupted native return produces `swarm_close_recovery_unsupported`, naming
-the canonical item and tracker-relative journal entry. Retrying never restores,
-rewrites or adopts a close based on author, copied messages or document equality.
-See [native close](native-close.md) for the complete boundary. There is no journal
-inspection SDK gap in this reduced implementation. Native settings registration
+A fresh close delegates one native operation, retaining lifecycle changes
+and warnings from core; retrying an existing pending episode compensates it
+instead of delegating another native close. Retrying the exact original author,
+token and note automatically restores the certified pre-close members and returns
+`swarm_close_compensated`, so a supported retry or a compensating restore is
+expected operator behavior, never evidence of corruption. A prior native close
+from another request, terminal state, legacy marker or unowned and mismatched
+history produces `swarm_close_recovery_unsupported`, naming the canonical item and
+tracker-relative journal entry. Recovery never restores, rewrites or adopts a
+close based on author equality, copied messages or document equality alone.
+See [native close](native-close.md) for the complete boundary. Native settings registration
 remains separately blocked on [pm-cli#1580](https://github.com/unbraind/pm-cli/issues/1580).
 
 ## Behavioral evidence

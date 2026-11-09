@@ -10,7 +10,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { decodeToon } from '@unbrained/pm-cli/sdk/testing';
 import { gitEnvironment } from '../src/git-environment.ts';
 import { assertFixtureRepo, fixtureGit, fixtureSnapshot } from './git-helpers.ts';
-import { requireBun, packedNonGitConsumer } from './install-helpers.ts';
+import { requireBun, packedNonGitConsumer, supportedHostSpec } from './install-helpers.ts';
 import { assertPackedCrashRecovery } from './packed-close-recovery.ts';
 import { processExit } from './process-helpers.ts';
 import { assertPackedCloseOwnership } from './packed-ownership-helpers.ts';
@@ -47,7 +47,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
   const packageDir = join(extracted, 'package');
   for (const runtime of ['npm', 'bun']) {
     const cwd = join(scratch, runtime); mkdirSync(cwd); writeFileSync(join(cwd, 'package.json'), '{"name":"swarm-consumer","private":true,"type":"module"}\n');
-    run(cwd, runtime, [runtime === 'npm' ? 'install' : 'add', '--ignore-scripts', '@unbrained/pm-cli@2026.10.23']);
+    run(cwd, runtime, [runtime === 'npm' ? 'install' : 'add', '--ignore-scripts', supportedHostSpec()]);
     run(cwd, 'git', ['init', '-b', 'main', cwd]);
     assertFixtureRepo(cwd);
     const runner = runtime === 'npm' ? 'npx' : 'bunx'; const prefix = runtime === 'npm' ? ['--no-install', 'pm'] : ['--bun', '--no-install', 'pm'];

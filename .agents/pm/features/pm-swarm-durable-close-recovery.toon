@@ -7,12 +7,14 @@ status: in_progress
 priority: 2
 tags[4]: close-recovery,durability,"gh:unbraind/pm-swarm#34","gh:unbraind/pm-swarm#65"
 created_at: "2026-10-27T19:53:07.216Z"
-updated_at: "2026-11-09T16:13:10.387Z"
+updated_at: "2026-11-09T19:49:27.034Z"
+assignee: pi-glm
+claim_principal: pi-glm
 author: codex-agent
 acceptance_criteria: "Canonicalize short IDs through host native get before every history read, including service-capable contexts; capture history heads before authoritative decision documents and recheck under the same native writer lock; identify own forward close and every restore by a durable unique compensation_id and exact SDK journal identity, never author, message markers or document equality; refuse unrelated same-author native closes and copied transaction markers; native close owns dependent unblock, blocker-field removal, Plan behavior and unchanged warnings, and actual read-back defines successors; persist full immutable member/pre-close bytes digest/post-close history domain before restore, fsync intent, progress and parent-directory updates; durable per-member restored/pending receipts recover own progress without mistaking it for peers; never restore peers or foreign records, and release/claim/restore ABA must be detected from locked native history heads even when all bytes and tokens match; real-process SIGKILL after every forward and reverse step including 0..N member restores with 1-3 dependents converges to exact pre-close item bytes with append-only audit history, no duplicates or loss; peer edits between restores stop with typed partial receipts preserving restored and pending members; lost native returns and ordinary coordinator failures preserve all lifecycle members coherently; packed npm/Bun, non-Git and installed separate/shared SDK layouts exercise every boundary; property tests, revert proofs, full 100 percent coverage, documentation and release gates."
 dependencies[1]{id,kind,created_at,author,source_kind,author_source}:
   pm-swarm-y972,related,"2026-10-27T19:53:07.216Z",codex-agent,"cli:create:dep",detected
-comments[46]{created_at,author,text}:
+comments[49]{created_at,author,text}:
   "2026-10-27T20:23:51.975Z",codex-agent,"Repository issue https://github.com/unbraind/pm-swarm/issues/34 owns the full rounds 5-15 close protocol. It is related to pm-swarm-y972; the existing dependent-progress issue 32 is linked as a narrower subtask. Removed prototype and tests remain reproducible from commit 0157465. Current PR intentionally has no swarm close transaction, automatic primary restore, member compensation, native-history ownership reconstruction or saved-result adoption."
   "2026-10-27T21:15:24.658Z",codex-agent,"Scope boundary implemented in PR 24: fresh native close only, immutable refusal after lost returns, prior native closes or legacy markers. Current regressions preserve an unrelated same-author close, service-context short IDs, reopened preimages and native dependent effects after SIGKILL. Full journaled recovery, exact compensation ownership and all multi-member restore progress remain this open Feature and issue 34. No automatic restore implementation ships."
   "2026-11-02T09:18:35.763Z",pi-glm,"Triage 2026-11-02 (missed-watch sweep): still valid, tracked here (gh:unbraind/pm-swarm#34). The deferred durable multi-item close recovery protocol (rounds 5-15 acceptance: identity-bound restores, immutable member lists and digests, fsynced progress, SIGKILL resume, peer-edit refusal) is not implemented on main; PR #24 deliberately reduced close to fresh native delegation. The narrower member-progress subtask remains pm-swarm-durable-compensation (gh:unbraind/pm-swarm#32). No duplicate item created."
@@ -59,6 +61,9 @@ comments[46]{created_at,author,text}:
   "2026-11-09T16:12:02.187Z",codex-agent,"FINAL validation: npm run release:check passed in 2633 seconds and bun run release:check passed in 2108 seconds (35m08s for Bun), sequentially under credential-free isolated HOME/Git configuration with at most two test workers. EACH gate passed 1143/1143 functional tests with zero failures/skips/cancellations, all 105 SIGKILL boundaries, 40 measured sources at 100 percent statements/branches/functions/lines, and 7/7 packed acceptance tests. Each packed matrix validated real npm/Node and native Bun consumers on non-Git trackers, observed history-read faults, 24 SIGKILL cases, 12 confirmation cases, write-free JSON/TOON/SDK replay, and identical global-host artifact bytes. Prior source revert fails seven regressions; inspected-head guard revert fails the race; identifier-only rediscovery fails five substitution variants; packed native Bun with prior recovery fails its committed-confirmation test. Thread PRRT_kwDOVLY-P861QrQN is fixed by native intent reconciliation, shared immutable plan identity and the primary inspected-head guard; no forced applying fallback remains. Files/docs/test links are retained on this item. Keeping the item in progress for orchestrator verification and releasing my claim; review threads remain for the orchestrator to answer. No new pm CLI/SDK defect was found."
   "2026-11-09T16:12:25.253Z",codex-agent,"Packed-count clarification: PER RELEASE GATE there are two runtime matrices, one npm/Node and one native Bun. EACH matrix executes 12 SIGKILL cases and 6 lost-confirmation cases; combined they execute 24 SIGKILL and 12 confirmation cases per gate. The same matrix was rerun in both complete release gates."
   "2026-11-09T16:13:10.380Z",codex-agent,"Final staged self-host checks: all 10 health checks report ok with strict exit 0; advisory telemetry_queue_pending:1 and stale_in_progress_items:2 remain tracker notices, separate from release and review findings. Identity reports 0 violations and the regenerated changelog check passes. Exactly seven text paths are staged for this round: the feature item/history pair, native-close documentation, close-journal and close-recovery source, and the confirmation and packed recovery tests. The claim is released and the item remains in_progress for the orchestrator. No review thread was replied to, resolved or reacted to."
+  "2026-11-09T19:15:49.470Z",pi-glm,"Review round 2 re-review (6 findings) verified against remote head 632d52a; all six are valid. Plan, closing each CLASS package-wide: (1) blocking src/close.ts:59 - general rule 'an ownership change must not strand a pending close episode'. New typed refusal when the registered close intent is malformed or in a nonterminal (applying/compensating) phase, enforced in the single transfer path (handoff preview+apply, reclaim dry-run+apply, pool) and claim admission (start/next/schedule); committed phases stay transferable because a newer generation retires them at fresh admission. Reclaim maps the refusal to a truthful refused row. Crash-then-transfer regression with real processes, revert proof by removing only the guard. (2) ARCHITECTURE state table: applying row distinguishes initial native-close delegation from retry compensation. (3) native-close verification guides: replace stale 'interrupted closes always refuse/never restore' claims with the automatic-compensation contract. (4) closeProcess outcome derivation no longer depends on the last stdout row; transfer test also asserts nonzero exit. (5) hard-coded host floor in packed/install helpers derived from the declared peerDependencies floor; acceptance evidence label derived from the installed SDK. (6) per-child timeouts in packed driver scripts."
+  "2026-11-09T19:37:38.909Z",pi-glm,"Round-2 fixes implemented at the class level. Blocking thread (src/close.ts:59, ownership transfer stranding a pending close): new typed refusal swarm_close_transfer_refused; assertCloseIntentSettled refuses handoff, reclaim (dry-run and apply, including pool), and claim admission (start/next/schedule) whenever the registered close intent is malformed or in a nonterminal applying/compensating phase; committed receipts remain transferable because retiredCloseGeneration retires them at fresh admission; reclaim maps the refusal to a truthful refused row with its code. Class scan: the single transfer path and claimState cover every swarm ownership change; reap only touches terminal items, raw native SDK claims stay explicit-inspection territory by design and are documented as such. Revert proofs in a disposable copy with finally restoration: removing ONLY the transfer guard makes the crash-then-reclaim test fail because dry-run reclaim transfers the pending episode to the receiver (refused row missing; the exact stranded-episode defect); removing ONLY the claimState guard makes it fail because start refuses with the plain ownership error instead of the typed close refusal. Restored code passes 3/3 including the new real-process regression (SIGKILL after the durable intent write; reclaim/handoff/start refuse with preserved native bytes; the original request compensates; the transfer then succeeds and the receiver closes with a committed receipt)."
+  "2026-11-09T19:37:44.798Z",pi-glm,"Non-blocking findings fixed with mutation-sensitivity proofs (all in disposable copies with finally restoration): (a) outcome-row order dependence - closeProcess now selects the typed outcome row by its code/result field via exported closeOutcomeRow; a new property test locates the typed row at every leading-noise position and behind trailing rows; reverting the derivation to the last row fails it (verified), restored passes. The transfer-process stale-fence assertion now also requires a nonzero exit. (b) pinned host version - supportedHostSpec derives the exact installable host version from the declared package.json peerDependencies floor; both packed helpers and the install acceptance use it; the sdk read-effects evidence label reports the actually installed SDK version instead of a literal; a new drift test asserts the spec equals the declared floor and fails when the helper is mutated to a stale literal (verified), restored passes. (c) child spawn timeouts - every spawn inside the packed crash-recovery and packed-ownership driver scripts (crash worker, confirmation replay, peer CLI writes, outer drivers, bun probe, pack and install) now carries an explicit timeout so a hang fails with its own case context instead of the generic outer limit."
 files[23]{path,scope}:
   src/close-journal.ts,project
   src/close-proofs.ts,project
@@ -83,7 +88,7 @@ files[23]{path,scope}:
   test/close-review.test.ts,project
   test/install.acceptance.ts,project
   test/packed-close-recovery.ts,project
-tests[8]:
+tests[12]:
   - command: node --test --test-concurrency=2 test/close-recovery.test.ts test/close-resume-progress.test.ts test/close-transfer-process.test.ts
     scope: project
     timeout_seconds: 600
@@ -148,6 +153,35 @@ tests[8]:
       author: codex-agent
       created_at: "2026-11-09T13:20:01.380Z"
       source_kind: local_mutation
+  - command: node --test --test-concurrency=2 test/close-transfer-process.test.ts
+    scope: project
+    provenance:
+      author: pi-glm
+      created_at: "2026-11-09T19:37:50.358Z"
+      source_kind: local_mutation
+      source_ref: close-after-handoff-and-crash-recovery
+  - command: node --test --test-concurrency=2 test/fencing.test.ts test/acquisition-generations.test.ts test/claim-lifecycle.test.ts
+    scope: project
+    provenance:
+      author: pi-glm
+      created_at: "2026-11-09T19:37:53.395Z"
+      source_kind: local_mutation
+      source_ref: close-after-handoff-and-crash-recovery
+  - command: node --test --test-concurrency=2 test/install-prerequisites.test.ts
+    scope: project
+    provenance:
+      author: pi-glm
+      created_at: "2026-11-09T19:37:54.884Z"
+      source_kind: local_mutation
+      source_ref: close-after-handoff-and-crash-recovery
+  - command: node --test --test-concurrency=2 test/close-*.test.ts
+    scope: project
+    timeout_seconds: 1800
+    provenance:
+      author: pi-glm
+      created_at: "2026-11-09T19:49:26.924Z"
+      source_kind: local_mutation
+      source_ref: close-after-handoff-and-crash-recovery
 docs[3]{path,scope}:
   ARCHITECTURE.md,project
   docs/native-close.md,project

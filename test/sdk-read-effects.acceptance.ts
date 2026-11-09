@@ -5,6 +5,9 @@ import { getHistoryPath, locateItem } from '@unbrained/pm-cli/sdk';
 import { sharedFixture } from './shared-helpers.ts';
 import { snapshot } from './privacy-snapshot.ts';
 
+/** Report the version actually installed for the measurement instead of a drifting literal. */
+const installedSdk = (JSON.parse(readFileSync(new URL('../node_modules/@unbrained/pm-cli/package.json', import.meta.url), 'utf8')) as { version: string }).version;
+
 test('measure SDK derived writes during a cold corpus-dependent refusal without rolling them back', async t => {
   const f = await sharedFixture(t); const active = await f.item(['src/overlap.ts']); const ready = await f.item(['src/overlap.ts']);
   await f.client.claim(active, { author: 'peer' });
@@ -17,5 +20,5 @@ test('measure SDK derived writes during a cold corpus-dependent refusal without 
   const created = readdirSync(f.pmRoot, { recursive: true, encoding: 'utf8' }).filter(name => !names.has(name));
   assert.equal(created.some(name => name.startsWith('runtime/swarm')), false, 'package-owned refusal infrastructure is removed');
   assert.ok(created.every(name => name === 'runtime' || name.startsWith('runtime/metadata-cache')));
-  console.log(JSON.stringify({ item_bytes_unchanged: true, history_bytes_unchanged: true, package_runtime_files_created: 0, sdk_runtime_files_created: created.filter(name => name !== 'runtime').length, tracker_byte_identical: before === snapshot(f.pmRoot), sdk: '2026.10.23' }));
+  console.log(JSON.stringify({ item_bytes_unchanged: true, history_bytes_unchanged: true, package_runtime_files_created: 0, sdk_runtime_files_created: created.filter(name => name !== 'runtime').length, tracker_byte_identical: before === snapshot(f.pmRoot), sdk: installedSdk }));
 });

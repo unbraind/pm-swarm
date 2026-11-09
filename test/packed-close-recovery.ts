@@ -35,7 +35,7 @@ for(const count of [1,2,3])for(let kill=0;kill<=count+1;kill++){
   for(let n=0;n<count;n++)members.push((await client.create({type:'Task',title:'Packed dependent',status:'blocked',blockedBy:id,blockedReason:'Public dependency'})).item.id);
   const paths=members.map(member=>getItemPath(root,'Task',member));const streams=members.map(member=>getHistoryPath(root,member));
   const bytes=()=>paths.map(path=>readFileSync(path,'utf8'));const before=bytes();const history=streams.map(path=>readFileSync(path,'utf8'));
-  const child=spawnSync(process.execPath,[process.argv[2],JSON.stringify({id,token:claim.token,kill})],{encoding:'utf8'});
+  const child=spawnSync(process.execPath,[process.argv[2],JSON.stringify({id,token:claim.token,kill})],{encoding:'utf8',timeout:120000});
   assert.equal(child.signal,'SIGKILL',child.stdout+child.stderr);killed++;
   for(let retry=0;retry<2;retry++){
     await assert.rejects(shared.close(id,'Packed crash proof',claim.token),error=>error.code==='swarm_close_compensated');assert.deepEqual(bytes(),before);
@@ -56,7 +56,7 @@ for(const count of [0,1,3])for(const artifact of ['item','history']){
   assert.deepEqual(bytes(),saved);assert.equal(JSON.parse((await client.get(id)).item[CLOSE_INTENT]).phase,'committed');
   assert.equal((await shared.close(id,'Packed confirmation proof',claim.token)).closed,true);
   for(const json of [false,true]){
-    const replay=spawnSync(process.execPath,[process.argv[3],'swarm','close',id,'--author','packed-crash','--token',claim.token,'--note','Packed confirmation proof',...(json?['--json']:[])],{encoding:'utf8'});
+    const replay=spawnSync(process.execPath,[process.argv[3],'swarm','close',id,'--author','packed-crash','--token',claim.token,'--note','Packed confirmation proof',...(json?['--json']:[])],{encoding:'utf8',timeout:120000});
     assert.equal(replay.status,0,replay.stdout+replay.stderr);assert.ok(json?JSON.parse(replay.stdout).closed:replay.stdout.includes('closed: true'));
   }
   assert.deepEqual(bytes(),saved);confirmations++;

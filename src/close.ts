@@ -26,6 +26,19 @@ export class CloseRecoveryUnsupported extends SettingsRefusal {
     this.committed = committed ? true : undefined;
   }
 }
+/** Refuse an ownership change that would strand a pending or malformed close episode.
+ * A transferred nonterminal intent can neither be compensated by its original author (the transfer
+ * is foreign history) nor retried by the new owner (the plan is author-bound), so every ownership
+ * change refuses until the episode is reconciled; a committed receipt stays transferable because
+ * a newer fencing generation retires it at fresh admission. */
+export function assertCloseIntentSettled(engine: Swarm, item: Record<string, unknown>): void {
+  if (item[CLOSE_INTENT] === undefined) return;
+  const id = String(item.id);
+  let journal: CloseJournal;
+  try { journal = parseCloseJournal(engine, item[CLOSE_INTENT]); }
+  catch { throw new SettingsRefusal('swarm_close_transfer_refused', `Item ${id} has a malformed close intent. Preserve native history and reconcile the close explicitly before changing ownership.`, 'close'); }
+  if (journal.phase !== 'committed') throw new SettingsRefusal('swarm_close_transfer_refused', `Item ${id} has an interrupted close episode. Retry the original close request with its author, token and note to reconcile it before changing ownership.`, 'close');
+}
 /** Legacy markers identify entries to inspect; they never select an automatic restore target. */
 function refuseLegacyMarker(engine: Swarm, item: Record<string, unknown>): void {
   if (item.swarm_close_transaction === undefined) return;
