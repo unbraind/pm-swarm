@@ -25,6 +25,7 @@ import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 import { recoveryItem } from './recovery.ts';
 import { assertCloseIntentSettled } from './close.ts';
+import { linkedTestDeadline } from './child-deadlines.ts';
 
 /** Every acquisition and following fallible step before a Git start receipt is returned. */
 export const START_TRANSITIONS = ['claimed', 'claim_read', 'branch_created', 'worktree_created', 'configured', 'published', 'receipt'] as const;
@@ -399,7 +400,8 @@ export class Swarm {
       await commitMutation({ tests, at: nowIso() }, admitted => acknowledgeLinkedTests(join(path, '.agents/pm'), admitted.tests, admitted.at));
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
       const environment: NodeJS.ProcessEnv = { ...gitEnvironment(), PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
-      const result = spawnSync(process.execPath, [fileURLToPath(runner)], { timeout: 3600000, cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
+      const timeout = linkedTestDeadline(tests);
+      const result = spawnSync(process.execPath, [fileURLToPath(runner)], { timeout, cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
       if (result.status !== 0 || result.stdout !== JSON.stringify({ passed: true })) throw new Error(`Linked tests failed for ${id}: ${result.stderr}`);
     } finally { try { if (existsSync(join(path, '.git'))) git(this.repo, ['worktree', 'remove', '--force', path]); } finally { rmSync(directory, { recursive: true, force: true }); } }
   }
