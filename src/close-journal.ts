@@ -35,7 +35,7 @@ export function closeEpisode(journal: CloseJournal, phase: string, payload: unkn
   return deriveMutationTransactionId(JSON.stringify({ compensation_id: journal.compensation_id, phase, payload }));
 }
 /** Compare immutable plans independently of changing progress and final warning receipts. */
-function plan(journal: CloseJournal): string {
+export function closePlanIdentity(journal: CloseJournal): string {
   return JSON.stringify([journal.protocol, journal.compensation_id, journal.id, journal.author, journal.token, journal.note, journal.members, journal.public_key]);
 }
 /** Reject malformed or foreign field content before it can authorize restoration. */
@@ -127,7 +127,7 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
         for (const field of ['swarm_handoff', 'swarm_claimed_at']) allowedFields.add(`/metadata/${field}`);
         if (view.document.metadata.swarm_handoff !== undefined || view.document.metadata.swarm_claimed_at !== undefined || recorded.token !== null && view.document.metadata.swarm_token !== String(BigInt(recorded.token) + 1n)) throw foreign();
       }
-      if (plan(recorded) !== plan(journal) || entry.agent_episode?.id !== closeEpisode(recorded, 'journal', recorded) || entry.patch.some(patch => !allowedFields.has(patch.path))) throw foreign();
+      if (closePlanIdentity(recorded) !== closePlanIdentity(journal) || entry.agent_episode?.id !== closeEpisode(recorded, 'journal', recorded) || entry.patch.some(patch => !allowedFields.has(patch.path))) throw foreign();
       if (previous === undefined ? offset !== 0 || recorded.phase !== 'applying' || recorded.post.length !== 0 || recorded.restored.length !== 0 || recorded.proofs.length !== 0
         : previous.phase !== 'applying' && (recorded.phase !== 'compensating' || previous.phase !== 'compensating' || JSON.stringify(recorded.post) !== JSON.stringify(previous.post) || recorded.restored.length !== previous.restored.length + 1 || previous.restored.some((id, index) => recorded.restored[index] !== id))
           || previous.phase === 'applying' && (recorded.phase === 'applying' || recorded.restored.length !== 0)) throw foreign();

@@ -21,9 +21,14 @@ await withCloseObserver((boundary)=>{
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
+import filesystem from 'node:fs/promises';
+import {syncBuiltinESMExports} from 'node:module';
+${runtime === process.execPath ? '' : "import {mock} from 'bun:test';"}
 import {PmClient,getItemPath,getHistoryPath} from '@unbrained/pm-cli/sdk';
-import {Swarm,SharedTracker} from 'pm-swarm';
+import {Swarm,SharedTracker,withCloseObserver,CLOSE_INTENT} from 'pm-swarm';
 const root=process.env.PM_PATH;const client=new PmClient({cwd:process.cwd(),pmRoot:root,author:'packed-crash'});
+// Bun retains named builtin bindings; explicitly replace and restore the filesystem module in that runtime.
+const setRead=readFile=>{filesystem.readFile=readFile;${runtime === process.execPath ? 'syncBuiltinESMExports();' : "mock.module('node:fs/promises',()=>({default:filesystem,...filesystem,readFile}));"}};
 const shared=new SharedTracker(new Swarm(process.cwd(),root,client,'packed-crash'));let killed=0;
 for(const count of [1,2,3])for(let kill=0;kill<=count+1;kill++){
   const id=(await client.create({type:'Task',title:'Packed crash domain'})).item.id;const claim=await shared.start(id);const members=[id];
@@ -38,10 +43,29 @@ for(const count of [1,2,3])for(let kill=0;kill<=count+1;kill++){
   }
   for(const member of members)await client.delete(member,{force:true});
 }
-console.log(JSON.stringify({packed_sigkill_cases:killed,exact_native_bytes:true}));
+let confirmations=0;
+for(const count of [0,1,3])for(const artifact of ['item','history']){
+  const id=(await client.create({type:'Task',title:'Packed lost confirmation'})).item.id;const claim=await shared.start(id);const members=[id];
+  for(let n=0;n<count;n++)members.push((await client.create({type:'Task',title:'Packed confirmation dependent',status:'blocked',blockedBy:id,blockedReason:'Public dependency'})).item.id);
+  const paths=members.flatMap(member=>[getItemPath(root,'Task',member),getHistoryPath(root,member)]);const bytes=()=>paths.map(path=>readFileSync(path,'utf8'));
+  const target=artifact==='item'?getItemPath(root,'Task',id):getHistoryPath(root,id);const read=filesystem.readFile;let armed=false;let failures=0;let saved;
+  setRead(new Proxy(read,{apply(fn,receiver,args){if(armed&&args[0]===target){armed=false;failures++;throw Object.assign(new Error('Packed read outage'),{code:'EIO'});}return Reflect.apply(fn,receiver,args);}}));
+  try{await assert.rejects(withCloseObserver(boundary=>{if(boundary==='committed'){saved=bytes();armed=true;throw new Error('Packed lost return');}},()=>shared.close(id,'Packed confirmation proof',claim.token)),error=>error.code==='swarm_partial_commit');}
+  finally{setRead(read);}
+  if(artifact==='history')assert.equal(failures,1,'The native consumer must encounter the injected read outage');
+  assert.deepEqual(bytes(),saved);assert.equal(JSON.parse((await client.get(id)).item[CLOSE_INTENT]).phase,'committed');
+  assert.equal((await shared.close(id,'Packed confirmation proof',claim.token)).closed,true);
+  for(const json of [false,true]){
+    const replay=spawnSync(process.execPath,[process.argv[3],'swarm','close',id,'--author','packed-crash','--token',claim.token,'--note','Packed confirmation proof',...(json?['--json']:[])],{encoding:'utf8'});
+    assert.equal(replay.status,0,replay.stdout+replay.stderr);assert.ok(json?JSON.parse(replay.stdout).closed:replay.stdout.includes('closed: true'));
+  }
+  assert.deepEqual(bytes(),saved);confirmations++;
+  for(const member of members)await client.delete(member,{force:true});
+}
+console.log(JSON.stringify({packed_sigkill_cases:killed,packed_confirmation_cases:confirmations,exact_native_bytes:true}));
 `);
-  const result = spawnSync(runtime, [driver, worker], { cwd: repo, env: environment, encoding: 'utf8', timeout: 900000 });
+  const result = spawnSync(runtime, [driver, worker, join(repo, 'node_modules/.bin/pm')], { cwd: repo, env: environment, encoding: 'utf8', timeout: 900000 });
   assert.equal(result.error, undefined);
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.deepEqual(JSON.parse(result.stdout), { packed_sigkill_cases: 12, exact_native_bytes: true });
+  assert.deepEqual(JSON.parse(result.stdout), { packed_sigkill_cases: 12, packed_confirmation_cases: 6, exact_native_bytes: true });
 }

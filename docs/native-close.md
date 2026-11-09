@@ -35,6 +35,14 @@ the original request token for replay. An interrupted forward call compensates d
 then returns `swarm_close_compensated`. The exact pre-close item bytes, including
 native timestamps, are restored with append-only compensation history.
 
+Compensation first rediscovers the native intent and checks the primary's exact
+history head before writing. Rediscovery must match every immutable plan field,
+using the same identity check as native history inspection. A committed receipt returns `swarm_partial_commit`
+when its response or durability confirmation is lost; retry the original request
+to replay it. An unavailable inspection never authorizes rollback or replacement
+of a committed receipt. When native intent cannot be read, recovery preserves all
+members and reports pending inspection through `swarm_compensation_partial`.
+
 A restored member's exact native operation receipt survives SIGKILL before the
 next progress write. Recovery skips that certified restore, records its missing
 progress and continues. The primary restores last; its native history retains

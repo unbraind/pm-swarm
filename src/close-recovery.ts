@@ -5,7 +5,7 @@ import type { Swarm } from './swarm.ts';
 import type { Lease } from './lease.ts';
 import { commitItemMutation, commitMutation, SettingsRefusal } from './settings.ts';
 import type { CloseInspection, CloseJournal, CloseMember } from './close-journal.ts';
-import { CLOSE_INTENT, captureCloseMember, closeBoundary, closeEpisode, discoverCloseJournal, inspectCloseMember, inspectCloseMembers, syncCloseMember } from './close-journal.ts';
+import { CLOSE_INTENT, captureCloseMember, closeBoundary, closeEpisode, closePlanIdentity, discoverCloseJournal, inspectCloseMember, inspectCloseMembers, parseCloseJournal, syncCloseMember } from './close-journal.ts';
 import { loadCloseProposals, recordCloseProposal, retireCloseProposals, signCloseResult } from './close-proofs.ts';
 
 /** Typed recovery outcome retains member-level progress without exposing documents or storage coordinates. */
@@ -42,6 +42,10 @@ async function completedCompensation(engine: Swarm, states: ReadonlyMap<string, 
   for (const id of restored) { try { await syncCloseMember(engine, id); } catch { pending.push(id); } }
   throw new CloseCompensation(restored, pending);
 }
+/** A durable completion is irreversible even when confirming its return or current domain fails. */
+function assertUncommittedClose(journal: CloseJournal): void {
+  if (journal.phase === 'committed') throw new SettingsRefusal('swarm_partial_commit', `The close committed for item ${journal.id}, but its response or durability confirmation was unavailable. Retry the original request to verify and replay its native receipt.`, 'close');
+}
 /** Restore dependents first and the primary last; native restore receipts survive a lost progress write. */
 async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal): Promise<never> {
   // Uncommitted success warnings may have failed privacy admission; compensation never republishes them.
@@ -50,6 +54,8 @@ async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal):
   journal = { ...journal, proofs: recoveredProofs };
   let states = await inspectDomain(engine, journal);
   const primary = states.get(journal.id)!;
+  // The checked native head also fences a completion appended after discovery but before inspection.
+  if (primary.item[CLOSE_INTENT] !== undefined) assertUncommittedClose(parseCloseJournal(engine, primary.item[CLOSE_INTENT]));
   if (primary.restored) return completedCompensation(engine, states);
   if (journal.phase !== 'compensating') {
     journal = { ...journal, phase: 'compensating', post: [...states].filter(([, state]) => state.changed).map(([id, state]) => ({ id, head: state.history })), restored: [] };
@@ -102,10 +108,20 @@ async function restoreClose(engine: Swarm, lease: Lease, journal: CloseJournal):
 }
 /** Convert storage and locked-CAS failures to truthful partial member receipts, retaining recoverable intent. */
 export async function compensateClose(engine: Swarm, lease: Lease, journal: CloseJournal): Promise<never> {
-  try { return await restoreClose(engine, lease, journal); }
+  try {
+    // A stale in-memory phase or unavailable read must never authorize rollback over native completion.
+    const latest = await discoverCloseJournal(engine, journal.id, undefined);
+    if (latest === undefined || closePlanIdentity(latest) !== closePlanIdentity(journal)) throw new CloseCompensation([], journal.members.map(member => member.id));
+    journal = latest; assertUncommittedClose(journal);
+    closeBoundary('recovery_intent', journal.id);
+    return await restoreClose(engine, lease, journal);
+  }
   catch (error) {
+    if (error instanceof SettingsRefusal && error.code === 'swarm_partial_commit') throw error;
     if (error instanceof CloseCompensation) throw error;
-    try { journal = await discoverCloseJournal(engine, journal.id, undefined) ?? journal; } catch { /* Preserve the original immutable plan when history is unavailable. */ }
+    let latest: CloseJournal | undefined;
+    try { latest = await discoverCloseJournal(engine, journal.id, undefined); } catch { /* Preserve the original immutable plan when history is unavailable. */ }
+    if (latest !== undefined && closePlanIdentity(latest) === closePlanIdentity(journal)) { journal = latest; assertUncommittedClose(journal); }
     const restored: string[] = []; const pending: string[] = [];
     for (const member of journal.members) {
       try { const state = await inspectCloseMember(engine, journal, member); if (state.restored) restored.push(member.id); else if (state.changed) pending.push(member.id); }
@@ -173,13 +189,5 @@ export async function applyClose(engine: Swarm, lease: Lease, prepared: Awaited<
     await retireCloseProposals(engine, journal); closeBoundary('proofs_retired', journal.id);
     closeBoundary('committed', journal.id);
     return { id: journal.id, closed: true, ...(journal.warnings!.length > 0 ? { warnings: journal.warnings } : {}) };
-  } catch {
-    // A lost return from the final journal write is settled by native history, never by the thrown value.
-    let checked: CloseInspection;
-    try { checked = await inspectCloseMember(engine, journal, journal.members[0]); }
-    catch { return compensateClose(engine, lease, { ...journal, phase: 'applying' }); }
-    const current = checked.item[CLOSE_INTENT];
-    if (typeof current === 'string' && JSON.parse(current).phase === 'committed') throw new SettingsRefusal('swarm_partial_commit', `The close committed for item ${journal.id}, but its response or durability confirmation was unavailable. Retry the original request to verify and replay its native receipt.`, 'close');
-    return compensateClose(engine, lease, { ...journal, phase: 'applying' });
-  }
+  } catch { return compensateClose(engine, lease, journal); }
 }
