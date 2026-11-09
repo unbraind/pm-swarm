@@ -29,7 +29,7 @@ test('a certified committed close retires for reopened work under a new fenced c
   const first = JSON.parse(String((await f.client.get(id)).item[CLOSE_INTENT])) as { compensation_id: string };
   await f.client.reopen(id, 'Additional public work'); const next = await f.shared.start(id);
   assert.ok(BigInt(next.token) > BigInt(token));
-  await assert.rejects(f.shared.close(id, 'First completion', token));
+  await assert.rejects(f.shared.close(id, 'First completion', token), { code: 'swarm_stale_fence' });
   assert.equal((await f.shared.close(id, 'Second completion', next.token)).closed, true);
   const after = (await f.client.get(id)).item;
   assert.notEqual((JSON.parse(String(after[CLOSE_INTENT])) as { compensation_id: string }).compensation_id, first.compensation_id);

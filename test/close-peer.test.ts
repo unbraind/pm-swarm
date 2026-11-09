@@ -17,6 +17,6 @@ test('a peer native close immediately before the native call is preserved withou
     };
     const value: unknown = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
   } });
-  await assert.rejects(new SharedTracker(new Swarm(f.repo, f.pmRoot, client, 'shared-test')).close(id, 'Public completion', claim.token), error => error instanceof SettingsRefusal && ['swarm_superseded', 'swarm_close_recovery_unsupported', 'swarm_compensation_partial'].includes(error.code));
+  await assert.rejects(new SharedTracker(new Swarm(f.repo, f.pmRoot, client, 'shared-test')).close(id, 'Public completion', claim.token), error => error instanceof SettingsRefusal && error.code === 'swarm_compensation_partial');
   assert.equal(changed, true); assert.deepEqual(peerBytes(f.pmRoot, id), peer);
 });

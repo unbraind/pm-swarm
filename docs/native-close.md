@@ -19,6 +19,11 @@ blocker-field removal, dependent unblocking and native warnings. Actual native
 read-back defines successors; swarm does not predict native documents. Both the
 full current document and proposed complete document pass privacy admission.
 
+After waiting for the operation lease, close captures a new native snapshot and
+repeats the same request admission and receipt checks. A peer completion replays
+its committed result; completed compensation replays its restore receipt. Changed
+request identity or fencing generations refuse before any new close or restore.
+
 Retry with the original author, token and note. Pending recovery is selected
 before terminal status and current ownership checks because native close may
 already have removed the assignee. A committed result replays its saved warning

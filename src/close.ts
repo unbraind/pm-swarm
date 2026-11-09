@@ -7,6 +7,7 @@ import { StaleFenceError, withSwarmLease } from './lease.ts';
 import { assertPrivatePathSafe, rawDocument, SettingsRefusal } from './settings.ts';
 import { admitCloseProofSettings } from './close-proofs.ts';
 import { RESOURCE_TAG } from './resources.ts';
+import type { CloseJournal } from './close-journal.ts';
 import type { Swarm } from './swarm.ts';
 
 /** Unowned or mismatched close history remains ineligible for automatic recovery. */
@@ -47,6 +48,30 @@ function admitCloseDocument(engine: Swarm, item: Record<string, unknown>, token:
   if (item.assignee !== engine.author || item.swarm_token !== undefined && selected !== item.swarm_token) throw new StaleFenceError(canonicalId);
   return { canonicalId, journal };
 }
+/** Validate both initial and lease-held state through the same request admission path. */
+async function admitCloseRequest(engine: Swarm, item: Record<string, unknown>, note: string, selected: string | undefined, tokens: Map<string, string>): Promise<CloseJournal | undefined> {
+  const canonicalId = String(item.id);
+  refuseLegacyMarker(engine, item);
+  const discovered = await discoverCloseJournal(engine, canonicalId, item[CLOSE_INTENT]);
+  if (discovered !== undefined && discovered.id !== canonicalId) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
+  const retired = discovered !== undefined && await retiredCloseGeneration(engine, discovered, item);
+  const journal = retired ? undefined : discovered;
+  if (journal !== undefined && (journal.author !== engine.author || journal.note.trim() !== note || journal.token !== (selected ?? null))) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
+  if (journal === undefined) {
+    admitCloseProofSettings(await rawDocument(engine.pmRoot));
+    admitCloseDocument(engine, item, selected, tokens, resolveRuntimeStatusRegistry((await readSettings(engine.pmRoot)).schema));
+    const history = await readHistoryEntries(getHistoryPath(engine.pmRoot, canonicalId), canonicalId);
+    const closedAt = history.findIndex(record => record.op === 'close');
+    if (!retired && closedAt !== -1) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl#entry=${closedAt + 1}`);
+  }
+  return journal;
+}
+/** Replay terminal native receipts before waiting, and again after acquiring the operation lease. */
+function replayCloseRequest(engine: Swarm, journal: CloseJournal | undefined, item: Record<string, unknown>) {
+  if (journal?.phase === 'committed') return replayCommittedClose(engine, journal);
+  if (journal !== undefined && (item[CLOSE_INTENT] === undefined || parseCloseJournal(engine, item[CLOSE_INTENT]).compensation_id !== journal.compensation_id)) return replayCompensatedClose(engine, journal);
+  return undefined;
+}
 /** Persist a native-field intent before close; resume or compensate only history-certified own work. */
 export async function completeClaim(engine: Swarm, id: string, note: string, token: string | undefined, tokens: Map<string, string>): Promise<{ id: string; closed: true; warnings?: string[] }> {
   assertPrivatePathSafe({ id, note, token, author: engine.author });
@@ -57,26 +82,18 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
   if (local !== null && local.item[CLOSE_INTENT] === undefined) admitCloseDocument(engine, { ...local.item, body: local.body }, token, tokens, statuses);
   const admission = await captureCloseMember(engine, id); const item = admission.item;
   const canonicalId = String(item.id); const selected = token ?? tokens.get(canonicalId);
-  refuseLegacyMarker(engine, item);
-  const discovered = await discoverCloseJournal(engine, canonicalId, item[CLOSE_INTENT]);
-  if (discovered !== undefined && discovered.id !== canonicalId) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
-  const retired = discovered !== undefined && await retiredCloseGeneration(engine, discovered, item);
-  const journal = retired ? undefined : discovered;
-  if (journal !== undefined && (journal.author !== engine.author || journal.note.trim() !== note || journal.token !== (selected ?? null))) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`);
-  if (journal?.phase === 'committed') return replayCommittedClose(engine, journal);
-  if (journal !== undefined && (item[CLOSE_INTENT] === undefined || parseCloseJournal(engine, item[CLOSE_INTENT]).compensation_id !== journal.compensation_id)) return replayCompensatedClose(engine, journal);
-  if (journal === undefined) {
-    admitCloseProofSettings(await rawDocument(engine.pmRoot));
-    admitCloseDocument(engine, item, selected, tokens, statuses);
-    const history = await readHistoryEntries(getHistoryPath(engine.pmRoot, canonicalId), canonicalId);
-    const closedAt = history.findIndex(record => record.op === 'close');
-    if (!retired && closedAt !== -1) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl#entry=${closedAt + 1}`);
-  }
+  const journal = await admitCloseRequest(engine, item, note, selected, tokens);
+  const replay = replayCloseRequest(engine, journal, item);
+  if (replay !== undefined) return replay;
   let committed = false;
   try {
     return await withSwarmLease(engine.pmRoot, engine.author, async lease => {
-      if (journal !== undefined) return compensateClose(engine, lease, journal);
-      const result = await applyClose(engine, lease, await prepareClose(engine, canonicalId, note, item.swarm_token, admission));
+      const current = await captureCloseMember(engine, canonicalId);
+      const refreshed = await admitCloseRequest(engine, current.item, note, selected, tokens);
+      const replay = replayCloseRequest(engine, refreshed, current.item);
+      if (replay !== undefined) return replay;
+      if (refreshed !== undefined) return compensateClose(engine, lease, refreshed);
+      const result = await applyClose(engine, lease, await prepareClose(engine, canonicalId, note, current.item.swarm_token, current));
       committed = true;
       tokens.delete(canonicalId);
       return result;
