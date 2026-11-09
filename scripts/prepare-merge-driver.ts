@@ -69,6 +69,6 @@ if (process.env.npm_command === "pack" || process.env.npm_command === "publish")
   if (installer === undefined) {
     console.error("pm-ops is not installed (omit-dev install); skipping merge-driver install");
   } else {
-    process.exitCode = spawnSync(process.execPath, [installer], { stdio: "inherit" }).status ?? 1;
+    process.exitCode = spawnSync(process.execPath, [installer], { timeout: 300000, stdio: "inherit" }).status ?? 1;
   }
 }

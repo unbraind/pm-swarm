@@ -69,7 +69,7 @@ for (const kind of ['shared', 'resource', 'Git claim', 'Git publication'] as con
 test('an independent process advances generation before a lost shared SDK return', async t => {
   const f = await sharedFixture(t); const id = await f.item();
   await preservesLostClaim(f, id, async () => {
-    const result = spawnSync(process.execPath, [f.host, 'update', id, '--field', 'swarm_token=9', '--author', 'shared-test', '--json'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    const result = spawnSync(process.execPath, [f.host, 'update', id, '--field', 'swarm_token=9', '--author', 'shared-test', '--json'], { timeout: 300000, cwd: f.repo, env: f.env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   });
   assert.equal((await f.client.get(id)).item.assignee, 'shared-test');

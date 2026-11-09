@@ -193,7 +193,7 @@ test('partial land maximizes the clean subset, explains blocked peers and execut
   assert.deepEqual(preview.blocked.map(({ messages: _messages, ...row }) => ({ ...row, peers: row.peers.map(({ messages: _peerMessages, ...peer }) => peer) })), [{ id: ids[1], branch: starts[1].branch, conflicts: ['same'], peers: [{ id: ids[0], branch: starts[0].branch, conflicts: ['same'], next_step: `rebase ${starts[1].branch} after ${starts[0].branch} lands` }] }]);
   assert.equal(commit(f.repo, 'HEAD'), before);
   const blockedSha = commit(f.repo, starts[1].branch); const blockedStatus = git(starts[1].worktree, ['status', '--porcelain']);
-  const execution = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'land', '--execute', '--json'], { cwd: f.repo, env: { ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }, encoding: 'utf8' });
+  const execution = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'land', '--execute', '--json'], { timeout: 300000, cwd: f.repo, env: { ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }, encoding: 'utf8' });
   assert.equal(execution.status, 1, execution.stderr);
   const landed = JSON.parse(execution.stdout) as typeof preview; assert.deepEqual(landed.order, preview.order); assert.equal(landed.exit_code, 1); assert.equal(landed.executed, true);
   assert.equal(git(f.repo, ['show', 'HEAD:same']), 'lane 0'); assert.equal(git(f.repo, ['show', 'HEAD:other']), 'lane 2');

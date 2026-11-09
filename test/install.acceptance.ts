@@ -35,7 +35,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
   /** Run an isolated consumer command, refusing activation warnings even on success. */
   const run = (cwd: string, bin: string, args: string[]) => {
     if (bin === 'git' && args[0] !== 'init') assertFixtureRepo(cwd);
-    const result = spawnSync(bin, args, { cwd, env: environment(cwd), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    const result = spawnSync(bin, args, { timeout: 300000, cwd, env: environment(cwd), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
     assert.doesNotMatch(result.stdout + result.stderr, /Extension activation failures/);
     assert.equal(result.status, 0, `${bin} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`); return result.stdout;
   };
@@ -186,7 +186,7 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
     invoke(runtime, ['swarm', 'deadlocks', resource, '--action', 'request', '--token', String(reserved.token), '--resources', wanted, '--revision', String(observed.revision), '--apply']);
     assert.deepEqual(invoke(runtime, ['swarm', 'deadlocks']).cycles, []);
     invoke(runtime, ['swarm', 'resource', resource, '--action', 'release', '--token', String(reserved.token)]);
-    const land = spawnSync(runtime, [host, 'swarm', 'land', '--json'], { cwd: repo, env, encoding: 'utf8' });
+    const land = spawnSync(runtime, [host, 'swarm', 'land', '--json'], { timeout: 300000, cwd: repo, env, encoding: 'utf8' });
     assert.equal(land.status, 2); assert.match(land.stdout + land.stderr, /needs a git repository/);
 
     // A terminal item can retain a stale claim after import or explicit override.

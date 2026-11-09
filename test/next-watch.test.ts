@@ -179,7 +179,7 @@ for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines
   git(right.worktree, ['switch', '--detach']);
   const sender = join(f.root, 'sender');
   repoGit(f.root, ['clone', '--branch', right.branch, f.repo, sender]);
-  const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test', PM_SWARM_TEST_POLL_HEARTBEAT: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { timeout: 300000, cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test', PM_SWARM_TEST_POLL_HEARTBEAT: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
   const exit = processExit(child, 'exit'); t.after(() => { child.kill('SIGKILL'); });
   let output = ''; let error = ''; child.stdout.on('data', data => { output += String(data); }); child.stderr.on('data', data => { error += String(data); });
   /** Decode only complete frames so separate pipe chunks cannot race assertions. */

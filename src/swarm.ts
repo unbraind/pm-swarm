@@ -24,6 +24,7 @@ import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 import { recoveryItem } from './recovery.ts';
+import { assertCloseIntentSettled } from './close.ts';
 
 /** Every acquisition and following fallible step before a Git start receipt is returned. */
 export const START_TRANSITIONS = ['claimed', 'claim_read', 'branch_created', 'worktree_created', 'configured', 'published', 'receipt'] as const;
@@ -130,8 +131,9 @@ export class Swarm {
   private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease) {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
-    if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
+    if (local !== null) { assertPrivatePathSafe({ ...local.item, body: local.body }, 'document'); assertCloseIntentSettled(this, local.item); }
     const initial = await clientMutationSnapshot(this.pmRoot, this.client, id, async canonicalId => (await requireActiveExtensionRead(() => readItem(this.client, canonicalId))).item); const item = initial.item;
+    assertCloseIntentSettled(this, item);
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
@@ -397,7 +399,7 @@ export class Swarm {
       await commitMutation({ tests, at: nowIso() }, admitted => acknowledgeLinkedTests(join(path, '.agents/pm'), admitted.tests, admitted.at));
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
       const environment: NodeJS.ProcessEnv = { ...gitEnvironment(), PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
-      const result = spawnSync(process.execPath, [fileURLToPath(runner)], { cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
+      const result = spawnSync(process.execPath, [fileURLToPath(runner)], { timeout: 3600000, cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
       if (result.status !== 0 || result.stdout !== JSON.stringify({ passed: true })) throw new Error(`Linked tests failed for ${id}: ${result.stderr}`);
     } finally { try { if (existsSync(join(path, '.git'))) git(this.repo, ['worktree', 'remove', '--force', path]); } finally { rmSync(directory, { recursive: true, force: true }); } }
   }
@@ -412,8 +414,8 @@ export class Swarm {
     const removed: string[] = []; const released: string[] = [];
     const cleanup: { id: string; action: string }[] = []; const refused: { id: string; reason: string }[] = [];
     for (const lane of lanes) {
-      if (!lane.terminal || spawnSync('git', ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)], { cwd: this.repo, env: gitEnvironment() }).status !== 0) continue;
-      const pathResult = spawnSync('git', ['config', '--local', '--get', `swarm.lane.${lane.id}`], { cwd: this.repo, env: gitEnvironment(), encoding: 'utf8' });
+      if (!lane.terminal || spawnSync('git', ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)], { timeout: 3600000, cwd: this.repo, env: gitEnvironment() }).status !== 0) continue;
+      const pathResult = spawnSync('git', ['config', '--local', '--get', `swarm.lane.${lane.id}`], { timeout: 3600000, cwd: this.repo, env: gitEnvironment(), encoding: 'utf8' });
       const path = pathResult.stdout.trimEnd();
       const worktrees = git(this.repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0');
       const matching = worktrees.find(entry => entry.split('\0').includes(`branch refs/heads/${lane.branch}`));

@@ -43,7 +43,9 @@ close with the exact original author, token and note automatically compensates
 it and returns `swarm_close_compensated`, so compensation restores are supported
 behavior. Unowned or mismatched episodes, legacy markers and prior native closes
 from another request still refuse with `swarm_close_recovery_unsupported`; there
-is no free-text ownership inference. See [native close](native-close.md).
+is no free-text ownership inference. A durable committed receipt replays its saved
+result; a lost return after commit reports `swarm_partial_commit` and never
+starts compensation. See [native close](native-close.md).
 
 The deterministic generation seed is `0xf37c9a21`; generated counters exceed the
 safe-number ceiling and remain exact strings. Adversarial coverage includes:

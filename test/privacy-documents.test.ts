@@ -84,7 +84,7 @@ test('the native SDK guard rechecks peer-modified documents across writers on on
     const value = encodeURIComponent(['', 'home', 'private', 'peer-document'].join('/')); let peerHistory = '';
     await assert.rejects(commitItemMutation({ id, item, options: { author: 'shared-test' }, note: 'Public update', files: ['src/added.ts'] }, async admitted => {
       const args = field === 'comments' ? [f.host, 'comment', id, value, '--json'] : [f.host, 'update', id, `--${field}`, value, '--json'];
-      const peer = spawnSync(process.execPath, args, { cwd: f.repo, encoding: 'utf8', env: { ...f.env, PATH: process.env.PATH } });
+      const peer = spawnSync(process.execPath, args, { timeout: 300000, cwd: f.repo, encoding: 'utf8', env: { ...f.env, PATH: process.env.PATH } });
       assert.equal(peer.status, 0, 'Independent core writer failed');
       peerHistory = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
       switch (writer) {

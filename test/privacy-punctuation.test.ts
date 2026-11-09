@@ -44,7 +44,7 @@ for(const value of [path,"Here's "+path,'['+path+']','"'+path+'"','flag"'+path+'
 const cases=[['semicolon-parent',home.replace('/profiles/','/pad;name/../profiles/')+'/project'],['prose-apostrophe',"Here's "+home.replace('/profiles/',"/pad'name/../profiles/")+'/project'],['unmatched-bracket','['+home.replace('/profiles/','/pad]name/../profiles/')+'/project]'],['json-quoted-parent',JSON.stringify({path:home.replace('/profiles/','/pad"name/../profiles/')+'/project'})]];
 for(const [name,value]of cases)if(!scanMutationSecrets(value).some(finding=>finding.rule==='absolute_home_path'))missed.push(name);
 process.stdout.write(JSON.stringify({checks,sdk_misses:missed,package_refusals:cases.length}));`;
-  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: '', PROBE_HOME: home } });
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', code], { timeout: 300000, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: '', PROBE_HOME: home } });
   assert.equal(result.status, 0, result.stderr.replaceAll(home, '[configured-home]'));
   const receipt = JSON.parse(result.stdout) as { checks: number; sdk_misses: string[]; package_refusals: number };
   assert.equal(receipt.checks, 72); assert.equal(receipt.package_refusals, 4);

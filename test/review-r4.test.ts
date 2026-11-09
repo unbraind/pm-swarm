@@ -82,7 +82,7 @@ for (const scenario of ['early failure', 'early clean exit', 'after ready', 'spa
       'intentional kill': "process.send({event:'ready', id:'task', agent:'worker'}); setInterval(()=>{}, 1000)",
     };
     writeFileSync(script, scripts[scenario]);
-    const child = fork(script, [], { execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'], ...(scenario === 'spawn error' ? { execPath: join(root, 'missing-node') } : {}) });
+    const child = fork(script, [], { timeout: 300000, execArgv: [], stdio: ['ignore', 'ignore', 'pipe', 'ipc'], ...(scenario === 'spawn error' ? { execPath: join(root, 'missing-node') } : {}) });
     t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
     const phases: string[] = []; const worker = monitorScaleWorker(child, (agent, phase) => phases.push(`${agent}:${phase}`));
     if (scenario === 'completed' || scenario === 'intentional kill') {

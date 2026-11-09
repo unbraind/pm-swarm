@@ -7,6 +7,7 @@ import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { assertCompensated, closeBytes, closeOutcomeRow, closeProcess } from './close-recovery-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { fixtureGit } from './git-helpers.ts';
 
 for (const transfer of ['handoff', 'reclaim']) test(`real processes close received ${transfer} work with a durable receipt and reject the prior owner`, async t => {
   const f = await sharedFixture(t); const id = await f.item(['src/public.ts']);
@@ -97,4 +98,50 @@ test('a malformed close intent refuses ownership changes with the typed transfer
   const refusal = (refused.refused as { id: string; code?: string; reason: string }[]).find(row => row.id === id);
   assert.ok(refusal, JSON.stringify(refused)); assert.equal(refusal.code, 'swarm_close_transfer_refused');
   assert.deepEqual(closeBytes(f, [id]), original);
+});
+
+/** Interrupt a real close, optionally reopen it through a peer, and retain the pending ownership state. */
+async function interruptedTransferFixture(t: Parameters<typeof sharedFixture>[0], phase: 'applying' | 'compensating' | 'malformed') {
+  const f = await sharedFixture(t); const id = await f.item(); const claim = await f.shared.start(id);
+  const killed = closeProcess(f, id, claim.token, phase === 'compensating' ? { fail: 'before_commit', kill: { boundary: 'compensating' } } : { kill: { boundary: 'intent' } });
+  assert.equal(killed.signal, 'SIGKILL', killed.stdout + killed.stderr);
+  // A peer may reopen a terminal primary before its pending compensation is reconciled.
+  if (phase === 'compensating') await f.client.update(id, { force: true, status: 'in_progress', assignee: 'shared-test' });
+  if (phase === 'malformed') await f.client.update(id, { force: true, field: [`${CLOSE_INTENT}=malformed`] });
+  else assert.equal(JSON.parse(String((await f.client.get(id)).item[CLOSE_INTENT])).phase, phase);
+  return { f, id, claim };
+}
+
+for (const phase of ['applying', 'compensating', 'malformed'] as const) test(`every transfer surface preserves a ${phase} close episode on a non-Git tracker`, { timeout: 180000 }, async t => {
+  const { f, id, claim } = await interruptedTransferFixture(t, phase);
+  const pending = closeBytes(f, [id]);
+  const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+  await assert.rejects(f.shared.start(id), { code: 'swarm_close_transfer_refused' });
+  await assert.rejects(f.shared.handoff(id, 'receiver', 'Public transfer', claim.token), { code: 'swarm_close_transfer_refused' });
+  for (const dry of [true, false]) for (const to of [undefined, 'receiver']) {
+    const result = await receiver.reclaim(0.000001, to, dry);
+    assert.deepEqual(result.recovered, []);
+    assert.deepEqual(result.refused.map(row => ({ id: row.id, code: row.code })), [{ id, code: 'swarm_close_transfer_refused' }]);
+    for (const json of [false, true]) {
+      const attempt = f.cli('swarm', 'reclaim', '--stale-after', '0.000001', '--agent', 'receiver', ...(to ? ['--to', to] : []), ...(dry ? ['--dry-run'] : []), ...(json ? ['--json'] : []));
+      assert.equal(attempt.status, 0, attempt.stdout + attempt.stderr);
+      assert.match(attempt.stdout, /swarm_close_transfer_refused/);
+      assert.match(attempt.stdout, new RegExp(id));
+    }
+  }
+  for (const json of [false, true]) for (const args of [['start', id], ['handoff', id, '--token', claim.token, '--to', 'receiver', '--note', 'Public transfer']]) {
+    const attempt = f.cli('swarm', ...args, ...(json ? ['--json'] : []));
+    assert.notEqual(attempt.status, 0); assert.match(attempt.stdout + attempt.stderr, /swarm_close_transfer_refused/);
+  }
+  assert.deepEqual(closeBytes(f, [id]), pending);
+});
+
+for (const phase of ['applying', 'compensating', 'malformed'] as const) test(`Git lane acquisition preserves a ${phase} close episode`, async t => {
+  const { f, id } = await interruptedTransferFixture(t, phase);
+  fixtureGit(f.repo, ['init', '-b', 'main']);
+  fixtureGit(f.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '--allow-empty', '-m', 'Fixture base']);
+  const before = closeBytes(f, [id]);
+  await assert.rejects(f.shared.engine.start(id), { code: 'swarm_close_transfer_refused' });
+  assert.deepEqual(closeBytes(f, [id]), before);
+  assert.equal(fixtureGit(f.repo, ['branch', '--format=%(refname:short)']).trim(), 'main');
 });

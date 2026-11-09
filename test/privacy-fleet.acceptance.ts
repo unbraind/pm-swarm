@@ -15,7 +15,7 @@ test('every tracked relative fleet path is allowed bare and within prose or Mark
   const shapes = { parentheses: 0, brackets: 0, slots: 0, spaces: 0 };
   for (const entry of readdirSync(fleet, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const result = spawnSync('git', ['-C', join(fleet, entry.name), 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } });
+    const result = spawnSync('git', ['-C', join(fleet, entry.name), 'ls-files', '-z'], { timeout: 300000, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } });
     if (result.status !== 0) { skipped++; continue; }
     repositories++; inventory.update(entry.name).update('\0').update(result.stdout);
     for (const path of result.stdout.split('\0').filter(Boolean)) {

@@ -15,7 +15,7 @@ import { branchExists } from '../src/git.ts';
 
 /** Make independent native peer mutations without inheriting this request's admission scope. */
 function peerCommand(f: Awaited<ReturnType<typeof fixture>>, ...args: string[]): void {
-  const result = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), '--path', f.pmRoot, ...args, '--author', 'swarm-test', '--json'], { cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_SOURCE_WORKSPACE_ROOT: f.repo, PM_SOURCE_PM_PATH: f.pmRoot, PM_GLOBAL_PATH: join(f.root, 'global-pm') }), encoding: 'utf8' });
+  const result = spawnSync(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), '--path', f.pmRoot, ...args, '--author', 'swarm-test', '--json'], { timeout: 300000, cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_SOURCE_WORKSPACE_ROOT: f.repo, PM_SOURCE_PM_PATH: f.pmRoot, PM_GLOBAL_PATH: join(f.root, 'global-pm') }), encoding: 'utf8' });
   assert.equal(result.status, 0, result.stdout + result.stderr);
 }
 

@@ -268,7 +268,7 @@ function runC8(root: string, config: CoverageGateConfig, inventory: SourceInvent
       "--test-concurrency=2",
       ...config.tests,
     ],
-    { cwd: root, env, stdio: "inherit" },
+    { timeout: 3600000, cwd: root, env, stdio: "inherit" },
   );
   if (result.error !== undefined) throw new CoverageGateFailure(`failed to start the c8 reporter: ${result.error.message}`);
   return result.status ?? 1;

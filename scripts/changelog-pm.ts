@@ -10,7 +10,7 @@ import { isMainInvocation } from './main-invocation.ts';
  */
 export function runChangelogPm(args: string[], host = fileURLToPath(new URL('../node_modules/.bin/pm', import.meta.url))): number {
   const full = args.includes('list') && args.includes('--all') ? ['--full'] : [];
-  const result = spawnSync(process.execPath, [host, ...args, ...full], { stdio: 'inherit' });
+  const result = spawnSync(process.execPath, [host, ...args, ...full], { timeout: 300000, stdio: 'inherit' });
   return result.status ?? 1;
 }
 

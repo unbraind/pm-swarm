@@ -201,7 +201,7 @@ test('no-git watch emits lanes and overlap changes, ignores age-only changes and
   await f.client.release(b);
   assert.ok(statusChanges(changed, await f.shared.status()).some(row => row.event === 'overlap_resolved'));
   const controller = new AbortController(); await watchStatus(f.shared, 2000, controller.signal, () => controller.abort());
-  const child = spawn(process.execPath, [f.host, 'swarm', 'status', '--watch', '--json'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [f.host, 'swarm', 'status', '--watch', '--json'], { timeout: 300000, cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => child.kill('SIGKILL')); const exit = processExit(child, 'exit'); let output = ''; let error = '';
   child.stdout.setEncoding('utf8').on('data', (data: string) => { output += data; });
   child.stderr.setEncoding('utf8').on('data', (data: string) => { error += data; });
