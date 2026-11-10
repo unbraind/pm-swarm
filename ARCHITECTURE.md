@@ -21,7 +21,7 @@ Canonical target identity is checked before considering any earlier generation
 retired, so a copied receipt cannot authorize fresh work on another item.
 Its immutable plan contains a random, SDK-validated `compensation_id`, canonical
 primary ID, author, token, note and complete admitted member list. Each member
-records its native restore version, pre-close item-byte digest, document hash
+records its native restore version, pre-close SDK document digest, document hash
 and native history head. No document body or history message is copied into the
 intent. The final successful update also clears handoff/claim metadata and advances the
 decimal fencing generation, while the journal retains the original request token.
@@ -83,8 +83,12 @@ directories. If a restore commits before its progress update, its immutable
 native receipt supplies the missing progress on retry. If the final primary
 restore removes the intent field or restores an older committed intent, retained
 native history still supplies the newest plan and final receipt. Discovery skips
-restore-entry values so an older restored field cannot mask newer compensation. Item bytes, including timestamps, return exactly to the
-pre-close version; successful history events and refusal evidence are retained.
+restore-entry values so an older restored field cannot mask newer compensation.
+The SDK-normalized document, including timestamps, returns to the pre-close
+version; storage spelling such as CRLF, BOM and trailing whitespace may normalize.
+Successful history events and refusal evidence are retained. Existing v3 raw-digest
+fields stay in immutable signed plans, but canonical admission identity is
+reconstructed from their certified native history rather than original file bytes.
 
 Every restore compares its captured history head under that member's native
 writer lock. The final primary restore also holds native locks on the restored
@@ -106,7 +110,8 @@ protocol's proof, including legacy transaction markers, remain manual recovery.
 
 Validation uses real non-Git trackers, OS-process SIGKILL at forward and reverse
 boundaries with one to three dependents, independent peer ABA writers, copied
-identity controls, exact native-byte oracles, and packed npm/Bun consumers.
+identity controls, native document oracles across equivalent disk encodings,
+and packed npm/Bun consumers.
 Coverage and privacy admission thresholds remain unchanged.
 
 On POSIX filesystems, barriers sync native files and parent directories. On Windows,

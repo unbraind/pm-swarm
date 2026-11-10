@@ -42,8 +42,12 @@ retirement first. The fresh invocation's final guarded native update
 clears handoff/claim metadata and advances a fenced generation once; legacy
 null-token completion preserves the prior token. The intent retains
 the original request token for replay. An interrupted forward call compensates dependents before the primary,
-then returns `swarm_close_compensated`. The exact pre-close item bytes, including
-native timestamps, are restored with append-only compensation history.
+then returns `swarm_close_compensated`. The SDK-normalized pre-close document,
+including native timestamps, is restored with append-only compensation history.
+Recovery compares native document hashes, not raw storage bytes: equivalent CRLF,
+UTF-8 BOM and trailing whitespace/newline spellings may normalize on restore.
+Genuine content changes still refuse. Existing v3 raw-digest plans remain readable;
+their authoritative normalized identity comes from certified admission history.
 
 Compensation first rediscovers the native intent and checks the primary's exact
 history head before writing. Rediscovery must match every immutable plan field,

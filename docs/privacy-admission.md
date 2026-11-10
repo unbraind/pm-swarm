@@ -352,8 +352,10 @@ Runtime publication uses exclusive temporary creation and removes only its own
 temporary, even when rename or post-pin request cleanup fails.
 
 Non-Git tests kill real processes at every instrumented native close and
-compensation boundary with one to three dependents. Recovery certifies exact
-original item bytes, retained audit history and no duplicate restores. Peer edits,
+compensation boundary with one to three dependents. Recovery certifies the
+SDK-normalized original document and timestamps, retained audit history and no
+duplicate restores. Storage-only line endings, BOM and trailing whitespace may
+normalize during native restore. Peer edits,
 ABA histories and copied identities refuse before overwriting foreign state.
 A completed receipt can return `swarm_partial_commit` when its response or
 required durability confirmation is unavailable. Retry its original author,

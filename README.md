@@ -129,8 +129,9 @@ A malformed intent requires explicit inspection of native history and the
 registered field; retrying the original request cannot reconcile it. A saved
 `committed` receipt replays without another item write. An interrupted forward call
 compensates its certified native mutations: dependents first, blocker last.
-`swarm_close_compensated` means exact pre-close item bytes were restored while
-all audit history remains. Repeated recovery adds no duplicate restores. A new
+`swarm_close_compensated` means the SDK-normalized pre-close document, including
+its timestamps, was restored while all audit history remains. Storage-only CRLF,
+BOM and whitespace differences may normalize during native restore. Repeated recovery adds no duplicate restores. A new
 claim generation can then begin another completion attempt. Replay requires the
 matching native primary close entry as well as signed receipts; a peer-created
 key and journal alone cannot certify completion or dependent compensation.

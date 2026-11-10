@@ -1,7 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
-import { deriveMutationTransactionId, getHistoryPath, getItemAt, hashHistoryStream, locateItem, readHistoryEntries, readSettings, replayHistoryToTarget, replayToCanonicalItemDocument, resolveItemTypeRegistry, validateWorkspaceTransactionIdentity, verifyHistoryEntries } from '@unbrained/pm-cli/sdk';
+import { deriveMutationTransactionId, getHistoryPath, getItemAt, hashDocument, hashHistoryStream, locateItem, readHistoryEntries, readLocatedItem, readSettings, replayHistoryToTarget, replayToCanonicalItemDocument, resolveItemTypeRegistry, validateWorkspaceTransactionIdentity, verifyHistoryEntries } from '@unbrained/pm-cli/sdk';
 import type { Swarm } from './swarm.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { assertItemHistoryHead, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, syncNativeArtifacts } from './settings.ts';
@@ -58,26 +56,29 @@ export function parseCloseJournal(engine: Swarm, value: unknown): CloseJournal {
   } catch { throw new SettingsRefusal('swarm_close_recovery_unsupported', 'The close intent is malformed or unsupported. Preserve native history and inspect the registered close field before retrying.', 'close'); }
 }
 /** Resolve storage only through the SDK's current type registry, including custom item types. */
-async function memberPath(engine: Swarm, id: string): Promise<string> {
+async function memberLocation(engine: Swarm, id: string) {
   const settings = await readSettings(engine.pmRoot);
   const located = await locateItem(engine.pmRoot, id, settings.id_prefix, settings.item_format, resolveItemTypeRegistry(settings).type_to_folder);
   if (located === null) throw new SettingsRefusal('swarm_compensation_partial', 'A lifecycle member is unavailable. Preserve all remaining members and inspect native history.', 'close');
-  return located.itemPath;
+  return located;
 }
-/** Hash the actual native item bytes; restore acceptance never ignores native timestamps. */
-export async function memberDigest(engine: Swarm, id: string): Promise<string> { return createHash('sha256').update(await readFile(await memberPath(engine, id))).digest('hex'); }
+/** Hash the SDK-normalized document, retaining content and timestamps while ignoring storage spelling. */
+export async function memberDigest(engine: Swarm, id: string): Promise<string> {
+  const settings = await readSettings(engine.pmRoot);
+  return hashDocument((await readLocatedItem(await memberLocation(engine, id), { schema: settings.schema })).document);
+}
 /** Flush native artifacts and supported parent-directory barriers without rewriting a journal file. */
 export async function syncCloseMember(engine: Swarm, id: string): Promise<void> {
-  const item = await memberPath(engine, id); const history = getHistoryPath(engine.pmRoot, id);
+  const item = (await memberLocation(engine, id)).itemPath; const history = getHistoryPath(engine.pmRoot, id);
   await syncNativeArtifacts([item, history]);
 }
-/** Capture canonical identity, history-before-document admission and an exact byte restore target. */
+/** Capture canonical identity, history-before-document admission and the native normalized restore target. */
 export async function captureCloseMember(engine: Swarm, id: string, admit = true) {
   const snapshot = await clientMutationSnapshot(engine.pmRoot, engine.client, id);
   const history = await readHistoryEntries(getHistoryPath(engine.pmRoot, String(snapshot.item.id)), String(snapshot.item.id));
   const view = await getItemAt(String(snapshot.item.id), history.at(-1)!.ts, { pmRoot: engine.pmRoot });
   if (view.as_of_version === null) throw new SettingsRefusal('swarm_close_recovery_unsupported', 'The native close history has no stable version mapping. Preserve it for explicit inspection.', 'close');
-  const member: CloseMember = { id: String(snapshot.item.id), version: view.as_of_version, head: snapshot.historyHead, digest: await memberDigest(engine, String(snapshot.item.id)), document_hash: history.at(-1)!.after_hash };
+  const member: CloseMember = { id: String(snapshot.item.id), version: view.as_of_version, head: snapshot.historyHead, digest: hashDocument(view.document), document_hash: history.at(-1)!.after_hash };
   // The native identity read proved ordinal mapping; retaining the same head also retains that mapping.
   await assertItemHistoryHead(engine.pmRoot, member.id, member.head);
   if (documentFingerprint(snapshot.item) !== documentFingerprint({ ...view.document.metadata, body: view.document.body })) throw new SettingsRefusal('swarm_document_changed', 'Refresh the complete native lifecycle snapshot before closing.', 'document');
@@ -156,7 +157,10 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
     if (changed ? post === undefined || post.head.length !== forwardEnd || post.head.hash !== hashHistoryStream(entries.slice(0, forwardEnd)) : post !== undefined) throw foreign();
   }
   const view = historical ?? { document: replayToCanonicalItemDocument(replayHistoryToTarget(entries, entries.length - 1), { schema }) };
-  if (documentFingerprint(snapshot.item) !== documentFingerprint({ ...view.document.metadata, body: view.document.body }) || through === undefined && (restored || !changed) && await memberDigest(engine, member.id) !== member.digest) throw foreign();
+  // Older v3 plans retain an opaque raw digest in their signed identity. Reconstruct the authoritative
+  // admitted document from certified history instead; native restore cannot reproduce its original bytes.
+  const admitted = replayToCanonicalItemDocument(replayHistoryToTarget(entries, member.head.length - 1), { schema });
+  if (documentFingerprint(snapshot.item) !== documentFingerprint({ ...view.document.metadata, body: view.document.body }) || through === undefined && (restored || !changed) && await memberDigest(engine, member.id) !== hashDocument(admitted)) throw foreign();
   return { item: snapshot.item, history: snapshot.historyHead, changed, restored, forwarded };
 }
 /** Verify one member with a freshly authenticated native proposal snapshot. */
