@@ -80,3 +80,12 @@ test('active recovery guides distinguish fresh execution, compensation and durab
     assert.doesNotMatch(source, /fresh-close\/read-only-refusal|interrupted closes? (?:always )?refuse|closes? never restore/i, file);
   }
 });
+
+// `undefined` is an intentional valid JavaScript expression placeholder, including the review example.
+test('embedded interpolation placeholders parse expressions and still detect missing deadlines', () => {
+  const interpolation = '${argument}';
+  for (const timeout of [', { timeout: 1 }', '']) {
+    const source = 'const program = `' + ['sp', 'awn'].join('') + '(' + interpolation + ', []' + timeout + ');`;';
+    assert.equal(unboundedChildren(source, 'interpolated').length, timeout === '' ? 1 : 0);
+  }
+});

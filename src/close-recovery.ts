@@ -1,3 +1,4 @@
+import { retainFailureCause } from './failure-cause.ts';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import type { KeyObject } from 'node:crypto';
 import { acquireLockLease, indexBlockedByIds, deriveMutationTransactionId, runWithAgentSessionContext, validateWorkspaceTransactionIdentity } from '@unbrained/pm-cli/sdk';
@@ -127,7 +128,7 @@ export async function compensateClose(engine: Swarm, lease: Lease, journal: Clos
       try { const state = await inspectCloseMember(engine, journal, member); if (state.restored) restored.push(member.id); else if (state.changed) pending.push(member.id); }
       catch { pending.push(member.id); }
     }
-    throw new CloseCompensation(restored, pending.length > 0 ? pending : restored);
+    throw retainFailureCause(new CloseCompensation(restored, pending.length > 0 ? pending : restored), error);
   }
 }
 /** Immutable plan captured through native reads; native close alone decides which dependents to mutate. */
@@ -154,7 +155,7 @@ export async function replayCommittedClose(engine: Swarm, journal: CloseJournal)
     return { id: journal.id, closed: true, ...(journal.warnings!.length > 0 ? { warnings: journal.warnings } : {}) };
   } catch (error) {
     if (error instanceof SettingsRefusal) throw error;
-    throw new SettingsRefusal('swarm_partial_commit', `The close committed for item ${journal.id}. Durability confirmation is unavailable; preserve native history and retry the original request after storage recovers.`, 'close');
+    throw retainFailureCause(new SettingsRefusal('swarm_partial_commit', `The close committed for item ${journal.id}. Durability confirmation is unavailable; preserve native history and retry the original request after storage recovers.`, 'close'), error);
   }
 }
 /** The final native primary restore is authoritative even when lease cleanup or its return was lost. */
@@ -189,5 +190,7 @@ export async function applyClose(engine: Swarm, lease: Lease, prepared: Awaited<
     await retireCloseProposals(engine, journal); closeBoundary('proofs_retired', journal.id);
     closeBoundary('committed', journal.id);
     return { id: journal.id, closed: true, ...(journal.warnings!.length > 0 ? { warnings: journal.warnings } : {}) };
-  } catch { return compensateClose(engine, lease, journal); }
+  } catch (failure) {
+    return compensateClose(engine, lease, journal).catch((outcome: unknown) => { throw retainFailureCause(outcome, failure); });
+  }
 }

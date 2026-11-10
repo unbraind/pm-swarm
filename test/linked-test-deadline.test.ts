@@ -8,7 +8,7 @@ import { linkedTestDeadline } from '../src/child-deadlines.ts';
 test('the linked-test coordinator preserves explicit long budgets and supplies a bounded default', () => {
   assert.equal(linkedTestDeadline([]), 300000);
   assert.equal(linkedTestDeadline([{}]), 3900000);
-  assert.equal(linkedTestDeadline([{ timeout_seconds: 7200 }, {}, { timeout_seconds: 30 }]), 14700000);
+  assert.equal(linkedTestDeadline([{ timeout_seconds: 7200 }, {}, { timeout_seconds: 30 }]), 11130000);
 });
 
 test('every generated linked-test sequence fits inside its coordinator deadline', () => {
@@ -20,7 +20,7 @@ test('every generated linked-test sequence fits inside its coordinator deadline'
       tests.push(seed % 3 === 0 ? {} : { timeout_seconds: 1 + seed % 86400 });
     }
     const declared = tests.reduce((total, entry) => total + (entry.timeout_seconds ?? 3600) * 1000, 0);
-    assert.ok(linkedTestDeadline(tests) >= declared + 300000, JSON.stringify(tests));
+    assert.equal(linkedTestDeadline(tests), declared + 300000, JSON.stringify(tests));
     assert.ok(Number.isSafeInteger(linkedTestDeadline(tests)));
   }
 });

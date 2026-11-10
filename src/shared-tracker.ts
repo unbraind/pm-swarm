@@ -12,7 +12,7 @@ import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem } from './recovery.ts';
 import { clientMutationSnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
-import { completeClaim, assertCloseIntentSettled } from './close.ts';
+import { completeClaim, assertCloseIntentSettled, closeIntentSettled } from './close.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -162,7 +162,7 @@ export class SharedTracker {
   /** Admit the complete prospective receiver receipt before caching a token or announcing liveness. */
   private async incomingHandoff(items: Awaited<ReturnType<Swarm['corpus']>>['items'], parent: string | undefined, dryRun: boolean, policy?: FairPolicy) {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-    const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
+    const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string' && closeIntentSettled(this.engine, item));
     if (incoming === undefined) return undefined;
     policy?.handoff(incoming);
     const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);

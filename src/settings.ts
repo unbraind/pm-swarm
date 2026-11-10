@@ -1,3 +1,4 @@
+import { retainFailureCause } from './failure-cause.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { open } from 'node:fs/promises';
@@ -43,7 +44,7 @@ export function assertPrivatePathSafe(value: unknown, field = 'value'): void {
 /** Portable refusal details cross package copies without relying on cross-module instanceof checks. */
 interface AdmissionRefusal { code: SettingsRefusalCode; remedy: string; field?: string }
 /** One admitted document and its verified native successors travel through the host commit. */
-interface ItemAdmissionScope { related?: Map<string, ItemAdmissionScope>; id: string; expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; history?: ItemHistoryHead; beforeWrite?: () => Promise<void>; onPrepared?: (before: ItemDocument, after: ItemDocument, operation: string, history: ItemHistoryHead) => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
+interface ItemAdmissionScope { failure?: unknown; related?: Map<string, ItemAdmissionScope>; id: string; expected: string; pending?: string; committed: number; refusal?: AdmissionRefusal; generation?: { token: unknown }; history?: ItemHistoryHead; beforeWrite?: () => Promise<void>; onPrepared?: (before: ItemDocument, after: ItemDocument, operation: string, history: ItemHistoryHead) => Promise<void>; onCommitted?: (before: ItemDocument, after: ItemDocument) => void }
 /** Observable boundaries cover the complete handoff from checked snapshot into the host's atomic writer. */
 export const ITEM_MUTATION_BOUNDARIES = ['admitted', 'scoped', 'before_commit'] as const;
 /** Trusted request-local instrumentation may observe or interrupt transitions, never replace SDK results. */
@@ -120,8 +121,8 @@ export function commitItemMutation<Payload extends { id: string; options: unknow
       await checkpoint?.('scoped');
       await checkpoint?.('before_commit');
       try { return await commit(admitted); } catch (error) {
-        if (scope.committed > 0 && options.transaction !== true) throw new SettingsRefusal('swarm_partial_commit', `${scope.committed} native item mutation(s) already committed; inspect the current tracker before retrying. ${scope.refusal?.remedy ?? 'The SDK refused a later step in its compound operation.'}`, scope.refusal?.field);
-        if (scope.refusal !== undefined) throw new SettingsRefusal(scope.refusal.code, scope.refusal.remedy, scope.refusal.field);
+        if (scope.committed > 0 && options.transaction !== true) throw retainFailureCause(new SettingsRefusal('swarm_partial_commit', `${scope.committed} native item mutation(s) already committed; inspect the current tracker before retrying. ${scope.refusal?.remedy ?? 'The SDK refused a later step in its compound operation.'}`, scope.refusal?.field), scope.failure ?? error);
+        if (scope.refusal !== undefined) throw retainFailureCause(new SettingsRefusal(scope.refusal.code, scope.refusal.remedy, scope.refusal.field), scope.failure ?? error);
         throw error;
       }
     });
@@ -157,6 +158,8 @@ export const guardItemDocument: BeforeMutationHook = async context => {
     return { allow: true };
   }
   catch (error) {
+    scope.failure = error;
+    primary!.failure = error;
     const refusal = nativePrewriteRefusal(error);
     scope.refusal = { code: refusal.code, remedy: refusal.remedy, field: refusal.field };
     return { allow: false, code: refusal.code, message: refusal.message, remediation: refusal.remedy };

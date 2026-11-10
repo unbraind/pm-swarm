@@ -12,12 +12,35 @@ import { readFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { PmClient, getHistoryPath, getItemPath, readHistoryEntries, getItemAt } from '@unbrained/pm-cli/sdk';
 import { SharedTracker, Swarm, ResourceReservations, trackerResourceBackend, withItemMutationObserver } from 'pm-swarm';
+import { captureCloseMember } from 'pm-swarm/dist/src/close-journal.js';
+import { prepareClose } from 'pm-swarm/dist/src/close-recovery.js';
 const client = new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:'packed-worker'});
 const shared = new SharedTracker(new Swarm(process.cwd(),process.env.PM_PATH,client,'packed-worker'));
+const unsettled=[];
+for(const phase of ['malformed','applying','compensating']){
+  const stuck=(await client.create({type:'Task',title:'Packed unavailable candidate',priority:0,file:['path=src/'+phase+'.ts']})).item.id;
+  const {journal}=await prepareClose(shared.engine,stuck,'Public packed selection',undefined,await captureCloseMember(shared.engine,stuck));
+  await client.update(stuck,{field:['swarm_close_intent='+(phase==='malformed'?'invalid':JSON.stringify({...journal,phase}))]});
+  await assert.rejects(shared.start(stuck),error=>error.code==='swarm_close_transfer_refused');unsettled.push(stuck);
+}
+const ready=(await client.create({type:'Task',title:'Packed available candidate',priority:1,file:['path=src/ready.ts']})).item.id;
+assert.deepEqual((await shared.plan()).suggested_start_set,[ready]);
+assert.equal((await shared.next(undefined,true)).selected,ready);
+assert.equal((await shared.schedule({skills:[],dryRun:true})).selected,ready);
+for(const stuck of unsettled)await client.update(stuck,{assignee:'packed-worker',field:['swarm_token=1','swarm_handoff='+JSON.stringify({token:'1',note:'Public packed receiver'})]});
+for(const command of ['plan','next','schedule'])for(const json of [false,true]){
+  const result=spawnSync(process.execPath,[process.argv[2],'swarm',command,...(command==='plan'?[]:['--dry-run']),...(json?['--json']:[])],{encoding:'utf8',timeout:120000});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  if(json){const receipt=JSON.parse(result.stdout);assert.equal(command==='plan'?receipt.suggested_start_set[0]:receipt.selected,ready);}else assert.ok(result.stdout.includes(ready));
+}
+assert.equal((await shared.next()).selected,ready);
+for(const stuck of unsettled)assert.equal((await client.get(stuck)).item.assignee,'packed-worker');
+for(const selected of [...unsettled,ready])await client.close(selected,'Public packed selection verified');
 const id=(await client.create({type:'Task',title:'Packed durable close recovery'})).item.id;
 const claim=await shared.start(id);const nativeClose=client.close.bind(client);let stopped=false;
-client.close=new Proxy(nativeClose,{async apply(target,receiver,args){const result=await Reflect.apply(target,receiver,args);stopped=true;throw new Error('Lost native close return');}});
-try{await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>error.code==='swarm_close_compensated');}finally{client.close=nativeClose;}
+const lostClose=new Error('Lost native close return');
+client.close=new Proxy(nativeClose,{async apply(target,receiver,args){await Reflect.apply(target,receiver,args);stopped=true;throw lostClose;}});
+try{await assert.rejects(shared.close(id,'Packed journal proof',claim.token),error=>{assert.equal(error.code,'swarm_close_compensated');let cause=error;while(cause instanceof Error&&cause!==lostClose)cause=cause.cause;assert.equal(cause,lostClose);assert.ok(!JSON.stringify(error).includes(lostClose.message));return true;});}finally{client.close=nativeClose;}
 assert.equal(stopped,true);await client.update(id,{title:'Packed peer survives'});
 const before=[getItemPath(process.env.PM_PATH,'Task',id),getHistoryPath(process.env.PM_PATH,id)].map(path=>readFileSync(path,'utf8'));
 for(let retry=0;retry<3;retry++){

@@ -1,3 +1,4 @@
+import { retainFailureCause } from './failure-cause.ts';
 import { relative, sep } from 'node:path';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, validateWorkspaceTransactionIdentity, getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
 import { inspectItem } from './inspection.ts';
@@ -38,6 +39,10 @@ export function assertCloseIntentSettled(engine: Swarm, item: Record<string, unk
   try { journal = parseCloseJournal(engine, item[CLOSE_INTENT]); }
   catch { throw new SettingsRefusal('swarm_close_transfer_refused', `Item ${id} has a malformed close intent. Preserve native history and reconcile the close explicitly before changing ownership.`, 'close'); }
   if (journal.phase !== 'committed') throw new SettingsRefusal('swarm_close_transfer_refused', `Item ${id} has an interrupted close episode. Retry the original close request with its author, token and note to reconcile it before changing ownership.`, 'close');
+}
+/** Select only ownership-ready work through the same pure guard used by explicit start. */
+export function closeIntentSettled(engine: Swarm, item: Record<string, unknown>): boolean {
+  try { assertCloseIntentSettled(engine, item); return true; } catch { return false; }
 }
 /** Legacy markers identify entries to inspect; they never select an automatic restore target. */
 function refuseLegacyMarker(engine: Swarm, item: Record<string, unknown>): void {
@@ -112,8 +117,8 @@ export async function completeClaim(engine: Swarm, id: string, note: string, tok
       return result;
     });
   } catch (error) {
-    if (committed) throw new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`, true);
+    if (committed) throw retainFailureCause(new CloseRecoveryUnsupported(canonicalId, `history/${canonicalId}.jsonl`, true), error);
     if (error instanceof SettingsRefusal || error instanceof StaleFenceError) throw error;
-    throw new SettingsRefusal('swarm_close_not_committed', `The close result for item ${canonicalId} is unavailable. Preserve native history/${canonicalId}.jsonl and retry the original close request to reconcile its durable intent.`, 'close');
+    throw retainFailureCause(new SettingsRefusal('swarm_close_not_committed', `The close result for item ${canonicalId} is unavailable. Preserve native history/${canonicalId}.jsonl and retry the original close request to reconcile its durable intent.`, 'close'), error);
   }
 }
