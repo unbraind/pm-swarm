@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath, mutateItem } from '@unbrained/pm-cli/sdk';
 import type { PmClient, TestResult, ClaimResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
-import { gitProbe, branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
+import { optionalGitProbe, branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
 import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
@@ -418,8 +418,8 @@ export class Swarm {
     const removed: string[] = []; const released: string[] = [];
     const cleanup: { id: string; action: string }[] = []; const refused: { id: string; reason: string }[] = [];
     for (const lane of lanes) {
-      if (!lane.terminal || gitProbe(this.repo, ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)]).status !== 0) continue;
-      const pathResult = gitProbe(this.repo, ['config', '--local', '--get', `swarm.lane.${lane.id}`]);
+      if (!lane.terminal || optionalGitProbe(this.repo, ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)]).status === 1) continue;
+      const pathResult = optionalGitProbe(this.repo, ['config', '--local', '--get', `swarm.lane.${lane.id}`]);
       const path = pathResult.stdout.trimEnd();
       const worktrees = git(this.repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0');
       const matching = worktrees.find(entry => entry.split('\0').includes(`branch refs/heads/${lane.branch}`));

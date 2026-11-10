@@ -8,6 +8,12 @@ export function gitProbe(repo: string, args: string[], input?: string) {
   if (result.error !== undefined || result.status === null) throw new Error(`git ${args[0]} failed; probe unavailable; inspect repository state`, { cause: result.error });
   return result;
 }
+/** Read a predicate or optional value only when Git reports success or documented absence. */
+export function optionalGitProbe(repo: string, args: string[]) {
+  const result = gitProbe(repo, args);
+  if (result.status !== 0 && result.status !== 1) throw new Error(`git ${args[0]} failed; probe unavailable; inspect repository state`);
+  return result;
+}
 /** Run Git without a shell; all failures use path-free package diagnostics. */
 export function git(repo: string, args: string[], input?: string): string {
   const result = gitProbe(repo, args, input);
@@ -20,7 +26,7 @@ export function commit(repo: string, ref: string): string {
 }
 /** Test existence without converting a missing branch into a command failure. */
 export function branchExists(repo: string, branch: string): boolean {
-  return gitProbe(repo, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
+  return optionalGitProbe(repo, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
 }
 /** Read changed paths relative to the true common ancestor, preserving unusual names. */
 export function changedFiles(repo: string, base: string, branch: string): string[] {
@@ -53,10 +59,10 @@ export function chain(repo: string, left: string, right: string, tree: string): 
 }
 /** Inspect every driver declared by tracked attributes in the worktree's context. */
 export function missingDrivers(repo: string): string[] {
-  const result = gitProbe(repo, ['show', 'HEAD:.gitattributes']);
-  if (result.status !== 0) return ['pm merge attributes'];
-  const attrs = result.stdout;
+  if (optionalGitProbe(repo, ['rev-parse', '--verify', '--quiet', 'HEAD']).status === 1) return ['pm merge attributes'];
+  if (git(repo, ['ls-tree', '--name-only', 'HEAD', '--', '.gitattributes']) === '') return ['pm merge attributes'];
+  const attrs = git(repo, ['show', 'HEAD:.gitattributes']);
   const names = [...new Set([...attrs.matchAll(/merge=(pm-[\w-]+)/g)].map(match => match[1]))];
   if (names.length === 0) return ['pm merge attributes'];
-  return names.filter(name => gitProbe(repo, ['config', '--get', `merge.${name}.driver`]).status !== 0);
+  return names.filter(name => optionalGitProbe(repo, ['config', '--get', `merge.${name}.driver`]).status === 1);
 }
