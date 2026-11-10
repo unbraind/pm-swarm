@@ -70,3 +70,20 @@ test('every unsuccessful fleet probe fails closed except verified non-repository
     finally { hook.mock.restore(); syncBuiltinESMExports(); }
   }
 });
+
+
+test('fleet discovery accepts only complete Git non-repository diagnostics including mount boundaries', t => {
+  const standard = 'fatal: not a git repository (or any of the parent directories): .git';
+  const mount = 'fatal: not a git repository (or any parent up to mount point /)';
+  const boundary = 'Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).';
+  const accepted = [standard, 'fatal: not a git repository: .git', `${mount}\n${boundary}`, `${mount}\r\n${boundary}\r\n`];
+  const rejected = [mount, `${mount}\nStopping at filesystem boundary`, `${mount}\nStopping at filesystem boundary (permission denied).`, `${mount}\n${boundary}\nfatal: corrupt index`, `${standard}\nfatal: permission denied`, `warning: failed\n${standard}`, `${mount}\n${boundary} trailing error`, 'fatal: not a git repository (or any parent up to mount point )\n' + boundary];
+  const original = childProcess.spawnSync;
+  for (const status of [128, 1, 129]) for (const stderr of [...accepted, ...rejected]) {
+    const hook = t.mock.method(childProcess, 'spawnSync', new Proxy(original, { apply() { return { status, signal: null, stdout: '', stderr, pid: 0, output: [] }; } })); syncBuiltinESMExports();
+    try {
+      if (status === 128 && accepted.includes(stderr)) assert.doesNotThrow(() => assert.equal(fleetTrackedPaths('unused'), undefined), stderr);
+      else assert.throws(() => fleetTrackedPaths('unused'), /incomplete inventory cannot pass/, stderr);
+    } finally { hook.mock.restore(); syncBuiltinESMExports(); }
+  }
+});

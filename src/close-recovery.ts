@@ -33,8 +33,11 @@ async function saveJournal(engine: Swarm, lease: Lease, journal: CloseJournal, p
 }
 /** Check every member before a recovery write; retain exact certified heads for the actual native lock. */
 async function inspectDomain(engine: Swarm, journal: CloseJournal): Promise<Map<string, CloseInspection>> {
-  const { states, pending } = await inspectCloseMembers(engine, journal);
-  if (pending.length > 0) throw new CloseCompensation([...states].filter(([, state]) => state.restored).map(([id]) => id), journal.members.filter(member => pending.includes(member.id) || states.get(member.id)?.changed && !states.get(member.id)?.restored).map(member => member.id));
+  const { states, pending, failures } = await inspectCloseMembers(engine, journal);
+  if (pending.length > 0) {
+    const outcome = new CloseCompensation([...states].filter(([, state]) => state.restored).map(([id]) => id), journal.members.filter(member => pending.includes(member.id) || states.get(member.id)?.changed && !states.get(member.id)?.restored).map(member => member.id));
+    throw failures.length > 0 ? retainFailureCause(outcome, failures[0]) : outcome;
+  }
   return states;
 }
 /** Sync every certified restoration before reporting a complete compensation receipt. */

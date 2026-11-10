@@ -234,6 +234,8 @@ function resolveC8Launcher(): string {
 
 /**
  * Run c8 over the configured tests and return the runner's exit status.
+ * Incremental merging releases each raw process report before loading the next,
+ * avoiding the all-reports heap exhaustion seen after a passing Node 26 suite.
  *
  * `NODE_V8_COVERAGE` and `NODE_TEST_CONTEXT` are removed from the child
  * environment: this gate itself runs inside an outer coverage run during the
@@ -254,6 +256,7 @@ function runC8(root: string, config: CoverageGateConfig, inventory: SourceInvent
     [
       runner.script,
       "--all",
+      "--merge-async",
       "--temp-directory",
       join(root, "coverage", "tmp"),
       ...inventory.include.flatMap(pattern => ["--include", pattern]),

@@ -208,3 +208,11 @@ test('canonical decoding reads every escape form and refuses nesting past its bo
   assert.equal(containsPrivatePath(entities(16)), true);
   assert.equal(containsPrivatePath(entities(15)), false);
 });
+
+
+test('privacy evidence guides track the executable sink and locked-history inventories', () => {
+  const privacy = readFileSync(new URL('../docs/privacy-admission.md', import.meta.url), 'utf8');
+  const receipts = readFileSync(new URL('../docs/receipt-and-generation-verification.md', import.meta.url), 'utf8').replace(/\s+/g, ' ');
+  assert.ok(privacy.includes(`**${WRITE_SITES.length} sites × five sources = ${WRITE_SITES.length * 5} refusals**`));
+  assert.ok(receipts.includes(`${WRITE_SITES.length} SDK/backend write sites, including ${HISTORY_SITES.length} locked-history sites`));
+});

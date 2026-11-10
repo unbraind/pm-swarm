@@ -161,14 +161,14 @@ export async function inspectCloseMember(engine: Swarm, journal: CloseJournal, m
   return inspectMember(engine, journal, member, await loadCloseProposals(engine, journal), through);
 }
 /** Authenticate proposals once per complete domain read, retaining every member-level refusal. */
-export async function inspectCloseMembers(engine: Swarm, journal: CloseJournal): Promise<{ states: Map<string, CloseInspection>; pending: string[] }> {
-  const proofs = await loadCloseProposals(engine, journal); const states = new Map<string, CloseInspection>(); const pending: string[] = [];
+export async function inspectCloseMembers(engine: Swarm, journal: CloseJournal): Promise<{ states: Map<string, CloseInspection>; pending: string[]; failures: unknown[] }> {
+  const proofs = await loadCloseProposals(engine, journal); const states = new Map<string, CloseInspection>(); const pending: string[] = []; const failures: unknown[] = [];
   for (const member of journal.members) {
     try { states.set(member.id, await inspectMember(engine, journal, member, proofs)); }
-    catch { pending.push(member.id); }
+    catch (failure) { pending.push(member.id); failures.push(failure); }
   }
   if (!states.get(journal.id)?.forwarded) for (const [id, state] of states) if (id !== journal.id && state.forwarded) pending.push(id);
-  return { states, pending };
+  return { states, pending, failures };
 }
 /** A newer claim retires only a historically certified committed close or final primary restore. */
 

@@ -375,7 +375,7 @@ without maintaining separate Git, file, peer or argument privacy policies.
 
 The inventory cross product supplies actual CLI, Git-diff, settings-file,
 source-file and peer-comment values to every inventoried SDK/backend kind:
-**23 sites × five sources = 115 refusals**, complete tracker/history snapshots,
+**26 sites × five sources = 130 refusals**, complete tracker/history snapshots,
 zero changes and no partial receipt. End-to-end regressions separately exercise
 Git-derived sync, fresh audited foreign settings, shared/Git recovery and real
 handoffs. These properties retain the existing SDK read-cache limitation below;
