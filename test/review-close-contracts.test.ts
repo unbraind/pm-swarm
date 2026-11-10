@@ -49,6 +49,10 @@ test('every package child process, including packed driver children, has its own
     if (program !== undefined) failures.push(...unboundedChildren(JSON.parse(program) as string, `package.json:${name}`));
   }
   assert.deepEqual(failures, []);
+  const scale = readFileSync(new URL('./scale.acceptance.ts', import.meta.url), 'utf8');
+  const budgets = [...scale.matchAll(/\btimeout:\s*(\d+)/g)].map(match => Number(match[1]));
+  assert.equal(budgets.length, 2, 'review every declared scale timeout when the fixture changes');
+  assert.ok(budgets[1] >= budgets[0], 'detached scale workers must retain the declared parent barrier lifetime');
 });
 
 test('child deadline inventory rejects any missing, zero or negative deadline even inside a generated program', () => {
