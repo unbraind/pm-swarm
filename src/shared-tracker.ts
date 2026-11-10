@@ -352,7 +352,7 @@ export class SharedTracker {
         try { recovered.push(await this.transfer(item, to, note, lease, historyHead)); }
         catch (error) {
           if (!(error instanceof SettingsRefusal)) throw error;
-          refused.push(error.code === 'swarm_superseded' ? { id: row.id, code: error.code, reason: 'superseded: Native history advanced; preserve the peer claim and refresh before recovery' } : error.code === 'swarm_close_transfer_refused' ? { id: row.id, code: error.code, reason: 'Pending or malformed close intent; retry the original close request to reconcile it before transferring ownership' } : { id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
+          refused.push(error.code === 'swarm_superseded' ? { id: row.id, code: error.code, reason: 'superseded: Native history advanced; preserve the peer claim and refresh before recovery' } : error.code === 'swarm_close_transfer_refused' ? { id: row.id, code: error.code, reason: error.message } : { id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
         }
       }
       return { dry_run: dryRun, recovered, refused };

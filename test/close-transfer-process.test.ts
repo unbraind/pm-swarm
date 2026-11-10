@@ -52,7 +52,7 @@ test('an interrupted close intent refuses reclaim, handoff and new claims until 
     const preview = f.run('swarm', 'reclaim', '--stale-after', '1', '--to', 'receiver', ...(dry ? ['--dry-run'] : []));
     const refusal = (preview.refused as { id: string; code?: string; reason: string }[]).find(row => row.id === id);
     assert.ok(refusal, JSON.stringify(preview)); assert.equal(refusal.code, 'swarm_close_transfer_refused');
-    assert.match(refusal.reason, /close intent/i);
+    assert.match(refusal.reason, /interrupted close episode.*Retry the original close request/);
   }
   const handoff = as('crash-worker', 'swarm', 'handoff', id, '--author', 'crash-worker', '--token', token, '--to', 'receiver', '--note', 'Public handoff');
   assert.notEqual(handoff.status, 0); assert.match(handoff.stdout + handoff.stderr, /swarm_close_transfer_refused/);
@@ -91,6 +91,7 @@ test('a malformed close intent refuses ownership changes with the typed transfer
   const claim = await peer.start(id);
   await f.client.update(id, { force: true, field: [`${CLOSE_INTENT}=not a journal`] });
   const original = closeBytes(f, [id]);
+  await assert.rejects(peer.close(id, 'Public original request', claim.token), { code: 'swarm_close_recovery_unsupported' });
   await assert.rejects(f.shared.start(id), { code: 'swarm_close_transfer_refused' });
   await assert.rejects(peer.handoff(id, 'receiver', 'Public handoff', claim.token), { code: 'swarm_close_transfer_refused' });
   await delay(1200);
@@ -120,13 +121,17 @@ for (const phase of ['applying', 'compensating', 'malformed'] as const) test(`ev
   await assert.rejects(f.shared.handoff(id, 'receiver', 'Public transfer', claim.token), { code: 'swarm_close_transfer_refused' });
   for (const dry of [true, false]) for (const to of [undefined, 'receiver']) {
     const result = await receiver.reclaim(0.000001, to, dry);
+    const advice = phase === 'malformed' ? /malformed close intent.*Preserve native history.*explicitly/ : /interrupted close episode.*Retry the original close request/;
+    assert.match(result.refused[0].reason, advice);
+    if (phase === 'malformed') assert.doesNotMatch(result.refused[0].reason, /retry/i);
     assert.deepEqual(result.recovered, []);
     assert.deepEqual(result.refused.map(row => ({ id: row.id, code: row.code })), [{ id, code: 'swarm_close_transfer_refused' }]);
     for (const json of [false, true]) {
       const attempt = f.cli('swarm', 'reclaim', '--stale-after', '0.000001', '--agent', 'receiver', ...(to ? ['--to', to] : []), ...(dry ? ['--dry-run'] : []), ...(json ? ['--json'] : []));
       assert.equal(attempt.status, 0, attempt.stdout + attempt.stderr);
       assert.match(attempt.stdout, /swarm_close_transfer_refused/);
-      assert.match(attempt.stdout, new RegExp(id));
+      assert.ok(attempt.stdout.includes(id));
+      assert.match(attempt.stdout, advice);
     }
   }
   for (const json of [false, true]) for (const args of [['start', id], ['handoff', id, '--token', claim.token, '--to', 'receiver', '--note', 'Public transfer']]) {

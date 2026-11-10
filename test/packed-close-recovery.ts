@@ -55,10 +55,12 @@ for(const phase of ['applying','compensating','malformed']){
   await assert.rejects(shared.handoff(id,'receiver','Packed transfer',claim.token),error=>error.code==='swarm_close_transfer_refused');
   const receiver=new SharedTracker(new Swarm(process.cwd(),root,client,'receiver'));
   for(const dry of [true,false])for(const to of [undefined,'receiver']){
-    const result=await receiver.reclaim(0.000001,to,dry);assert.deepEqual(result.recovered,[]);assert.equal(result.refused.find(row=>row.id===id)?.code,'swarm_close_transfer_refused');
+    const result=await receiver.reclaim(0.000001,to,dry);assert.deepEqual(result.recovered,[]);const refusal=result.refused.find(row=>row.id===id);assert.equal(refusal?.code,'swarm_close_transfer_refused');
+    const advice=phase==='malformed'?/malformed close intent.*Preserve native history.*explicitly/:/interrupted close episode.*Retry the original close request/;
+    assert.match(refusal.reason,advice);if(phase==='malformed')assert.doesNotMatch(refusal.reason,/retry/i);
     for(const json of [false,true]){
       const replay=spawnSync(process.execPath,[process.argv[3],'swarm','reclaim','--stale-after','0.000001','--author','receiver',...(to?['--to',to]:[]),...(dry?['--dry-run']:[]),...(json?['--json']:[])],{encoding:'utf8',timeout:120000});
-      assert.equal(replay.status,0,replay.stdout+replay.stderr);assert.ok(replay.stdout.includes('swarm_close_transfer_refused'),replay.stdout);transferRefusals++;
+      assert.equal(replay.status,0,replay.stdout+replay.stderr);assert.ok(replay.stdout.includes('swarm_close_transfer_refused'),replay.stdout);assert.match(replay.stdout,advice);transferRefusals++;
     }
   }
   assert.deepEqual(bytes(),before);await client.delete(id,{force:true});

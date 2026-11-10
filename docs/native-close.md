@@ -6,9 +6,11 @@ reading the complete decision document and checks that same head under the
 native item writer lock. Legitimate handoff/reclaim receipts select the current
 owner and generation; stale tokens, bodies and peer ABA histories still refuse.
 A pending or malformed close intent refuses handoff, reclaim and new claims with
-`swarm_close_transfer_refused` until the exact original request reconciles it;
-a committed receipt stays transferable because a newer fencing generation retires
-it at fresh admission.
+`swarm_close_transfer_refused`. Retry the exact original request to reconcile a
+valid pending intent. A malformed intent requires explicit inspection of native
+history and the registered field before transfer; retrying the original request
+cannot reconcile it. A committed receipt stays transferable because a newer
+fencing generation retires it at fresh admission.
 
 The close protocol and transition table are specified in
 [ARCHITECTURE](../ARCHITECTURE.md). The primary item's registered

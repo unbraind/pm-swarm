@@ -13,6 +13,9 @@ interface SyntaxNode {
 /** Child-process APIs share the deadline contract across direct, namespace and computed calls. */
 const CHILD_APIS = ['spawn', 'spawnSync', 'fork', 'execFile', 'execFileSync', 'exec', 'execSync'];
 
+/** Fixed child API syntax is compiled once; input text never supplies regex syntax. */
+const CHILD_CALL = /\b(?:spawn|spawnSync|fork|execFile|execFileSync|exec|execSync)\s*(?:['"]\])?\s*(?:\?\.)?\s*\(/;
+
 /** Resolve direct and member call names, including optional and string-computed members. */
 function callName(node: SyntaxNode | undefined): string | undefined {
   if (node?.type === 'Identifier') return node.name;
@@ -56,7 +59,7 @@ function unboundedChildren(source: string, label: string): string[] {
       embedded = node.quasis![0].value.cooked;
       for (const [index, expression] of node.expressions!.entries()) embedded += interpolation(expression, embedded) + node.quasis![index + 1].value.cooked;
     }
-    if (embedded !== undefined && new RegExp('\\b(?:' + CHILD_APIS.join('|') + ')\\s*(?:[\'"]\\])?\\s*(?:\\?\\.)?\\s*\\(').test(embedded)) {
+    if (embedded !== undefined && CHILD_CALL.test(embedded)) {
       failures.push(...unboundedChildren(embedded, `${label}:embedded`));
     }
     for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
@@ -103,6 +106,12 @@ test('active recovery guides distinguish fresh execution, compensation and durab
   assert.match(applying, /retry.*compensat/);
   for (const file of ['journal-and-acquisition-verification.md', 'receipt-and-generation-verification.md', 'native-close.md']) {
     const source = readFileSync(new URL(`../docs/${file}`, import.meta.url), 'utf8');
+    if (file === 'native-close.md') {
+      const admission = source.split('\n\n')[1];
+      assert.match(admission, /exact original request to reconcile a\s+valid pending intent/);
+      assert.match(admission, /malformed intent requires explicit inspection/);
+      assert.match(admission, /retrying the original request\s+cannot reconcile it/);
+    }
     assert.match(source, /swarm_close_compensated/, file);
     assert.match(source, /swarm_partial_commit/, file);
     assert.match(source, /committed.*receipt|receipt.*committed/s, file);
@@ -141,5 +150,26 @@ test('embedded import and export interpolation preserves syntax and deadline det
         assert.equal(unboundedChildren(source, 'module-interpolation').length, timeout === '' ? 1 : 0, source);
       }
     }
+  }
+});
+
+
+test('deadline visitor uses fixed regex literals rather than rebuilding patterns from variables', () => {
+  const source = readFileSync(new URL('./review-close-contracts.test.ts', import.meta.url), 'utf8');
+  const ast = parse(source, { sourceType: 'module', plugins: ['typescript'] });
+  const failures: string[] = [];
+  /** Reject regex construction anywhere in the deadline inventory, including its recursive visitor. */
+  const visit = (raw: unknown): void => {
+    if (typeof raw !== 'object' || raw === null) return;
+    if (Array.isArray(raw)) { raw.forEach(visit); return; }
+    const node = raw as SyntaxNode;
+    if (['NewExpression', 'CallExpression'].includes(node.type) && node.callee?.name === 'RegExp') failures.push('runtime regex construction');
+    Object.values(raw).forEach(visit);
+  };
+  visit(ast);
+  assert.deepEqual(failures, []);
+  for (const api of CHILD_APIS) for (const member of [api, `cp.${api}`, `cp['${api}']`, `cp?.${api}`, `cp.${api}?.`]) {
+    assert.equal(CHILD_CALL.test(`${member}('program');`), true, member);
+    assert.equal(CHILD_CALL.test(`${member}('program');`), true, 'repeated matching must be stateless');
   }
 });

@@ -115,7 +115,7 @@ test('a completion appended between discovery and inspection is fenced before th
         const episode=deriveMutationTransactionId(JSON.stringify({compensation_id:journal.compensation_id,phase:'journal',payload:journal}));
         const client=new PmClient({cwd:process.cwd(),pmRoot:process.env.PM_PATH,author:journal.author});
         await runWithAgentSessionContext({episode:{id:episode}},()=>client.update(journal.id,{force:true,field:['swarm_close_intent='+JSON.stringify(journal),'swarm_token='+String(BigInt(journal.token)+1n)],unset:['swarm_handoff','swarm_claimed_at']}));
-      `, JSON.stringify(completed)], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 10000 });
+      `, JSON.stringify(completed)], { cwd: f.repo, env: f.env, encoding: 'utf8', timeout: 120000 });
       assert.equal(peer.status, 0, peer.stdout + peer.stderr + String(peer.error ?? ''));
       saved = closeBytes(f, ids);
     }

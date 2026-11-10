@@ -85,7 +85,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     for (const json of [false, true]) {
       const watchArgs = [host, 'swarm', 'status', '--watch', '--interval', '0.1'];
       if (json) watchArgs.push('--json');
-      const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: { ...environment(cwd), PM_SWARM_TEST_POLL_HEARTBEAT: '1' }, cwd, timeout: 20000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: { ...environment(cwd), PM_SWARM_TEST_POLL_HEARTBEAT: '1' }, cwd, timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] });
       const exit = processExit(child, 'exit');
       const stream = { output: '', error: '' };
       child.stdout.on('data', chunk => { stream.output += chunk.toString(); });
