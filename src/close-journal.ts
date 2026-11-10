@@ -5,7 +5,7 @@ import { deriveMutationTransactionId, getHistoryPath, getItemAt, hashHistoryStre
 import type { Swarm } from './swarm.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { assertItemHistoryHead, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, syncNativeArtifacts } from './settings.ts';
-import { clientMutationSnapshot, readItemIdentity } from './inspection.ts';
+import { clientMutationSnapshot } from './inspection.ts';
 import { loadCloseProposals, validCloseResult } from './close-proofs.ts';
 import type { SignedCloseProposal } from './close-proofs.ts';
 
@@ -104,15 +104,18 @@ export async function discoverCloseJournal(engine: Swarm, id: string, current: u
 export interface CloseInspection { item: Record<string, unknown>; history: ItemHistoryHead; changed: boolean; restored: boolean; forwarded: boolean }
 /** Verify an uninterrupted native receipt chain; copied prose, author equality and ABA never suffice. */
 async function inspectMember(engine: Swarm, journal: CloseJournal, member: CloseMember, proofs: readonly SignedCloseProposal[], through?: number): Promise<CloseInspection> {
+  // A committed dependent is certified at its saved post-head, or its pre-head if untouched.
+  // Later work belongs to that dependent's owner; only the primary must still match live state.
+  through ??= journal.phase === 'committed' && member.id !== journal.id ? journal.post.find(post => post.id === member.id)?.head.length ?? member.head.length : undefined;
   const current = through === undefined ? await clientMutationSnapshot(engine.pmRoot, engine.client, member.id) : undefined;
-  const canonical = current?.item.id ?? (await readItemIdentity(engine.client, member.id)).item.id;
+  const canonical = current?.item.id ?? member.id;
   if (canonical !== member.id) throw new SettingsRefusal('swarm_compensation_partial', 'The recovery member identity is not canonical. Preserve its native history and inspect the close intent.', 'close');
   const complete = await readHistoryEntries(getHistoryPath(engine.pmRoot, member.id), member.id);
   const entries = through === undefined ? complete : complete.slice(0, through);
   const historical = through === undefined ? undefined : await getItemAt(member.id, String(member.version + entries.length - member.head.length), { pmRoot: engine.pmRoot });
   const snapshot = historical === undefined ? current! : { item: { ...historical.document.metadata, body: historical.document.body }, historyHead: { length: entries.length, hash: hashHistoryStream(entries) } };
   const foreign = () => new SettingsRefusal('swarm_compensation_partial', `Native history for lifecycle member ${member.id} was superseded. Preserve peer edits; inspect restored and pending members before retrying.`, 'close');
-  if (!verifyHistoryEntries(entries).ok || hashHistoryStream(entries.slice(0, member.head.length)) !== member.head.hash || entries.length !== snapshot.historyHead.length || entries[member.head.length - 1]?.after_hash !== member.document_hash) throw foreign();
+  if (snapshot.item.id !== member.id || through !== undefined && entries.length !== through || !verifyHistoryEntries(entries).ok || hashHistoryStream(entries.slice(0, member.head.length)) !== member.head.hash || entries.length !== snapshot.historyHead.length || entries[member.head.length - 1]?.after_hash !== member.document_hash) throw foreign();
   const { schema } = await readSettings(engine.pmRoot);
   let changed = false; let restored = false; let forwarded = false; let previous: CloseJournal | undefined; let forwardEnd = member.head.length;
   for (const [offset, entry] of entries.slice(member.head.length).entries()) {

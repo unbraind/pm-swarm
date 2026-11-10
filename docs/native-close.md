@@ -33,8 +33,12 @@ request identity or fencing generations refuse before any new close or restore.
 Retry with the original author, token and note. Pending recovery is selected
 before terminal status and current ownership checks because native close may
 already have removed the assignee. A committed result replays its saved warning
-receipt without waiting for an operation pin, completing any lost native proof-cache
-retirement first. Its final guarded native update
+receipt without waiting for an operation pin. Dependent histories are checked only
+through the signed completion heads (or admitted pre-heads for unchanged members);
+later claims, progress and completion by their owners preserve that receipt. The
+primary still has to match its live native history and the result signature must
+verify. Replay completes any lost native proof-cache
+retirement first. The fresh invocation's final guarded native update
 clears handoff/claim metadata and advances a fenced generation once; legacy
 null-token completion preserves the prior token. The intent retains
 the original request token for replay. An interrupted forward call compensates dependents before the primary,

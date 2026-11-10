@@ -7,7 +7,7 @@ import type { Lease } from './lease.ts';
 import { commitItemMutation, commitMutation, SettingsRefusal } from './settings.ts';
 import type { CloseInspection, CloseJournal, CloseMember } from './close-journal.ts';
 import { CLOSE_INTENT, captureCloseMember, closeBoundary, closeEpisode, closePlanIdentity, discoverCloseJournal, inspectCloseMember, inspectCloseMembers, parseCloseJournal, syncCloseMember } from './close-journal.ts';
-import { loadCloseProposals, recordCloseProposal, retireCloseProposals, signCloseResult } from './close-proofs.ts';
+import { loadCloseProposals, recordCloseProposal, retireCloseProposals, signCloseResult, validCloseResult } from './close-proofs.ts';
 
 /** Typed recovery outcome retains member-level progress without exposing documents or storage coordinates. */
 export class CloseCompensation extends SettingsRefusal {
@@ -152,8 +152,10 @@ export async function prepareClose(engine: Swarm, id: string, note: string, toke
 /** Replay certified completion before abandoned pins, retiring only its remaining native proof cache. */
 export async function replayCommittedClose(engine: Swarm, journal: CloseJournal): Promise<{ id: string; closed: true; warnings?: string[] }> {
   try {
-    const states = await inspectDomain(engine, journal);
-    for (const [id, state] of states) if (state.changed) await syncCloseMember(engine, id);
+    if (!validCloseResult(journal)) throw new SettingsRefusal('swarm_compensation_partial', 'The committed close receipt cannot be authenticated. Preserve native history and inspect its saved result.', 'close');
+    await inspectDomain(engine, journal);
+    // Dependents were synced before this receipt committed. Their current files now belong to later work.
+    await syncCloseMember(engine, journal.id);
     await retireCloseProposals(engine, journal);
     return { id: journal.id, closed: true, ...(journal.warnings!.length > 0 ? { warnings: journal.warnings } : {}) };
   } catch (error) {
