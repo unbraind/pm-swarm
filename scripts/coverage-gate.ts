@@ -248,6 +248,7 @@ function runC8(root: string, config: CoverageGateConfig, inventory: SourceInvent
   delete env.NODE_V8_COVERAGE;
   delete env.NODE_TEST_CONTEXT;
   const excludes = [...C8_EXCLUDES, ...(config.skipDirs ?? []).map(name => `**/${name}/**`)];
+  const timeout = 3600000;
   const result = spawnSync(
     runner.executable,
     [
@@ -268,9 +269,12 @@ function runC8(root: string, config: CoverageGateConfig, inventory: SourceInvent
       "--test-concurrency=2",
       ...config.tests,
     ],
-    { timeout: 3600000, cwd: root, env, stdio: "inherit" },
+    { timeout, cwd: root, env, stdio: "inherit" },
   );
-  if (result.error !== undefined) throw new CoverageGateFailure(`failed to start the c8 reporter: ${result.error.message}`);
+  if (result.error !== undefined) {
+    if ((result.error as NodeJS.ErrnoException).code === "ETIMEDOUT") throw new CoverageGateFailure(`the c8 coverage run exceeded its ${timeout} ms deadline; inspect the runner output above.`);
+    throw new CoverageGateFailure(`failed to start the c8 reporter: ${result.error.message}`);
+  }
   return result.status ?? 1;
 }
 

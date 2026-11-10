@@ -42,3 +42,18 @@ test('the real merged-test child receives every declared test budget plus coordi
   finally { installSpawn(original); }
   assert.deepEqual(deadlines, [11100000], 'a fixed coordinator cap truncates the declared two-hour test budget');
 });
+
+
+test('fractional linked-test budgets always produce valid whole millisecond deadlines without truncation', () => {
+  let seed = 0x81de;
+  for (let count = 1; count <= 200; count++) {
+    const tests = Array.from({ length: count % 21 + 1 }, () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return { timeout_seconds: seed / 1048576 + 0.0000001 };
+    });
+    const exact = tests.reduce((total, entry) => total + entry.timeout_seconds * 1000, 300000);
+    const deadline = linkedTestDeadline(tests);
+    assert.ok(Number.isSafeInteger(deadline), 'spawnSync requires an integer timeout');
+    assert.ok(deadline >= exact && deadline < exact + 1, 'never truncate the declared aggregate budget');
+  }
+});

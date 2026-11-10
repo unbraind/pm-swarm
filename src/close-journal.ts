@@ -76,7 +76,8 @@ export async function captureCloseMember(engine: Swarm, id: string, admit = true
   const snapshot = await clientMutationSnapshot(engine.pmRoot, engine.client, id);
   const history = await readHistoryEntries(getHistoryPath(engine.pmRoot, String(snapshot.item.id)), String(snapshot.item.id));
   const view = await getItemAt(String(snapshot.item.id), history.at(-1)!.ts, { pmRoot: engine.pmRoot });
-  const member: CloseMember = { id: String(snapshot.item.id), version: view.as_of_version!, head: snapshot.historyHead, digest: await memberDigest(engine, String(snapshot.item.id)), document_hash: history.at(-1)!.after_hash };
+  if (view.as_of_version === null) throw new SettingsRefusal('swarm_close_recovery_unsupported', 'The native close history has no stable version mapping. Preserve it for explicit inspection.', 'close');
+  const member: CloseMember = { id: String(snapshot.item.id), version: view.as_of_version, head: snapshot.historyHead, digest: await memberDigest(engine, String(snapshot.item.id)), document_hash: history.at(-1)!.after_hash };
   // The native identity read proved ordinal mapping; retaining the same head also retains that mapping.
   await assertItemHistoryHead(engine.pmRoot, member.id, member.head);
   if (documentFingerprint(snapshot.item) !== documentFingerprint({ ...view.document.metadata, body: view.document.body })) throw new SettingsRefusal('swarm_document_changed', 'Refresh the complete native lifecycle snapshot before closing.', 'document');

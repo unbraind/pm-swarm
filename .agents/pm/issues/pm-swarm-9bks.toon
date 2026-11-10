@@ -1,0 +1,11 @@
+id: pm-swarm-9bks
+title: Bound coverage reporter memory on Node 26 after a passing source suite
+description: "Prior-head PR 65 CI run https://github.com/unbraind/pm-swarm/actions/runs/42782833349 passed 1189 source tests on Node 26.13.0, then c8 exhausted its approximately 4 GiB V8 heap while generating reports. Node 22 passed. Investigate report aggregation memory and certify the full unchanged 100 percent four-dimension gate on Node 22 and Node 26 without reducing scope, tests or thresholds. This resource issue is separate from the round-five correctness findings."
+type: Issue
+status: open
+priority: 2
+tags[3]: ci,coverage,"gh:unbraind/pm-swarm#65"
+created_at: "2026-11-10T08:52:59.206Z"
+updated_at: "2026-11-10T08:52:59.206Z"
+author: codex-agent
+body: ""
