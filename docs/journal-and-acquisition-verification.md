@@ -36,11 +36,13 @@ and [issue 34](https://github.com/unbraind/pm-swarm/issues/34). Its previous tes
 counts and recovery claims are historical evidence, not the current contract.
 
 A fresh close delegates one native operation, retaining lifecycle changes
-and warnings from core; retrying an existing pending episode compensates it
-instead of delegating another native close. Retrying the exact original author,
-token and note automatically restores the certified pre-close members and returns
+and warnings from core; retrying a valid pending intent compensates it
+instead of delegating another native close. Retrying that intent with the exact
+original author, token and note automatically restores the certified pre-close members and returns
 `swarm_close_compensated`, so a supported retry or a compensating restore is
-expected operator behavior, never evidence of corruption. A prior native close
+expected operator behavior, never evidence of corruption. A malformed intent
+requires explicit inspection of native history and the registered field;
+retrying the original request cannot reconcile it. A prior native close
 from another request, an unowned terminal state, legacy marker or mismatched
 history produces `swarm_close_recovery_unsupported`, naming the canonical item and
 tracker-relative journal entry. Recovery never restores, rewrites or adopts a

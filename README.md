@@ -124,7 +124,9 @@ calling core, it persists a `swarm_close_intent` field containing a unique recov
 identity and immutable member restore targets. Core still owns dependent
 unblocking, Plan policy, blocker-field removal and warning tokens.
 
-Retry an interrupted close with its original author, note and token. A saved
+Retry a valid pending intent with its original author, note and token.
+A malformed intent requires explicit inspection of native history and the
+registered field; retrying the original request cannot reconcile it. A saved
 `committed` receipt replays without another item write. An interrupted forward call
 compensates its certified native mutations: dependents first, blocker last.
 `swarm_close_compensated` means exact pre-close item bytes were restored while

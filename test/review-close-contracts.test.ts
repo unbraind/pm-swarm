@@ -104,8 +104,16 @@ test('active recovery guides distinguish fresh execution, compensation and durab
   const applying = architecture.split('\n').find(line => line.startsWith('| `applying` intent |'))!;
   assert.match(applying, /[Ff]resh.*native close/);
   assert.match(applying, /retry.*compensat/);
+  assert.match(architecture, /Malformed intent.*retrying the original request cannot reconcile it/);
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  assert.match(readme, /valid pending intent/);
+  assert.match(readme, /malformed intent requires explicit inspection/);
+  assert.match(readme, /retrying the original request cannot reconcile it/);
   for (const file of ['journal-and-acquisition-verification.md', 'receipt-and-generation-verification.md', 'native-close.md']) {
     const source = readFileSync(new URL(`../docs/${file}`, import.meta.url), 'utf8');
+    assert.match(source, /valid pending\s+intent/);
+    assert.match(source, /malformed intent\s+requires explicit inspection/);
+    assert.match(source, /retrying the original request\s+cannot reconcile it/);
     if (file === 'native-close.md') {
       const admission = source.split('\n\n')[1];
       assert.match(admission, /exact original request to reconcile a\s+valid pending intent/);

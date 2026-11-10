@@ -13,6 +13,7 @@ Neither an author name nor a fencing token is an authentication credential.
 | `compensating` intent | Restore pending dependents, then the primary | Skip certified restores and continue |
 | Primary restored | Its native restore receipt certifies compensation | Return `swarm_close_compensated` without writes |
 | Foreign history or unavailable storage | Preserve existing state | Return `swarm_compensation_partial` with restored/pending IDs |
+| Malformed intent | Preserve native history and inspect the registered field; retrying the original request cannot reconcile it | Return `swarm_close_recovery_unsupported` |
 | Legacy or unowned history | Require explicit inspection | Return `swarm_close_recovery_unsupported` |
 
 The coordinator is the primary item's registered `swarm_close_intent` string.

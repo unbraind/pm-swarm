@@ -38,10 +38,12 @@ Git; returning no changed fields writes no item or history event. The outer
 lease releases last. Git configuration removal additionally uses the fixed-value
 compare-and-set form, while branch deletion retains its expected object id.
 A peer generation yields typed `swarm_superseded` with a preservation remedy.
-Close delegates one fresh native operation per request; retrying an interrupted
-close with the exact original author, token and note automatically compensates
+Close delegates one fresh native operation per request; retrying a valid pending
+intent with the exact original author, token and note automatically compensates
 it and returns `swarm_close_compensated`, so compensation restores are supported
-behavior. Unowned or mismatched episodes, legacy markers and prior native closes
+behavior. A malformed intent requires explicit inspection of native history and
+the registered field; retrying the original request cannot reconcile it.
+Unowned or mismatched episodes, legacy markers and prior native closes
 from another request still refuse with `swarm_close_recovery_unsupported`; there
 is no free-text ownership inference. A durable committed receipt replays its saved
 result; a lost return after commit reports `swarm_partial_commit` and never
