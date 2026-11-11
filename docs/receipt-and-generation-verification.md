@@ -38,9 +38,16 @@ Git; returning no changed fields writes no item or history event. The outer
 lease releases last. Git configuration removal additionally uses the fixed-value
 compare-and-set form, while branch deletion retains its expected object id.
 A peer generation yields typed `swarm_superseded` with a preservation remedy.
-Close now delegates only fresh native operations. Interrupted or previously
-closed work refuses with `swarm_close_recovery_unsupported`; there is no automatic
-restore or free-text ownership inference. See [native close](native-close.md).
+Close delegates one fresh native operation per request; retrying a valid pending
+intent with the exact original author, token and note automatically compensates
+it and returns `swarm_close_compensated`, so compensation restores are supported
+behavior. A malformed intent requires explicit inspection of native history and
+the registered field; retrying the original request cannot reconcile it.
+Unowned or mismatched episodes, legacy markers and prior native closes
+from another request still refuse with `swarm_close_recovery_unsupported`; there
+is no free-text ownership inference. A durable committed receipt replays its saved
+result; a lost return after commit reports `swarm_partial_commit` and never
+starts compensation. See [native close](native-close.md).
 
 The deterministic generation seed is `0xf37c9a21`; generated counters exceed the
 safe-number ceiling and remain exact strings. Adversarial coverage includes:
@@ -61,8 +68,8 @@ A raw Git peer changing configuration between read and unset retains its value.
 Byte comparisons cover peer item/history and Git resources. No-op cleanup tests
 require exactly claim/release history and prohibit an extra update event.
 
-The current inventory contains 21 SDK/backend write sites, including 15 item
-writers; the five-source sink property checks each one with unchanged durable
+The current inventory contains 26 SDK/backend write sites, including 18
+locked-history sites; the five-source sink property checks each one with unchanged durable
 tracker bytes.
 Existing private-content and benign corpora, real fleet paths, decoder and
 normalization fuzz remain in the release suite. Packed npm and Bun consumers run

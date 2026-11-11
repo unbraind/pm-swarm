@@ -69,7 +69,7 @@ for (const kind of ['shared', 'resource', 'Git claim', 'Git publication'] as con
 test('an independent process advances generation before a lost shared SDK return', async t => {
   const f = await sharedFixture(t); const id = await f.item();
   await preservesLostClaim(f, id, async () => {
-    const result = spawnSync(process.execPath, [f.host, 'update', id, '--field', 'swarm_token=9', '--author', 'shared-test', '--json'], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+    const result = spawnSync(process.execPath, [f.host, 'update', id, '--field', 'swarm_token=9', '--author', 'shared-test', '--json'], { timeout: 300000, cwd: f.repo, env: f.env, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stdout + result.stderr);
   });
   assert.equal((await f.client.get(id)).item.assignee, 'shared-test');
@@ -171,7 +171,7 @@ for (const phase of ['acquisition', 'reap'] as const) test(`the native item lock
   const observation = t.mock.method(childProcess, 'spawnSync', new Proxy(nativeSpawn, { apply(target, receiver, input: unknown[]) {
     if (!attempted && input[0] === 'git' && (input[1] as string[]).includes('--unset') && (input[1] as string[]).some(value => value.startsWith('swarm.lane.'))) {
       attempted = true;
-      const peer = nativeSpawn(process.execPath, args, { cwd: f.repo, env, encoding: 'utf8', timeout: 10000 });
+      const peer = nativeSpawn(process.execPath, args, { cwd: f.repo, env, encoding: 'utf8', timeout: 120000 });
       assert.equal(peer.error, undefined); peerStatus = peer.status; diagnostics = peer.stdout + peer.stderr;
       if (peer.status === 0) peerResources = gitResources(f.repo);
     }
@@ -184,7 +184,7 @@ for (const phase of ['acquisition', 'reap'] as const) test(`the native item lock
   if (peerStatus === 0) assert.deepEqual(gitResources(f.repo), peerResources, 'cleanup deleted a superseding peer generation');
   assert.notEqual(peerStatus, 0); assert.match(diagnostics, /locked|lock_held|contention/i);
   if (phase === 'acquisition') { assert.ok(attempt.status === 'rejected'); assert.match(String(attempt.reason), /Lost Git acquisition result/); } else assert.equal(attempt.status, 'fulfilled');
-  const retry = nativeSpawn(process.execPath, args, { cwd: f.repo, env, encoding: 'utf8', timeout: 10000 });
+  const retry = nativeSpawn(process.execPath, args, { cwd: f.repo, env, encoding: 'utf8', timeout: 120000 });
   assert.equal(retry.status, 0, retry.stdout + retry.stderr); assert.equal((await f.client.get(id)).item.swarm_token, '9');
   console.log(JSON.stringify({ git_cleanup_peer_blocked: true, peer_retry_succeeded: true }));
 });

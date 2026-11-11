@@ -42,7 +42,7 @@ test('50 real CLI agents retain every fenced write and reclaim 13 SIGKILL owners
   const setupMs = performance.now() - start; process.stderr.write(`scale: setup complete (${Math.round(setupMs)} ms), starting 50 agents\n`);
   /** Launch an actual process agent whose individual mutations are actual CLI invocations. */
   const agent = (index: number, iterations: number, barrier: boolean) => {
-    const child = fork(new URL('./scale-worker.ts', import.meta.url), [], { env, execArgv: [], detached: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    const child = fork(new URL('./scale-worker.ts', import.meta.url), [], { timeout: 1800000, env, execArgv: [], detached: true, stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     t.after(() => { if (child.exitCode === null && child.signalCode === null) process.kill(-child.pid!, 'SIGKILL'); });
     const state = monitorScaleWorker(child, (agent, phase) => phases.set(agent, phase));
     child.send({ repo, host, env, agent: `agent-${index}`, iterations, barrier });

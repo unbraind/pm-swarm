@@ -41,7 +41,7 @@ const declaredDrivers = [
 function checkout(name: string, pmOps: "absent" | "pinned" | "stale"): string {
   const directory = join(scratch, name);
   mkdirSync(join(directory, ".agents", "pm"), { recursive: true });
-  assert.equal(spawnSync("git", ["init", "-q"], { cwd: directory, env: gitEnvironment() }).status, 0);
+  assert.equal(spawnSync("git", ["init", "-q"], { timeout: 300000, cwd: directory, env: gitEnvironment() }).status, 0);
   assertFixtureRepo(directory);
   writeFileSync(join(directory, "package.json"), JSON.stringify({ name, type: "module" }));
   copyFileSync(join(root, ".gitattributes"), join(directory, ".gitattributes"));
@@ -78,12 +78,12 @@ function stubPm(name: string, status: number, body = ""): string {
  */
 function prepare(cwd: string, path: string, extraEnv: NodeJS.ProcessEnv = {}): SpawnSyncReturns<string> {
   assertFixtureRepo(cwd);
-  return spawnSync(process.execPath, [launcher], { cwd, encoding: "utf8", env: gitEnvironment({ ...process.env, PATH: path, ...extraEnv }) });
+  return spawnSync(process.execPath, [launcher], { timeout: 300000, cwd, encoding: "utf8", env: gitEnvironment({ ...process.env, PATH: path, ...extraEnv }) });
 }
 
 /** The merge drivers registered in a checkout's LOCAL Git config, by name. */
 function registeredDrivers(cwd: string): string[] {
-  const config = spawnSync("git", ["config", "--local", "--name-only", "--get-regexp", "^merge\\..*\\.driver$"], {
+  const config = spawnSync("git", ["config", "--local", "--name-only", "--get-regexp", "^merge\\..*\\.driver$"], { timeout: 300000,
     cwd,
     env: gitEnvironment(),
     encoding: "utf8",

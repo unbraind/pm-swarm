@@ -1,3 +1,4 @@
+import { retainFailureCause } from './failure-cause.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -8,22 +9,24 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath, mutateItem } from '@unbrained/pm-cli/sdk';
+import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath, mutateItem } from '@unbrained/pm-cli/sdk';
 import type { PmClient, TestResult, ClaimResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
-import { branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
+import { optionalGitProbe, branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
 import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, assertMutationReceipt, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
-import { inspectItem, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
+import { liveItemTypes, inspectItem, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
 import { recoveryItem } from './recovery.ts';
+import { assertCloseIntentSettled, closeIntentSettled } from './close.ts';
+import { linkedTestDeadline } from './child-deadlines.ts';
 
 /** Every acquisition and following fallible step before a Git start receipt is returned. */
 export const START_TRANSITIONS = ['claimed', 'claim_read', 'branch_created', 'worktree_created', 'configured', 'published', 'receipt'] as const;
@@ -64,13 +67,14 @@ export class Swarm {
   /** Use the same certified readiness and ownership rules for plan and next. */
   async readyCandidates(parent?: string, gitLanes = true) {
     const corpus = await this.corpus();
-    const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = resolveItemTypeRegistry(prefs);
+    const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = await liveItemTypes(this.pmRoot, this.repo, prefs);
     const report = computeActionabilityReport(corpus.items, corpus.items, statuses, types);
     const ready = selectActionableEntries(report, statuses, {}, types).ready;
     const candidates: (Candidate & { priority: number; created_at: string })[] = [];
     for (const { item } of ready) {
       if (item.tags.includes(RESOURCE_TAG) || item.status !== statuses.open_status || (gitLanes && item.swarm_branch) || (parent !== undefined && item.parent !== parent)) continue;
       if (item.assignee?.trim()) continue;
+      if (!closeIntentSettled(this, item)) continue;
       candidates.push({ id: item.id, files: itemFootprint(item), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
     }
     return { candidates, corpus };
@@ -130,8 +134,9 @@ export class Swarm {
   private async startLane(id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease) {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
-    if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
+    if (local !== null) { assertPrivatePathSafe({ ...local.item, body: local.body }, 'document'); assertCloseIntentSettled(this, local.item); }
     const initial = await clientMutationSnapshot(this.pmRoot, this.client, id, async canonicalId => (await requireActiveExtensionRead(() => readItem(this.client, canonicalId))).item); const item = initial.item;
+    assertCloseIntentSettled(this, item);
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
@@ -218,7 +223,7 @@ export class Swarm {
       await startTransition('receipt');
       return result;
     } catch (error) {
-      await cleanup();
+      try { await cleanup(); } catch (outcome) { throw retainFailureCause(outcome, error); }
       throw error;
     }
   }
@@ -238,10 +243,10 @@ export class Swarm {
 
   /** Keep every Git cleanup decision and action inside the exact item's native writer lock. */
   private async guardItemCleanup(id: string, item: Record<string, unknown>, history: ItemHistoryHead, lease: Lease, cleanup: () => Promise<void>): Promise<void> {
-    const settings = await readSettings(this.pmRoot);
+    const settings = await readSettings(this.pmRoot); const types = await liveItemTypes(this.pmRoot, this.repo, settings);
     await retryLock(() => commitItemMutation({ id, item, options: { author: this.author }, token: item.swarm_token, history }, admitted => mutateItem({
       pmRoot: this.pmRoot, settings, id: admitted.id, author: admitted.options.author, op: 'update', skipNoop: true, bypassAssigneeConflict: true,
-      extensionFieldNames: Object.keys(admitted.item), typeToFolder: resolveItemTypeRegistry(settings).type_to_folder,
+      extensionFieldNames: Object.keys(admitted.item), typeToFolder: types.type_to_folder,
       mutate: async document => {
         await assertItemHistoryHead(this.pmRoot, admitted.id, admitted.history);
         assertClaimGeneration(document.metadata.swarm_token, admitted.token);
@@ -397,7 +402,8 @@ export class Swarm {
       await commitMutation({ tests, at: nowIso() }, admitted => acknowledgeLinkedTests(join(path, '.agents/pm'), admitted.tests, admitted.at));
       const runner = new URL(`./test-runner${extname(import.meta.filename)}`, import.meta.url);
       const environment: NodeJS.ProcessEnv = { ...gitEnvironment(), PM_SOURCE_WORKSPACE_ROOT: path }; delete environment.NODE_TEST_CONTEXT;
-      const result = spawnSync(process.execPath, [fileURLToPath(runner)], { cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
+      const timeout = linkedTestDeadline(tests);
+      const result = spawnSync(process.execPath, [fileURLToPath(runner)], { timeout, cwd: path, input: JSON.stringify({ tests, pmRoot: join(path, '.agents/pm') }), encoding: 'utf8', env: environment });
       if (result.status !== 0 || result.stdout !== JSON.stringify({ passed: true })) throw new Error(`Linked tests failed for ${id}: ${result.stderr}`);
     } finally { try { if (existsSync(join(path, '.git'))) git(this.repo, ['worktree', 'remove', '--force', path]); } finally { rmSync(directory, { recursive: true, force: true }); } }
   }
@@ -412,8 +418,8 @@ export class Swarm {
     const removed: string[] = []; const released: string[] = [];
     const cleanup: { id: string; action: string }[] = []; const refused: { id: string; reason: string }[] = [];
     for (const lane of lanes) {
-      if (!lane.terminal || spawnSync('git', ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)], { cwd: this.repo, env: gitEnvironment() }).status !== 0) continue;
-      const pathResult = spawnSync('git', ['config', '--local', '--get', `swarm.lane.${lane.id}`], { cwd: this.repo, env: gitEnvironment(), encoding: 'utf8' });
+      if (!lane.terminal || optionalGitProbe(this.repo, ['merge-base', '--is-ancestor', lane.sha, commit(this.repo, lane.target)]).status === 1) continue;
+      const pathResult = optionalGitProbe(this.repo, ['config', '--local', '--get', `swarm.lane.${lane.id}`]);
       const path = pathResult.stdout.trimEnd();
       const worktrees = git(this.repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0');
       const matching = worktrees.find(entry => entry.split('\0').includes(`branch refs/heads/${lane.branch}`));

@@ -10,7 +10,7 @@ test('changelog bridge preserves complete core reads, schema discovery and host 
   const f = await sharedFixture(t); const id = await f.item(['src/linked.ts']);
   const script = join(import.meta.dirname, '../scripts/changelog-pm.ts');
   /** Exercise the actual executable and capture its forwarded SDK output. */
-  const run = (...args: string[]) => spawnSync(process.execPath, [script, ...args], { cwd: f.repo, env: f.env, encoding: 'utf8' });
+  const run = (...args: string[]) => spawnSync(process.execPath, [script, ...args], { timeout: 300000, cwd: f.repo, env: f.env, encoding: 'utf8' });
   const list = run('--pm-path', f.pmRoot, '--output-budget', 'unbounded', '--output-limit', 'unbounded', 'list', '--all', '--json');
   assert.equal(list.status, 0, list.stderr);
   const result = JSON.parse(list.stdout) as { items: { id: string; files: { path: string }[] }[]; omission_receipt: { has_omissions: boolean } };

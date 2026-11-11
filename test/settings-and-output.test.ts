@@ -134,7 +134,7 @@ test('private path guard refuses nested home paths, object keys and Windows path
 
 for (const boundary of boundaries) test(`settings survive SIGKILL at ${boundary} without duplicate audit events`, { timeout: 90000 }, async t => {
   const f = await sharedFixture(t); const operationId = `killed-${boundary}`;
-  const child = fork(new URL('./settings-worker.ts', import.meta.url), [f.pmRoot, boundary, operationId], { env: f.env, execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
+  const child = fork(new URL('./settings-worker.ts', import.meta.url), [f.pmRoot, boundary, operationId], { timeout: 300000, env: f.env, execArgv: [], stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   const exit = processExit(child, 'exit'); let stderr = '';
   child.stderr!.on('data', chunk => { stderr += String(chunk); });
   t.after(() => child.kill('SIGKILL'));

@@ -67,7 +67,7 @@ test('host binding rejects foreign SDK clients and progress reuses the exact nat
   assert.throws(() => assertSdkInstance({}), error => error instanceof SettingsRefusal && error.code === 'swarm_sdk_mismatch');
   assert.equal(new PlanProgress({ cwd: f.repo, pmRoot: f.pmRoot }, sdk.client).client, sdk.client);
   const module = new URL('../src/settings.ts', import.meta.url).href;
-  const child = spawnSync(process.execPath, ['--import', new URL('../dist/src/settings.js', import.meta.url).href, '--input-type=module', '-e', `import {assertSdkInstance} from ${JSON.stringify(module)}; assertSdkInstance(); process.stdout.write('one-sdk');`], { encoding: 'utf8', env: f.env });
+  const child = spawnSync(process.execPath, ['--import', new URL('../dist/src/settings.js', import.meta.url).href, '--input-type=module', '-e', `import {assertSdkInstance} from ${JSON.stringify(module)}; assertSdkInstance(); process.stdout.write('one-sdk');`], { timeout: 300000, encoding: 'utf8', env: f.env });
   assert.equal(child.status, 0, child.stderr.replaceAll(f.repo, '[fixture]')); assert.equal(child.stdout, 'one-sdk');
 });
 
@@ -143,9 +143,9 @@ if(['update','close'].includes(context.op)) globalThis[Symbol.for('pm-swarm.test
   writeFileSync(join(f.pmRoot, 'extensions/pm-swarm/entry.js'), entry);
   const id = await f.item(['src/public.ts']); const receipt = await f.shared.start(id); events.length = 0;
   await f.shared.close(id, 'Public completion', receipt.token);
-  assert.deepEqual(events, ['close'], 'Swarm delegates exactly one primary native close');
+  assert.deepEqual(events, ['update', 'close', 'update'], 'Intent and completion surround exactly one admitted primary native close');
   const item = (await f.client.get(id, { depth: 'full' })).item;
-  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, receipt.token);
+  assert.equal(item.status, 'closed'); assert.equal(item.assignee, undefined); assert.equal(item.swarm_token, String(BigInt(receipt.token) + 1n));
 });
 
 test('compound native writes preserve later peer state and truthfully report an already committed prefix', async t => {

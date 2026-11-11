@@ -33,7 +33,7 @@ for (const kind of ['Git', 'coverage'] as const) test(`fixture canonicalizes a s
   `;
   const env = gitEnvironment({ ...process.env, TMPDIR: alias, TMP: alias, TEMP: alias }); delete env.NODE_TEST_CONTEXT;
   const args = kind === 'Git' ? ['--input-type=module', '-e', script] : ['--test', '--test-name-pattern=coverage gate measures repository-root sources', join(import.meta.dirname, 'tooling.test.ts')];
-  const child = spawnSync(process.execPath, args, { env, encoding: 'utf8' });
+  const child = spawnSync(process.execPath, args, { timeout: 300000, env, encoding: 'utf8' });
   assert.equal(child.status, 0, child.stdout + child.stderr);
 });
 

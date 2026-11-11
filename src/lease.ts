@@ -1,3 +1,4 @@
+import { retainFailureCause } from './failure-cause.ts';
 import { commitMutation, SettingsRefusal } from './settings.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { closeSync, linkSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, renameSync, rmdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -221,7 +222,7 @@ export async function withSwarmLease<T>(pmRoot: string, author: string, operatio
       const failures: unknown[] = [];
       for (const rollback of rollbacks.reverse()) { try { await rollback(); } catch (failure) { failures.push(failure); } }
       const refusal = failures.find(failure => failure instanceof SettingsRefusal || failure instanceof StaleFenceError);
-      if (refusal !== undefined) throw refusal;
+      if (refusal !== undefined) throw retainFailureCause(refusal, error);
       if (failures.length > 0) throw new AggregateError([error, ...failures], 'Operation failed and owned rollback could not be completed; preserve peer state and inspect the remaining resources.');
       throw error;
     }

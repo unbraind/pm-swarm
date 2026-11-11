@@ -127,7 +127,7 @@ test('concurrent real process agents receive exactly one resource reservation', 
   const f = await sharedFixture(t); const id = await resource(f);
   /** Launch a real command on the same non-Git tracker, without a git executable. */
   const attempt = async (agent: string) => {
-    const child = spawn(process.execPath, [f.host, 'swarm', 'resource', id, '--action', 'reserve', '--agent', agent, '--json'], { cwd: f.repo, env: f.env });
+    const child = spawn(process.execPath, [f.host, 'swarm', 'resource', id, '--action', 'reserve', '--agent', agent, '--json'], { timeout: 300000, cwd: f.repo, env: f.env });
     let output = ''; child.stdout.on('data', chunk => { output += String(chunk); }); child.stderr.on('data', chunk => { output += String(chunk); });
     const [code] = await once(child, 'close'); return { code, output };
   };

@@ -84,7 +84,7 @@ test('Git reap rechecks its lease after synchronous cleanup before releasing the
 for (const scenario of ['early failure', 'early clean exit', 'spawn error', 'ready'] as const) {
   test(`lease-holder readiness settles on ${scenario}`, { timeout: 10000 }, async t => {
     const child = spawn(scenario === 'spawn error' ? 'swarm-test-missing-executable' : process.execPath,
-      ['-e', scenario === 'ready' ? "process.stdout.write('ready'); setInterval(() => {}, 1000)" : `process.exit(${scenario === 'early failure' ? 7 : 0})`]);
+      ['-e', scenario === 'ready' ? "process.stdout.write('ready'); setInterval(() => {}, 1000)" : `process.exit(${scenario === 'early failure' ? 7 : 0})`], { timeout: 300000 });
     t.after(() => { if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL'); });
     const closed = new Promise<void>(resolve => { child.once('close', () => resolve()); });
     const holder = monitorLeaseHolder(child);
@@ -103,7 +103,7 @@ for (const scenario of ['early failure', 'early clean exit', 'spawn error', 'rea
 
 for (const event of ['close', 'exit'] as const) {
   test(`deferred ${event} consumers retain spawn failures without unhandled rejections`, async () => {
-    const child = spawn('swarm-test-missing-executable');
+    const child = spawn('swarm-test-missing-executable', [], { timeout: 300000 });
     const closed = new Promise<void>(resolve => { child.once('close', () => resolve()); });
     const exit = processExit(child, event);
     await closed; await turn();

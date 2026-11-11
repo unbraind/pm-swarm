@@ -10,15 +10,15 @@ import { sharedFixture } from './shared-helpers.ts';
 export async function publicCorpus(t: TestContext) {
   const source = process.env.PUBLIC_TRACKER_REPO;
   assert.ok(source, 'Set PUBLIC_TRACKER_REPO to the public pm-ops checkout');
-  const metadata: { private: boolean } = JSON.parse(execFileSync('gh', ['api', 'repos/unbraind/pm-ops'], { encoding: 'utf8' }));
+  const metadata: { private: boolean } = JSON.parse(execFileSync('gh', ['api', 'repos/unbraind/pm-ops'], { timeout: 300000, encoding: 'utf8' }));
   assert.equal(metadata.private, false);
   /** Inspect committed public data without modifying the source checkout. */
-  const inspect = (args: string[]) => execFileSync('git', ['-C', source, ...args], { maxBuffer: 32 * 1024 * 1024 });
+  const inspect = (args: string[]) => execFileSync('git', ['-C', source, ...args], { timeout: 300000, maxBuffer: 32 * 1024 * 1024 });
   const remote = inspect(['remote', 'get-url', 'origin']).toString().trim();
   assert.match(remote, /^https:\/\/github.com\/unbraind\/pm-ops\.git$/);
   const head = inspect(['rev-parse', 'origin/main']).toString().trim();
   const f = await sharedFixture(t);
-  execFileSync('tar', ['-x', '-C', f.repo], { input: inspect(['archive', head, '.agents/pm']) });
+  execFileSync('tar', ['-x', '-C', f.repo], { timeout: 300000, input: inspect(['archive', head, '.agents/pm']) });
   const hashes = new Map<string, string>();
   const entries = readdirSync(f.pmRoot, { recursive: true, withFileTypes: true });
   for (const entry of entries) {

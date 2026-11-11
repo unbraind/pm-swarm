@@ -27,22 +27,31 @@ only that owned temporary; request cleanup remains inside the pin cleanup scope.
 Verification-worktree cleanup encloses creation and still removes its owned
 temporary directory when worktree removal fails.
 
-## Fresh close only
+## Close admission and automatic recovery
 
-The former `swarm-close/v2` coordinator, phase reconstruction and compensation
-implementation are retired from this PR. Commit `0157465` preserves the prototype
+The former `swarm-close/v2` prototype was retired before the current
+native-field intent protocol. Commit `0157465` preserves the prototype
 for the related [durable recovery Feature](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-durable-close-recovery.toon)
 and [issue 34](https://github.com/unbraind/pm-swarm/issues/34). Its previous test
 counts and recovery claims are historical evidence, not the current contract.
 
-Current close delegates one fresh native operation, retaining lifecycle changes
-and warnings from core. A prior native close, terminal state, legacy marker or
-interrupted native return produces `swarm_close_recovery_unsupported`, naming
-the canonical item and tracker-relative journal entry. Retrying never restores,
-rewrites or adopts a close based on author, copied messages or document equality.
-See [native close](native-close.md) for the complete boundary. There is no journal
-inspection SDK gap in this reduced implementation. Native settings registration
-remains separately blocked on [pm-cli#1580](https://github.com/unbraind/pm-cli/issues/1580).
+A fresh close delegates one native operation, retaining lifecycle changes
+and warnings from core; retrying a valid pending intent compensates it
+instead of delegating another native close. Retrying that intent with the exact
+original author, token and note automatically restores the certified pre-close members and returns
+`swarm_close_compensated`, so a supported retry or a compensating restore is
+expected operator behavior, never evidence of corruption. A malformed intent
+requires explicit inspection of native history and the registered field;
+retrying the original request cannot reconcile it. A prior native close
+from another request, an unowned terminal state, legacy marker or mismatched
+history produces `swarm_close_recovery_unsupported`, naming the canonical item and
+tracker-relative journal entry. Recovery never restores, rewrites or adopts a
+close based on author equality, copied messages or document equality alone.
+A durable committed receipt replays its saved result; a lost return after commit
+reports `swarm_partial_commit` and never starts compensation.
+See [native close](native-close.md) for the complete boundary. Configuration access
+is separate from close recovery; [pm-cli#1580](https://github.com/unbraind/pm-cli/issues/1580)
+records the historical SDK settings-reader gap.
 
 ## Behavioral evidence
 
@@ -57,9 +66,11 @@ adopts an unrelated same-author native close and fails the required rejection.
 Selecting history before native ID resolution fails the service-context short-ID
 success case. Removing the prior-close guard permits another close after a peer
 restores an open preimage. Each reverted probe exits 1 behaviorally; restored
-source passes. Tests also kill a real process after native close and prove that
-repeated refusals preserve all item, dependent, journal and peer bytes.
+source passes. Current tests kill real processes at every forward and reverse
+boundary: owned interrupted prefixes compensate, while foreign-history refusals
+preserve all item, dependent, journal and peer bytes.
 
-Packed npm and Bun consumers exercise this same fresh-close/read-only-refusal
-contract. Full release and four-dimensional coverage evidence belongs to the
+Packed npm and Bun consumers exercise fresh close, saved-result replay,
+automatic compensation and peer-preserving refusal on non-Git trackers. Full
+release and four-dimensional coverage evidence belongs to the
 final pushed-head CI run, with unchanged thresholds and at most two test workers.

@@ -14,10 +14,10 @@ import { sharedFixture } from './shared-helpers.ts';
 for (const action of ['publication and reap', 'rollback'] as const) {
   test(`Git checkout slower than the default lease permits ${action}`, { timeout: 240000 }, async t => {
     const f = await fixture(t); const id = await f.item(); f.save();
-    const realGit = spawnSync('which', ['git'], { encoding: 'utf8' }).stdout.trim(); assert.ok(realGit);
+    const realGit = spawnSync('which', ['git'], { timeout: 300000, encoding: 'utf8' }).stdout.trim(); assert.ok(realGit);
     const bin = join(f.root, 'slow-bin'); mkdirSync(bin);
     const log = join(f.root, 'slow-operations');
-    writeFileSync(join(bin, 'git'), `#!${process.execPath}\nimport { spawnSync } from 'node:child_process';\nimport { appendFileSync } from 'node:fs';\nconst args = process.argv.slice(2);\nif (args[0] === 'worktree' && ['add', 'remove'].includes(args[1])) {\n  const before = Date.now(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 31000);\n  appendFileSync(${JSON.stringify(log)}, JSON.stringify({ operation: args[1], elapsed: Date.now() - before }) + '\\n');\n}\nconst result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit' });\nprocess.exit(result.status ?? 1);\n`, { mode: 0o755 });
+    writeFileSync(join(bin, 'git'), `#!${process.execPath}\nimport { spawnSync } from 'node:child_process';\nimport { appendFileSync } from 'node:fs';\nconst args = process.argv.slice(2);\nif (args[0] === 'worktree' && ['add', 'remove'].includes(args[1])) {\n  const before = Date.now(); Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 31000);\n  appendFileSync(${JSON.stringify(log)}, JSON.stringify({ operation: args[1], elapsed: Date.now() - before }) + '\\n');\n}\nconst result = spawnSync(${JSON.stringify(realGit)}, args, { stdio: 'inherit', timeout: 300000 });\nprocess.exit(result.status ?? 1);\n`, { mode: 0o755 });
     process.env.PATH = `${bin}:${process.env.PATH}`;
     const root = '../lanes'; const path = join(f.repo, root, `repo-${id}`);
     if (action === 'rollback') {

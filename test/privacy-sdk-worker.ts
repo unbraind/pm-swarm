@@ -25,7 +25,7 @@ const before = durable();
 function compete(): void {
   assert.equal(injected, false); injected = true;
   const title = input.private ? encodeURIComponent(['', 'home', 'private', 'peer-title'].join('/')) : 'Public peer title';
-  const peer = spawnSync(process.execPath, [input.host, '--no-extensions', 'update', input.id, '--title', title, '--json'], { cwd: input.cwd, encoding: 'utf8', env: process.env });
+  const peer = spawnSync(process.execPath, [input.host, '--no-extensions', 'update', input.id, '--title', title, '--json'], { timeout: 300000, cwd: input.cwd, encoding: 'utf8', env: process.env });
   assert.equal(peer.status, 0, 'Independent peer update must commit');
   peerHistory = readFileSync(getHistoryPath(input.pmRoot, input.id), 'utf8');
   // The native host activates this installed package at its next call. Same-version SDK copies still differ by identity.

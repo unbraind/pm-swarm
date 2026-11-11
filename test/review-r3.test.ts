@@ -26,7 +26,7 @@ async function directorySplit(t: Parameters<typeof fixture>[0], pair = false) {
 
 test('directory split conflict without paths stays visible in status and refuses landing', async t => {
   const f = await directorySplit(t); const base = commit(f.repo, 'main');
-  const raw = spawnSync('git', ['merge-tree', '--write-tree', '--name-only', '-z', '--no-messages', base, f.lane.branch], { cwd: f.repo, env: gitEnvironment(), encoding: 'utf8' });
+  const raw = spawnSync('git', ['merge-tree', '--write-tree', '--name-only', '-z', '--no-messages', base, f.lane.branch], { timeout: 300000, cwd: f.repo, env: gitEnvironment(), encoding: 'utf8' });
   assert.equal(raw.status, 1); assert.deepEqual(raw.stdout.split('\0').slice(1).filter(Boolean), []);
   const status = await f.swarm.status(); assert.equal(status.clean_pairs, 0); assert.equal(status.predictions.length, 1);
   assert.equal(status.predictions[0].clean, false); assert.deepEqual(status.predictions[0].conflicts, []);
@@ -69,7 +69,7 @@ for (const stale of ['missing directory', 'orphan directory']) test(`reap repair
   assert.equal(existsSync(lane.worktree), false); assert.equal(branchExists(f.repo, lane.branch), false);
   assert.deepEqual(preview.cleanup, [{ id, action }]); assert.deepEqual(result.cleanup, [{ id, action }]); assert.deepEqual(result.refused, []);
   const after = git(f.repo, ['worktree', 'list', '--porcelain', '-z']); assert.equal(after.includes(lane.worktree), false); assert.equal(after.includes(other), true);
-  assert.equal(spawnSync('git', ['config', '--get', `swarm.lane.${id}`], { cwd: f.repo, env: gitEnvironment() }).status, 1);
+  assert.equal(spawnSync('git', ['config', '--get', `swarm.lane.${id}`], { timeout: 300000, cwd: f.repo, env: gitEnvironment() }).status, 1);
 });
 
 test('reap refuses config outside root and arbitrary or redirected directories inside root untouched', async t => {
@@ -105,7 +105,7 @@ test('reap refuses active detached and locked worktrees', async t => {
 for (const preflight of [false, true]) test(`landing rechecks pathless conflicts after linked tests change merge config during ${preflight ? 'preflight' : 'execution'}`, async t => {
   const f = await directorySplit(t); const script = 'enable-directory-renames.test.js';
   process.env.SWARM_TEST_CONFIG = join(f.repo, '.git/config');
-  f.write(script, "const {test}=require('node:test');const {execFileSync}=require('node:child_process');test('configure merge',()=>execFileSync('git',['config','--file',process.env.SWARM_TEST_CONFIG,'merge.renames','true']));\n");
+  f.write(script, "const {test}=require('node:test');const {execFileSync}=require('node:child_process');test('configure merge',()=>execFileSync('git',['config','--file',process.env.SWARM_TEST_CONFIG,'merge.renames','true'],{timeout:300000}));\n");
   await f.client.run('test', { id: f.id, options: { add: [`command=node --test ${script}`] } });
   if (preflight) {
     const peer = await f.item(); git(f.repo, ['branch', `swarm/${peer}`, 'main']);

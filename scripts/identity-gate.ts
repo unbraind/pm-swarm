@@ -16,7 +16,7 @@ function gitOutput(root: string, args: readonly string[]): string {
   const directory = mkdtempSync(join(tmpdir(), 'pm-swarm-identity-'));
   try {
     const path = join(directory, 'stdout'); const descriptor = openSync(path, 'w');
-    try { execFileSync('git', [...args], { cwd: root, env: gitEnvironment(), stdio: ['ignore', descriptor, 'pipe'] }); }
+    try { execFileSync('git', [...args], { timeout: 300000, cwd: root, env: gitEnvironment(), stdio: ['ignore', descriptor, 'pipe'] }); }
     finally { closeSync(descriptor); }
     return readFileSync(path, 'utf8').trim();
   } finally { rmSync(directory, { recursive: true, force: true }); }

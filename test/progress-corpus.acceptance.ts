@@ -20,14 +20,14 @@ function fingerprints(root: string): Map<string, string> {
 test('public fleet tracker copy retains every baseline byte during non-Git progress validation', async t => {
   const source = process.env.PUBLIC_TRACKER_REPO;
   assert.ok(source, 'Provide the public pm-ops checkout using PUBLIC_TRACKER_REPO');
-  assert.equal(execFileSync('gh', ['api', 'repos/unbraind/pm-ops', '--jq', '.private'], { encoding: 'utf8' }).trim(), 'false');
+  assert.equal(execFileSync('gh', ['api', 'repos/unbraind/pm-ops', '--jq', '.private'], { timeout: 300000, encoding: 'utf8' }).trim(), 'false');
   /** All Git access is read-only and ends before invoking the progress command. */
-  const inspect = (...args: string[]) => execFileSync('git', ['-C', source, ...args], { encoding: 'utf8' }).trim();
+  const inspect = (...args: string[]) => execFileSync('git', ['-C', source, ...args], { timeout: 300000, encoding: 'utf8' }).trim();
   assert.match(inspect('remote', 'get-url', 'origin'), /github.com[:/]unbraind\/pm-ops(?:\.git)?$/);
   const head = inspect('rev-parse', 'origin/main');
-  const archived = execFileSync('git', ['-C', source, 'archive', head, '.agents/pm'], { maxBuffer: 32 * 1024 * 1024 });
+  const archived = execFileSync('git', ['-C', source, 'archive', head, '.agents/pm'], { timeout: 300000, maxBuffer: 32 * 1024 * 1024 });
   const f = await sharedFixture(t);
-  execFileSync('tar', ['-x', '-C', f.repo], { input: archived });
+  execFileSync('tar', ['-x', '-C', f.repo], { timeout: 300000, input: archived });
   const baseline = fingerprints(f.pmRoot);
   for (const path of baseline.keys()) chmodSync(path, 0o444);
   const start = performance.now();

@@ -24,11 +24,11 @@ function lostClose(client: PmClient, typed: boolean): PmClient {
   } });
 }
 
-for (const typed of [false, true]) test(`lost ${typed ? 'typed' : 'ordinary'} native close return refuses all repair and preserves dependents`, async t => {
+for (const typed of [false, true]) test(`lost ${typed ? 'typed' : 'ordinary'} native close return compensates the native lifecycle and refuses a different request`, async t => {
   const f = await sharedFixture(t); const { id, claim } = await closeClaim(f); const dependent = await blockedDependent(f, id);
   const shared = new SharedTracker(new Swarm(f.repo, f.pmRoot, lostClose(f.client, typed), 'shared-test'));
-  await assert.rejects(shared.close(id, 'Public completion', claim.token), CloseRecoveryUnsupported);
-  assert.equal((await f.client.get(id)).item.status, 'closed'); assert.equal((await f.client.get(dependent)).item.status, 'open');
+  await assert.rejects(shared.close(id, 'Public completion', claim.token), { code: 'swarm_close_compensated' });
+  assert.equal((await f.client.get(id)).item.status, 'open'); assert.equal((await f.client.get(dependent)).item.status, 'blocked');
   const stable = durableSnapshot(f.pmRoot);
   for (const method of ['sdk', 'json', 'toon'] as const) {
     if (method === 'sdk') await assert.rejects(f.shared.close(id, 'Different retry note', claim.token), error => error instanceof CloseRecoveryUnsupported && error.item_id === id && error.journal_entry === `history/${id}.jsonl`);

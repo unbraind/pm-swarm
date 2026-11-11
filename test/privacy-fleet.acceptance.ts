@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { containsPrivatePath } from '../src/privacy.ts';
 import { pathPresentations } from './privacy-path-samples.ts';
+import { fleetTrackedPaths } from './privacy-fleet-helpers.ts';
 
 test('every tracked relative fleet path is allowed bare and within prose or Markdown', t => {
   const fleet = process.env.PUBLIC_FLEET_ROOT ?? resolve(import.meta.dirname, '../../..', 'fleet');
@@ -15,10 +15,10 @@ test('every tracked relative fleet path is allowed bare and within prose or Mark
   const shapes = { parentheses: 0, brackets: 0, slots: 0, spaces: 0 };
   for (const entry of readdirSync(fleet, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
-    const result = spawnSync('git', ['-C', join(fleet, entry.name), 'ls-files', '-z'], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } });
-    if (result.status !== 0) { skipped++; continue; }
-    repositories++; inventory.update(entry.name).update('\0').update(result.stdout);
-    for (const path of result.stdout.split('\0').filter(Boolean)) {
+    const tracked = fleetTrackedPaths(join(fleet, entry.name));
+    if (tracked === undefined) { skipped++; continue; }
+    repositories++; inventory.update(entry.name).update('\0').update(tracked);
+    for (const path of tracked.split('\0').filter(Boolean)) {
       paths++;
       if (/[()]/.test(path)) shapes.parentheses++;
       if (/[[\]]/.test(path)) shapes.brackets++;

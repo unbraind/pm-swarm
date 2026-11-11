@@ -17,6 +17,7 @@
     "dist/",
     "manifest.json",
     "README.md",
+    "ARCHITECTURE.md",
     "LICENSE",
     "CHANGELOG.md"
   ],
@@ -31,7 +32,7 @@
     "docstring": "node scripts/docstring-gate.ts",
     "lint": "node scripts/lint.ts",
     "duplication": "node scripts/duplication-gate.ts",
-    "audit:prod": "node --input-type=module -e \"import { spawnSync } from 'node:child_process'; import { devNull } from 'node:os'; const env = { ...process.env, npm_config_userconfig: devNull, NPM_CONFIG_USERCONFIG: devNull }; for (const key of Object.keys(env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete env[key]; const win = process.platform === 'win32'; const r = spawnSync(win ? 'npm.cmd' : 'npm', ['audit', '--omit=dev', '--ignore-scripts'], { stdio: 'inherit', env, shell: win }); process.exit(r.status ?? 1);\"",
+    "audit:prod": "node --input-type=module -e \"import { spawnSync } from 'node:child_process'; import { devNull } from 'node:os'; const env = { ...process.env, npm_config_userconfig: devNull, NPM_CONFIG_USERCONFIG: devNull }; for (const key of Object.keys(env)) if (key.toLowerCase() === 'npm_config_allow_scripts') delete env[key]; const win = process.platform === 'win32'; const r = spawnSync(win ? 'npm.cmd' : 'npm', ['audit', '--omit=dev', '--ignore-scripts'], { stdio: 'inherit', env, shell: win, timeout: 300000 }); process.exit(r.status ?? 1);\"",
     "pack:dry-run": "npm pack --dry-run",
     "changelog": "pm-changelog --pm-root .agents/pm --mode prepend --output CHANGELOG.md --release-version-from-package --date-from-version --since-previous-tag --until-release-tag --item-url-base https://github.com/unbraind/pm-swarm/blob/main/.agents/pm --respect-item-release --status closed,in_progress --pm-bin ./scripts/changelog-pm.ts --pm-arg=--output-budget --pm-arg=unbounded --pm-arg=--output-limit --pm-arg=unbounded",
     "changelog:full": "pm-changelog --pm-root .agents/pm --mode replace --output CHANGELOG.md --all-release-tags --release-version-from-package --date-from-version --item-url-base https://github.com/unbraind/pm-swarm/blob/main/.agents/pm --respect-item-release --status closed,in_progress --pm-bin ./scripts/changelog-pm.ts --pm-arg=--output-budget --pm-arg=unbounded --pm-arg=--output-limit --pm-arg=unbounded",
@@ -106,6 +107,7 @@
     },
     "docs": [
       "README.md",
+      "ARCHITECTURE.md",
       "CHANGELOG.md"
     ],
     "examples": [

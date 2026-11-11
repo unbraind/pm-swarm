@@ -12,7 +12,7 @@ import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem } from './recovery.ts';
 import { clientMutationSnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
-import { completeClaim } from './close.ts';
+import { completeClaim, assertCloseIntentSettled, closeIntentSettled } from './close.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
 export const SHARED_LAND_REFUSAL = 'pm swarm land needs a git repository: landing merges git branches; in shared-tracker mode work is already on the shared tracker. Use next, sync --files, status and reap.';
@@ -111,6 +111,7 @@ export class SharedTracker {
 
   /** Validate a guard or authoritative client snapshot without recording a claim or read receipt. */
   private async claimState(item: Record<string, unknown>): Promise<string> {
+    assertCloseIntentSettled(this.engine, item);
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot start a terminal item');
@@ -161,7 +162,7 @@ export class SharedTracker {
   /** Admit the complete prospective receiver receipt before caching a token or announcing liveness. */
   private async incomingHandoff(items: Awaited<ReturnType<Swarm['corpus']>>['items'], parent: string | undefined, dryRun: boolean, policy?: FairPolicy) {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-    const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string');
+    const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string' && closeIntentSettled(this.engine, item));
     if (incoming === undefined) return undefined;
     policy?.handoff(incoming);
     const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
@@ -301,6 +302,7 @@ export class SharedTracker {
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
   private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease, history?: ItemHistoryHead) {
+    assertCloseIntentSettled(this.engine, item);
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
     let files: string[];
     try { files = itemFootprint(item); }
@@ -350,7 +352,7 @@ export class SharedTracker {
         try { recovered.push(await this.transfer(item, to, note, lease, historyHead)); }
         catch (error) {
           if (!(error instanceof SettingsRefusal)) throw error;
-          refused.push(error.code === 'swarm_superseded' ? { id: row.id, code: error.code, reason: 'superseded: Native history advanced; preserve the peer claim and refresh before recovery' } : { id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
+          refused.push(error.code === 'swarm_superseded' ? { id: row.id, code: error.code, reason: 'superseded: Native history advanced; preserve the peer claim and refresh before recovery' } : error.code === 'swarm_close_transfer_refused' ? { id: row.id, code: error.code, reason: error.message } : { id: row.id, reason: 'Unsafe foreign context; replace private locations with project-relative references before recovery' });
         }
       }
       return { dry_run: dryRun, recovered, refused };

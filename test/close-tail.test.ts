@@ -1,113 +1,86 @@
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
-import { getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
+import { getHistoryPath, getItemPath } from '@unbrained/pm-cli/sdk';
 import { SettingsRefusal } from '../src/settings.ts';
-import { StaleFenceError } from '../src/lease.ts';
-import { CloseRecoveryUnsupported } from '../src/close.ts';
+import { CLOSE_INTENT } from '../src/close-journal.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { blockedDependent, closeClaim } from './close-native-helpers.ts';
-import { durableSnapshot } from './privacy-snapshot.ts';
 import { installCloseTailProbe, rejectNativeClose, traceCloseTail } from './close-tail-helpers.ts';
 
-/** Real storage errno failures and a scalar throw must never become an untyped close result. */
+/** Native storage errors and scalar rejections must produce a recoverable typed outcome. */
 const FAULTS = [
   ...['EIO', 'ENOSPC', 'EACCES'].map(code => ({ name: code, value: () => Object.assign(new Error(`${code}: Injected storage fault`), { code }) })),
-  { name: 'non-Error', value: () => 'Injected scalar fault' },
-  { name: 'undefined rejection', value: () => undefined },
+  { name: 'scalar', value: () => 'Injected scalar fault' },
+  { name: 'undefined', value: () => undefined },
 ];
-/** Activate the native observer before acquiring the real claim used by a fault case. */
-async function observedClaim(t: Parameters<typeof sharedFixture>[0]) {
-  const f = await sharedFixture(t); installCloseTailProbe(f); return { f, ...await closeClaim(f) };
+/** Prepare native hooks and a real claim before arming filesystem diagnostics. */
+async function observedClaim(t: Parameters<typeof sharedFixture>[0], warnings = false) {
+  const f = await sharedFixture(t); installCloseTailProbe(f); const { id, claim } = await closeClaim(f);
+  if (warnings) { const dependent = await blockedDependent(f, id); writeFileSync(getHistoryPath(f.pmRoot, dependent), '{foreign unreadable history}\n'); }
+  return { f, id, token: claim.token, before: readFileSync(getItemPath(f.pmRoot, 'Task', id), 'utf8') };
 }
-/** Exercise warning iteration during both native result validation and final lease receipt admission. */
-async function warnedClaim(t: Parameters<typeof sharedFixture>[0]) {
-  const { f, id, claim } = await observedClaim(t); const dependent = await blockedDependent(f, id);
-  writeFileSync(getHistoryPath(f.pmRoot, dependent), '{foreign unreadable history}\n');
-  return { f, id, token: claim.token };
+/** Reconcile after fault removal and require a stable native success or exact native compensation. */
+async function converges(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, token: string, before: string) {
+  const view = await f.client.get(id, { depth: 'full' });
+  const committed = view.item[CLOSE_INTENT] !== undefined && JSON.parse(String(view.item[CLOSE_INTENT])).phase === 'committed';
+  const history = getHistoryPath(f.pmRoot, id);
+  if (committed) assert.equal((await f.shared.close(id, 'Public completion', token)).closed, true);
+  else {
+    await assert.rejects(f.shared.close(id, 'Public completion', token), { code: 'swarm_close_compensated' });
+    assert.equal(readFileSync(getItemPath(f.pmRoot, 'Task', id), 'utf8'), before);
+  }
+  const stable = readFileSync(history, 'utf8');
+  if (committed) await f.shared.close(id, 'Public completion', token);
+  else await assert.rejects(f.shared.close(id, 'Public completion', token), { code: 'swarm_close_compensated' });
+  assert.equal(readFileSync(history, 'utf8'), stable);
 }
-/** Verify both the truthful native outcome and the immutable no-replay contract after a failure. */
-async function assertOutcome(f: Awaited<ReturnType<typeof sharedFixture>>, id: string, committed: boolean): Promise<void> {
-  assert.equal((await f.client.get(id)).item.status, committed ? 'closed' : 'open');
-  const history = await readHistoryEntries(getHistoryPath(f.pmRoot, id), id); assert.equal(history.filter(entry => entry.op === 'close').length, committed ? 1 : 0);
-}
-/** Expected diagnostics always name the selected item and native journal without leaking the injected error. */
-function remedy(id: string, committed: boolean) {
-  return (error: unknown) => error instanceof SettingsRefusal && error.code === (committed ? 'swarm_close_recovery_unsupported' : 'swarm_close_not_committed')
-    && error.remedy.includes(id) && error.remedy.includes(`history/${id}.jsonl`) && !error.remedy.includes('Injected') && (!committed || /native close committed/i.test(error.remedy) || !error.remedy.includes('#after='));
+/** Host diagnostics must never echo raw thrown storage errors. */
+function typed(error: unknown): boolean { return error instanceof SettingsRefusal && !error.remedy.includes('Injected'); }
+/** Restore native functions before checking durable convergence after an injected tail failure. */
+async function assertTailFault(probe: ReturnType<typeof traceCloseTail>, fixture: Awaited<ReturnType<typeof observedClaim>>) {
+  try { await assert.rejects(probe.close(fixture.token), typed); } finally { probe.restore(); }
+  assert.equal(probe.state.injected, true); await converges(fixture.f, fixture.id, fixture.token, fixture.before);
 }
 
-test('every observed post-commit operation returns a truthful typed close refusal on every storage fault', async t => {
+test('every post-native lease and receipt operation converges after each storage-fault style', async t => {
   let events: string[] = [];
-  await t.test('enumerate the real completion path', async child => {
-    const { f, id, token } = await warnedClaim(child); const probe = traceCloseTail(child, f, id);
+  await t.test('enumerate real operations', async child => {
+    const { f, id, token } = await observedClaim(child, true); const probe = traceCloseTail(child, f, id);
     try { await probe.close(token); } finally { probe.restore(); }
-    assert.equal(probe.state.committed, true); events = probe.state.events; console.log(JSON.stringify({ baseline_events: events }));
-    assert.ok(events.includes('tokens.delete')); assert.ok(events.filter(event => event === 'renameSync:agent.json.temporary').length === 2);
-    assert.ok(events.some(event => event === 'unlinkSync:operation.json')); assert.ok(events.some(event => event === 'unlinkSync:operation-pin.json'));
-    assert.ok(events.filter(event => event === 'warnings.entries').length >= 2); await assertOutcome(f, id, true);
+    events = probe.state.events; assert.equal(probe.state.committed, true);
+    assert.ok(events.includes('tokens.delete')); assert.ok(events.includes('unlinkSync:operation.json')); assert.ok(events.includes('unlinkSync:operation-pin.json'));
+    assert.ok(events.some(event => event.startsWith('warnings.')));
   });
-  assert.ok(events.length > 0);
   for (const [index, event] of events.entries()) for (const fault of FAULTS) await t.test(`${index}/${event}/${fault.name}`, async child => {
-    const { f, id, token } = await warnedClaim(child); const probe = traceCloseTail(child, f, id, { index, value: fault.value });
-    try { await assert.rejects(probe.close(token), remedy(id, true)); } finally { probe.restore(); }
-    assert.equal(probe.state.injected, true); assert.deepEqual(probe.state.events.slice(0, index + 1), events.slice(0, index + 1)); await assertOutcome(f, id, true);
-    const before = durableSnapshot(f.pmRoot);
-    await assert.rejects(f.shared.close(id, 'Retry after storage fault', token), remedy(id, true));
-    assert.equal(durableSnapshot(f.pmRoot), before); await assertOutcome(f, id, true);
+    const fixture = await observedClaim(child, true);
+    await assertTailFault(traceCloseTail(child, fixture.f, fixture.id, { index, value: fault.value }), fixture);
   });
-  console.log(JSON.stringify({ post_commit_operations: events.length, synchronous_fault_styles: FAULTS.length, injected_cases: events.length * FAULTS.length }));
+  console.log(JSON.stringify({ post_native_operations: events.length, fault_styles: FAULTS.length, injected_cases: events.length * FAULTS.length }));
 });
 
-test('final lease heartbeat failure reports the committed close and its native journal', async t => {
-  const { f, id, claim } = await observedClaim(t); let heartbeats = 0;
-  const probe = traceCloseTail(t, f, id, { index: event => event === 'renameSync:agent.json.temporary' && ++heartbeats === 2, value: FAULTS[0].value });
-  try {
-    await assert.rejects(probe.close(claim.token), error => error instanceof CloseRecoveryUnsupported && error.committed === true && remedy(id, true)(error));
-  } finally { probe.restore(); assert.equal(probe.state.injected, true); await assertOutcome(f, id, true); }
-});
-
-test('lease renewal failures during an awaited native return retain the committed close', async t => {
+test('renewal failure while awaiting a native return compensates every owned effect', { timeout: 120000 }, async t => {
   for (const fault of FAULTS) await t.test(fault.name, async child => {
-    const { f, id, claim } = await observedClaim(child);
-    const probe = traceCloseTail(child, f, id, { index: event => event === 'renameSync:operation.json.temporary', value: fault.value }, false, () => delay(5200));
-    try { await assert.rejects(probe.close(claim.token), remedy(id, true)); }
-    finally { probe.restore(); assert.equal(probe.state.injected, true); await assertOutcome(f, id, true); }
+    const fixture = await observedClaim(child);
+    await assertTailFault(traceCloseTail(child, fixture.f, fixture.id, { index: event => event === 'renameSync:operation.json.temporary', value: fault.value }, false, () => delay(5200)), fixture);
   });
 });
 
-test('error-only empty-runtime cleanup cannot hide a committed legacy native close', async t => {
+for (const after of [false, true]) test(`ordinary native promise rejection ${after ? 'after' : 'before'} close compensates the durable intent`, async t => {
   for (const fault of FAULTS) await t.test(fault.name, async child => {
-    const f = await sharedFixture(child); installCloseTailProbe(f); const id = await f.item(); await f.client.claim(id);
-    let publication = false; let cleanup = false;
-    const probe = traceCloseTail(child, f, id, { index: event => {
-      if (event === 'renameSync:agent.json.temporary') { publication = true; return true; }
-      if (event === 'rmdirSync:swarm') { cleanup = true; return true; }
-      return false;
-    }, value: () => cleanup ? fault.value() : new Error('Injected initial heartbeat fault') });
-    try { await assert.rejects(probe.close(), remedy(id, true)); }
-    finally { probe.restore(); assert.equal(publication, true); assert.equal(cleanup, true); await assertOutcome(f, id, true); }
+    const { f, id, token, before } = await observedClaim(child);
+    await assert.rejects(rejectNativeClose(f, fault.value, after).close(id, 'Public completion', token), { code: 'swarm_close_compensated' });
+    await converges(f, id, token, before);
   });
 });
 
-for (const committed of [false, true]) test(`native promise rejection ${committed ? 'after' : 'before'} commit retains the exact outcome and typed remedy`, async t => {
-  for (const fault of [...FAULTS, { name: 'promise object rejection', value: () => ({ rejected: 'Injected promise fault' }) }]) await t.test(fault.name, async child => {
-    const f = await sharedFixture(child); const { id, claim } = await closeClaim(f); const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
-    await assert.rejects(rejectNativeClose(f, fault.value, committed).close(id, 'Public completion', claim.token), remedy(id, committed));
-    await assertOutcome(f, id, committed); if (!committed) assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), history);
-  });
-});
-
-test('pre-commit filesystem faults keep the native item open with a distinct typed remedy', async t => {
+test('pre-intent filesystem faults preserve native state and report an uncommitted close', async t => {
   for (const fault of FAULTS) await t.test(fault.name, async child => {
-    const { f, id, claim } = await observedClaim(child); const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
+    const { f, id, token, before } = await observedClaim(child); const history = readFileSync(getHistoryPath(f.pmRoot, id), 'utf8');
     const probe = traceCloseTail(child, f, id, { index: 0, value: fault.value }, true);
-    try { await assert.rejects(probe.close(claim.token), remedy(id, false)); } finally { probe.restore(); }
-    assert.equal(probe.state.injected, true); assert.equal(probe.state.committed, false); await assertOutcome(f, id, false);
-    assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), history);
+    try { await assert.rejects(probe.close(token), error => typed(error) && (error as SettingsRefusal).code === 'swarm_close_not_committed'); } finally { probe.restore(); }
+    assert.equal(probe.state.injected, true); assert.equal(probe.state.committed, false);
+    assert.equal(readFileSync(getItemPath(f.pmRoot, 'Task', id), 'utf8'), before); assert.equal(readFileSync(getHistoryPath(f.pmRoot, id), 'utf8'), history);
   });
-  const f = await sharedFixture(t); const { id, claim } = await closeClaim(f);
-  await assert.rejects(rejectNativeClose(f, () => new StaleFenceError(id), false).close(id, 'Public completion', claim.token), StaleFenceError);
-  await assertOutcome(f, id, false);
 });

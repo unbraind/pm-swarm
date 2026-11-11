@@ -102,7 +102,7 @@ test('explicit handoffs keep their context and fence and refuse an unqualified r
 test('concurrent real process selectors cannot double-claim, including ordinary next', { timeout: 120000 }, async t => {
   const f = await sharedFixture(t); const ids = [await f.item(['a']), await f.item(['b']), await f.item(['c'])];
   const children = ['schedule', 'schedule', 'next'].map((command, index) => {
-    const child = spawn(process.execPath, [f.host, 'swarm', command, '--agent', `worker-${index}`, '--json'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [f.host, 'swarm', command, '--agent', `worker-${index}`, '--json'], { timeout: 300000, cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = ''; let stderr = ''; child.stdout.on('data', data => { stdout += String(data); }); child.stderr.on('data', data => { stderr += String(data); });
     return { child, output: () => ({ stdout, stderr }) };
   });

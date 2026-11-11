@@ -12,15 +12,15 @@ test('read-only committed public fleet corpus stays unchanged during non-Git res
   const source = process.env.PUBLIC_TRACKER_REPO; assert.ok(source, 'Set PUBLIC_TRACKER_REPO to the public pm-ops checkout');
   /** Inspect a committed public source; never write to that checkout. */
   const git = (...args: string[]) => {
-    const result = spawnSync('git', ['-C', source, ...args], { encoding: 'utf8' });
+    const result = spawnSync('git', ['-C', source, ...args], { timeout: 300000, encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr); return result.stdout.trim();
   };
   assert.match(git('remote', 'get-url', 'origin'), /^https:\/\/github\.com\/unbraind\/pm-ops(?:\.git)?$/);
   const head = git('rev-parse', 'origin/main');
-  const archive = spawnSync('git', ['-C', source, 'archive', head, '.agents/pm'], { maxBuffer: 32 * 1024 * 1024 });
+  const archive = spawnSync('git', ['-C', source, 'archive', head, '.agents/pm'], { timeout: 300000, maxBuffer: 32 * 1024 * 1024 });
   assert.equal(archive.status, 0);
   const f = await sharedFixture(t);
-  const extracted = spawnSync('tar', ['-x', '-C', f.repo], { input: archive.stdout }); assert.equal(extracted.status, 0);
+  const extracted = spawnSync('tar', ['-x', '-C', f.repo], { timeout: 300000, input: archive.stdout }); assert.equal(extracted.status, 0);
   /** Enumerate only the copied tracker, excluding ignored runtime and the test extension. */
   const files = (root: string): string[] => readdirSync(root, { withFileTypes: true }).flatMap(entry => {
     if (['runtime', 'locks', 'extensions'].includes(entry.name)) return [];

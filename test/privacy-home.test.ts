@@ -68,7 +68,7 @@ test('configured and real process homes are private even outside conventional ho
   const module = new URL('../src/privacy.ts', import.meta.url).href;
   const code = `import { containsPrivatePath } from ${JSON.stringify(module)}; const home = process.env.HOME; process.stdout.write(JSON.stringify([containsPrivatePath(home + '/x'), containsPrivatePath(process.env.PROBE_PATH), containsPrivatePath('https://example.test/?p=' + encodeURIComponent(process.env.PROBE_PATH)), containsPrivatePath('Option A: kept the cache; took ~5 min')]));`;
   for (const [home, candidate, expected] of [[alias, `${realpathSync(real)}/x`, true], [join(root, 'future'), `${root}/future/x`, true], ['/', ['', 'usr', 'bin'].join('/'), false], ['', ['', 'usr', 'bin'].join('/'), false]] as const) {
-    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, HOME: home, PROBE_PATH: candidate } });
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { timeout: 300000, encoding: 'utf8', env: { ...process.env, HOME: home, PROBE_PATH: candidate } });
     assert.equal(child.status, 0, 'Process-home probe failed');
     assert.deepEqual(JSON.parse(child.stdout), [expected, expected, expected, false]);
   }
@@ -89,12 +89,12 @@ process.stdout.write(JSON.stringify(results)); } finally { for (const cleanup of
   let checks = 0;
   for (const variable of ['HOME', 'USERPROFILE'] as const) for (const [configured, canonical] of variants) {
     const home = join(root, variable.toLowerCase(), configured); mkdirSync(home, { recursive: true });
-    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, [variable]: home, CONFIGURED_PROBE: home, CANONICAL_PROBE: join(root, variable.toLowerCase(), canonical) } });
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { timeout: 300000, encoding: 'utf8', env: { ...process.env, [variable]: home, CONFIGURED_PROBE: home, CANONICAL_PROBE: join(root, variable.toLowerCase(), canonical) } });
     assert.equal(child.status, 0, `Home normalization probe ${checks} failed`);
     assert.deepEqual(JSON.parse(child.stdout), [true, true, true, true, true, true], `Home normalization probe ${checks}`); checks++;
   }
   const nested = Array.from({ length: 18 }).reduce<string>(value => encodeURIComponent(value), ['','srv','profiles','private'].join('/'));
-  const excessive = spawnSync(process.execPath, ['--input-type=module', '-e', `import { containsPrivatePath } from ${JSON.stringify(guard)}; process.stdout.write(JSON.stringify(containsPrivatePath('ordinary')));`], { encoding: 'utf8', env: { ...process.env, HOME: nested } });
+  const excessive = spawnSync(process.execPath, ['--input-type=module', '-e', `import { containsPrivatePath } from ${JSON.stringify(guard)}; process.stdout.write(JSON.stringify(containsPrivatePath('ordinary')));`], { timeout: 300000, encoding: 'utf8', env: { ...process.env, HOME: nested } });
   assert.equal(excessive.status, 0); assert.equal(excessive.stdout, 'true', 'An uninspectable configured root fails closed');
   console.log(JSON.stringify({ normalized_home_environments: checks, configured_and_canonical_refusals: checks * 2, handoff_tracker_changes: 0 }));
 });
