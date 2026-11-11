@@ -1,4 +1,4 @@
-import { createMutationGuardSdk, discoverExtensions, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions, getItemAt, readHistoryEntries, getHistoryPath, hashHistoryStream } from '@unbrained/pm-cli/sdk';
+import { createMutationGuardSdk, discoverExtensions, getActiveExtensionRegistrations, isReadOutputBudgetExceeded, readSettings, resolveItemTypeRegistry, runWithActiveExtensions, getItemAt, readHistoryEntries, getHistoryPath, hashHistoryStream } from '@unbrained/pm-cli/sdk';
 import type { GetResult, GetItemAtResult, PmClient, PmReadOutputBudgetExceeded } from '@unbrained/pm-cli/sdk';
 import type { ItemHistoryHead } from './settings.ts';
 import { SettingsRefusal, assertItemHistoryHead, assertSdkInstance, readItemHistoryHead, requireActiveExtensionRead } from './settings.ts';
@@ -17,6 +17,14 @@ export async function readItem(client: Pick<PmClient, 'get'>, id: string, fields
   return requireItemRead(await client.get(id, fields === undefined ? FULL_ITEM_READ : { fields, ...COMPLETE_READ_OUTPUT }));
 }
 
+/** Resolve the native type registry inside the requested workspace's live extension scope. */
+export async function liveItemTypes(pmRoot: string, cwd: string, settings: Awaited<ReturnType<typeof readSettings>>) {
+  const active = getActiveExtensionRegistrations();
+  // Native writer hooks already hold the host scope; reactivation would nest another SDK invocation.
+  if (active !== null) return resolveItemTypeRegistry(settings, active);
+  return runWithActiveExtensions({ cwd, path: pmRoot }, async () => resolveItemTypeRegistry(settings, getActiveExtensionRegistrations()));
+}
+
 /** Inspect current local metadata through the public SDK guard without client cache or usage writes.
  * Service-backed reads remain owned by the host: a null result tells callers to
  * use their bound client, never to interpret a local shadow as provider state.
@@ -25,7 +33,7 @@ async function localGuard(pmRoot: string, cwd: string) {
   const settings = await readSettings(pmRoot);
   const discovered = await discoverExtensions({ pmRoot, cwd, settings });
   if (discovered.effective.some(extension => extension.capabilities === undefined || extension.capabilities.length === 0 || extension.capabilities.includes('services'))) return null;
-  return createMutationGuardSdk({ pmRoot, settings, typeToFolder: resolveItemTypeRegistry(settings).type_to_folder });
+  return createMutationGuardSdk({ pmRoot, settings, typeToFolder: (await liveItemTypes(pmRoot, cwd, settings)).type_to_folder });
 }
 /** Inspect local metadata without client usage receipts; providers always retain their bound client. */
 export async function inspectItem(pmRoot: string, cwd: string, id: string) { return (await localGuard(pmRoot, cwd))?.get(id) ?? null; }

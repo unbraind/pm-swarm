@@ -5,6 +5,8 @@ selecting history, including service-capable layouts. It captures history before
 reading the complete decision document and checks that same head under the
 native item writer lock. Legitimate handoff/reclaim receipts select the current
 owner and generation; stale tokens, bodies and peer ABA histories still refuse.
+Lifecycle storage uses the SDK live type registry, including types and folders
+registered by active extensions. Unregistered storage folders are never guessed.
 A pending or malformed close intent refuses handoff, reclaim and new claims with
 `swarm_close_transfer_refused`. Retry the exact original request to reconcile a
 valid pending intent. A malformed intent requires explicit inspection of native

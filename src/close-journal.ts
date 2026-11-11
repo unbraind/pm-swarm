@@ -1,9 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { deriveMutationTransactionId, getHistoryPath, getItemAt, hashDocument, hashHistoryStream, locateItem, readHistoryEntries, readLocatedItem, readSettings, replayHistoryToTarget, replayToCanonicalItemDocument, resolveItemTypeRegistry, validateWorkspaceTransactionIdentity, verifyHistoryEntries } from '@unbrained/pm-cli/sdk';
+import { deriveMutationTransactionId, getHistoryPath, getItemAt, hashDocument, hashHistoryStream, locateItem, readHistoryEntries, readLocatedItem, readSettings, replayHistoryToTarget, replayToCanonicalItemDocument, validateWorkspaceTransactionIdentity, verifyHistoryEntries } from '@unbrained/pm-cli/sdk';
 import type { Swarm } from './swarm.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { assertItemHistoryHead, assertPrivatePathSafe, documentFingerprint, SettingsRefusal, syncNativeArtifacts } from './settings.ts';
-import { clientMutationSnapshot } from './inspection.ts';
+import { clientMutationSnapshot, liveItemTypes } from './inspection.ts';
 import { loadCloseProposals, validCloseResult } from './close-proofs.ts';
 import type { SignedCloseProposal } from './close-proofs.ts';
 
@@ -58,7 +58,7 @@ export function parseCloseJournal(engine: Swarm, value: unknown): CloseJournal {
 /** Resolve storage only through the SDK's current type registry, including custom item types. */
 async function memberLocation(engine: Swarm, id: string) {
   const settings = await readSettings(engine.pmRoot);
-  const located = await locateItem(engine.pmRoot, id, settings.id_prefix, settings.item_format, resolveItemTypeRegistry(settings).type_to_folder);
+  const located = await locateItem(engine.pmRoot, id, settings.id_prefix, settings.item_format, (await liveItemTypes(engine.pmRoot, engine.repo, settings)).type_to_folder);
   if (located === null) throw new SettingsRefusal('swarm_compensation_partial', 'A lifecycle member is unavailable. Preserve all remaining members and inspect native history.', 'close');
   return located;
 }

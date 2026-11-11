@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os';
 import { basename, join, resolve, extname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readSettings, resolveRuntimeStatusRegistry, resolveItemTypeRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath, mutateItem } from '@unbrained/pm-cli/sdk';
+import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath, mutateItem } from '@unbrained/pm-cli/sdk';
 import type { PmClient, TestResult, ClaimResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
 import { optionalGitProbe, branchExists, changedFiles, commit, git, missingDrivers, predict, chain } from './git.ts';
@@ -19,7 +19,7 @@ import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, assertMutationReceipt, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
-import { inspectItem, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
+import { liveItemTypes, inspectItem, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -67,7 +67,7 @@ export class Swarm {
   /** Use the same certified readiness and ownership rules for plan and next. */
   async readyCandidates(parent?: string, gitLanes = true) {
     const corpus = await this.corpus();
-    const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = resolveItemTypeRegistry(prefs);
+    const prefs = await readSettings(this.pmRoot); const statuses = resolveRuntimeStatusRegistry(prefs.schema); const types = await liveItemTypes(this.pmRoot, this.repo, prefs);
     const report = computeActionabilityReport(corpus.items, corpus.items, statuses, types);
     const ready = selectActionableEntries(report, statuses, {}, types).ready;
     const candidates: (Candidate & { priority: number; created_at: string })[] = [];
@@ -243,10 +243,10 @@ export class Swarm {
 
   /** Keep every Git cleanup decision and action inside the exact item's native writer lock. */
   private async guardItemCleanup(id: string, item: Record<string, unknown>, history: ItemHistoryHead, lease: Lease, cleanup: () => Promise<void>): Promise<void> {
-    const settings = await readSettings(this.pmRoot);
+    const settings = await readSettings(this.pmRoot); const types = await liveItemTypes(this.pmRoot, this.repo, settings);
     await retryLock(() => commitItemMutation({ id, item, options: { author: this.author }, token: item.swarm_token, history }, admitted => mutateItem({
       pmRoot: this.pmRoot, settings, id: admitted.id, author: admitted.options.author, op: 'update', skipNoop: true, bypassAssigneeConflict: true,
-      extensionFieldNames: Object.keys(admitted.item), typeToFolder: resolveItemTypeRegistry(settings).type_to_folder,
+      extensionFieldNames: Object.keys(admitted.item), typeToFolder: types.type_to_folder,
       mutate: async document => {
         await assertItemHistoryHead(this.pmRoot, admitted.id, admitted.history);
         assertClaimGeneration(document.metadata.swarm_token, admitted.token);
