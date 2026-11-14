@@ -2,19 +2,24 @@ id: pm-swarm-9bks
 title: Bound coverage reporter memory on Node 26 after a passing source suite
 description: "Prior-head PR 65 CI run https://github.com/unbraind/pm-swarm/actions/runs/42782833349 passed 1189 source tests on Node 26.13.0, then c8 exhausted its approximately 4 GiB V8 heap while generating reports. Node 22 passed. Investigate report aggregation memory and certify the full unchanged 100 percent four-dimension gate on Node 22 and Node 26 without reducing scope, tests or thresholds. This resource issue is separate from the round-five correctness findings."
 type: Issue
-status: in_progress
+status: closed
 priority: 2
 tags[3]: ci,coverage,"gh:unbraind/pm-swarm#65"
 created_at: "2026-11-10T08:52:59.206Z"
-updated_at: "2026-11-10T17:16:19.605Z"
+updated_at: "2026-11-14T10:15:19.412Z"
+closed_at: "2026-11-14T09:01:47.570Z"
+completed_at: "2026-11-11T09:10:50.000Z"
 author: codex-agent
-comments[3]{created_at,author,text}:
+release: 2026.11.11
+comments[4]{created_at,author,text}:
   "2026-11-10T16:17:09.265Z",codex-agent,"Final scoped PR 65 continuation explicitly authorizes fixing the observed CI failure. Current head 7e59834 test (26), run 42814446970, passed all 1198 source tests then c8 exhausted its approximately 4 GiB heap during report aggregation; test (22) passed. Installed c8 12 already provides --merge-async: its synchronous loader retains every raw process report before filtering, whereas the asynchronous merger reads, filters and merges one report at a time. Enable that supported streaming mode without changing source/test scope, thresholds, worker count or the production heap cap. A synthetic 125-dump corpus with large excluded vendor coverage and an actually measured authored source will exercise the real reporter under a 64 MiB heap, failing when the flag is reverted. No dependency or workflow change is required."
   "2026-11-10T16:41:26.155Z",codex-agent,"Implemented the observed Node 26 CI failure fix with c8's supported --merge-async mode. No larger production heap, dependency change, coverage exclusion or threshold reduction. Real reporter stress: 125 large raw process dumps plus measured authored source pass within a 64 MiB reporter heap and retain 100 percent of all four dimensions. Removing only --merge-async reproduces heap out of memory and the regression exits 1; restoring the flag passes. The pinned linked stress command passes 1/1; it also passes within the 471/471 importer group. Prior-head CI test (22) is successful; test (26) passed 1198 source tests and failed only during synchronous report aggregation. New Node 26 final-head CI certification remains pending."
   "2026-11-10T17:16:16.060Z",codex-agent,"Final implementation 05b0023: real incremental reporter stress passes 1/1 on Node 26.13.0 (exact failed CI runtime), with the reporter constrained to 64 MiB and all authored fixture coverage dimensions at 100 percent. It also passes on Node 24.19.0. Removing only --merge-async reproduces heap out of memory; restoring it passes. The single bounded npm test exits 0 in 1867s with 1208/1208 tests, no failures/skips/cancellations; required importer group passes 471/471 and static checks pass. The prior Node 26 failure was report aggregation after a passing source suite, not a failing source test. Production heap, dependency pins, source scope, thresholds and worker limits are unchanged. Releasing this claim and retaining in_progress; final-head Node 22/26 release-gate certification remains for CI and orchestrator verification at https://github.com/unbraind/pm-swarm/pull/65/checks."
+  "2026-11-14T10:15:19.410Z",codex-sweep-1114,"Release-attribution correction: completed_at = 2026-11-11T09:10:50Z from https://github.com/unbraind/pm-swarm/pull/65 (merge SHA bb72f4fa6f2c30ab6b53a125aa3b1f0fc4f26b38); first containing release tag v2026.11.11, recorded release 2026.11.11."
 files[2]{path,scope}:
   scripts/coverage-gate.ts,project
   test/coverage-aggregation.test.ts,project
 tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,source_ref}}:
   node --test --test-concurrency=2 test/coverage-aggregation.test.ts,project,300,codex-agent,"2026-11-10T16:20:44.758Z",local_mutation,review/swarm65-codex-continuation
+close_reason: "https://github.com/unbraind/pm-swarm/pull/65 merged 2026-11-11T09:10:50Z; merge SHA bb72f4fa6f2c30ab6b53a125aa3b1f0fc4f26b38; PR head 2378e884184d40299eede0b73f3ee276b9b0fae2. Delivered: Incremental c8 reporter aggregation fixes Node 26 memory exhaustion while retaining full authored source coverage, production heap and all thresholds. Green at that head: test (22), codeql, test (26), CodeQL. Other check outcomes: enable-auto-merge: SKIPPED; cubic · AI code reviewer: NEUTRAL; CodeRabbit: SKIPPED; Sourcery review: SKIPPED (not counted as green)."
 body: ""
