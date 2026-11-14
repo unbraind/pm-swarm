@@ -1,17 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
+- Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
+
+### Other
+
+- Close delivered pm items and reserve in progress for active work (2026-10-24) ([pm-swarm-b5p4](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-b5p4.toon))
+
 ## 2026.11.11 - 2026-11-11
-
-### Added
-
-- Durable multi-item close recovery ([pm-swarm-durable-close-recovery](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-durable-close-recovery.toon))
 
 ### Fixed
 
 - Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository ([pm-swarm-aa9h](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-aa9h.toon))
-- Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
-- Resume durable native close compensation across dependents ([pm-swarm-durable-compensation](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-durable-compensation.toon))
-- PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
 
 ## 2026.11.4 - 2026-11-04
 

@@ -2,11 +2,13 @@ id: pm-swarm-github-44bd244dd53c-27
 title: "PR #24: valid close after handoff/reclaim fails with swarm_document_changed"
 description: "GH issue #27: https://github.com/unbraind/pm-swarm/issues/27 · author @unbraind · created 2026-10-26T21:31:07Z · updated 2026-10-26T22:40:33Z"
 type: Issue
-status: in_progress
+status: closed
 priority: 2
 tags[2]: "gh:unbraind/pm-swarm#27","github_author:unbraind"
 created_at: "2026-10-26T21:31:07Z"
-updated_at: "2026-11-06T14:38:51.602Z"
+updated_at: "2026-11-14T09:01:51.716Z"
+closed_at: "2026-11-14T09:01:51.608Z"
+completed_at: "2026-11-14T09:01:51.608Z"
 author: pm-github
 comments[5]{created_at,author,text}:
   "2026-11-06T09:12:44.818Z",codex-sol,"Read the complete linked issues and current implementation. Verify the existing handoff successor guard with real processes; implement native-history-bound durable close intent and per-member recovery through the pinned SDK, with crash and peer-interleaving regressions. No SDK dependency bump or release workflow change planned."
@@ -18,6 +20,7 @@ files[3]{path,scope}:
   src/close-journal.ts,project
   src/close-recovery.ts,project
   test/close-transfer-process.test.ts,project
+close_reason: "https://github.com/unbraind/pm-swarm/pull/65 merged 2026-11-11T09:10:50Z; merge SHA bb72f4fa6f2c30ab6b53a125aa3b1f0fc4f26b38; PR head 2378e884184d40299eede0b73f3ee276b9b0fae2. Delivered: Native close succeeds after valid handoff/reclaim with exact successor identity; stale peers, ABA, generation and idempotent replay guards remain enforced. Green at that head: test (22), codeql, test (26), CodeQL. Other check outcomes: enable-auto-merge: SKIPPED; cubic · AI code reviewer: NEUTRAL; CodeRabbit: SKIPPED; Sourcery review: SKIPPED (not counted as green)."
 github_close_reason: ""
 github_closed_at: ""
 github_created_at: "2026-10-26T21:31:07Z"
