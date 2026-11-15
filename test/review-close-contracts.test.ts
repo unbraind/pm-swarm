@@ -49,7 +49,11 @@ function unboundedChildren(source: string, label: string): string[] {
     if (['CallExpression', 'OptionalCallExpression'].includes(node.type) && CHILD_APIS.includes(name ?? '')) {
       const options = node.arguments?.find(argument => argument.type === 'ObjectExpression');
       const timeout = options?.properties?.find(property => property.key?.name === 'timeout' || property.key?.value === 'timeout');
-      const value = timeout?.value;
+      const expression = timeout?.value as SyntaxNode | undefined;
+      // The shared helper validates its scale during module evaluation and
+      // rounds an explicitly positive base deadline before the child launches.
+      const value = expression?.type === 'CallExpression' && callName(expression.callee) === 'testTime' && expression.arguments?.length === 1
+        ? expression.arguments[0] : expression;
       const positive = typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'NumericLiteral' && Number((value as SyntaxNode).value) > 0;
       const parameter = timeout?.type === 'ObjectProperty' && typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'Identifier' && (value as SyntaxNode).name === 'timeout';
       if (!positive && !parameter) failures.push(`${label}:${name}: missing positive per-child timeout`);
@@ -97,6 +101,19 @@ test('child deadline inventory rejects any missing, zero or negative deadline ev
     }
     assert.deepEqual(unboundedChildren(`${name}(${args}, { timeout: 120000 });`, 'control'), []);
   }
+});
+
+test('child deadline inventory permits scaled positive budgets and refuses invalid scaled arguments', () => {
+  const call = ['spawn', 'Sync'].join('');
+  for (const budget of ['120000', 'timeout']) {
+    const source = `${call}('program', [], { timeout: testTime(${budget}) });`;
+    assert.deepEqual(unboundedChildren(source, 'scaled'), []);
+  }
+  for (const budget of ['', '0', '-1', 'NaN', 'Infinity', 'unknown', '1, 2']) {
+    const source = `${call}('program', [], { timeout: testTime(${budget}) });`;
+    assert.equal(unboundedChildren(source, 'invalid-scaled').length, 1, budget);
+  }
+  assert.equal(unboundedChildren(`${call}('program', [], { timeout: unvalidated(120000) });`, 'foreign-helper').length, 1);
 });
 
 test('active recovery guides distinguish fresh execution, compensation and durable committed replay', () => {

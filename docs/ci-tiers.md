@@ -73,3 +73,9 @@ violations), publish verifier and strict YAML parse passed. Local strict health
 has the existing managed extension mismatch, tracked by pm-swarm-ci-extension-host-skew.
 No full local depth or separate coverage run was attempted. Final quick coverage,
 packed installation acceptance and deep certification remain pending CI.
+
+## Review round E
+
+The failed logs identify two rollout regressions: install-prerequisites copied install-helpers without its new support/time.ts dependency; the strict child-deadline audit rejected an inline testTime call. Copy the helper dependency and teach the strict audit to recognize the validated scaling helper only with positive literal or declared timeout bases. Regression cases retain refusals for missing, zero, negative and unvalidated budgets. Targeted review and tooling checks passed.
+
+The cheap tier excludes only inert tracker record formats; executable tracker changes keep product gates. `test/ci-routing.test.ts` executes each detector with inert and executable tracker paths. Product deadlines, full-depth cases and coverage thresholds are unchanged.
