@@ -73,6 +73,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify commit identities and private path policy
+        run: npm run identity:check
+
       - name: Verify tracked pm project health
         if: steps.changes.outputs.code != 'true' || matrix.node-version == 26
         shell: bash
@@ -98,7 +101,6 @@ jobs:
         if: steps.changes.outputs.code != 'true'
         run: |
           npm run changelog:check
-          npm run identity:check
           npm run pack:dry-run
           node --test --test-concurrency=2 test/privacy-*.test.ts test/tooling.test.ts test/release-approval.test.ts test/review-close-contracts.test.ts test/review-r5.test.ts test/review-r6.test.ts test/review-r7.test.ts test/review-r11.test.ts test/review-r12.test.ts test/review-r13.test.ts test/mixed-tracker.test.ts
 

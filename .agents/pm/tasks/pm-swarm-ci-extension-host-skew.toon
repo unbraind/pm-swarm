@@ -1,0 +1,11 @@
+id: pm-swarm-ci-extension-host-skew
+title: Align pinned CLI and managed extension host health versions
+description: Fleet CI v2 local strict health reports pinned CLI 2026.11.10 versus managed pm-github host 2026.11.15. Dependency alignment is outside the CI tier change. Verify a compatible pin or managed-host policy without bypassing strict health; preserve historical tracker evidence.
+type: Task
+status: open
+priority: 2
+tags[2]: ci,health
+created_at: "2026-11-15T21:02:29.886Z"
+updated_at: "2026-11-15T21:02:29.886Z"
+author: codex-sol
+body: ""

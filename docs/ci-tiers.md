@@ -13,7 +13,7 @@ per-ref deep concurrency cancels superseded runs. Existing action pins remain.
 | --- | --- | --- | --- | --- |
 | npm ci / prepare | yes | yes | yes | yes |
 | Strict health / merge drivers | — | yes | yes | yes |
-| Identity and private-path policy | via tests | release gate | yes | release gate |
+| Identity and private-path policy | explicit step | explicit step + release gate | explicit step | release gate |
 | Build and test suite | quick | quick coverage | docs/privacy suites | full |
 | Typecheck, lint, duplication, docstrings | — | yes | applicable tooling tests | yes |
 | Coverage: 100% statements/branches/functions/lines (unchanged) | — | quick | — | full |
@@ -55,3 +55,21 @@ dependents; punctuation privacy took 78–79 s. These are historical measurement
 not a controlled quick/full benchmark. New quick and final CI timings are pending.
 Full local depth is deliberately not run on the overloaded host.
 Companion: pm-cli-website-dyhg.
+
+## Local quick validation
+
+The bounded local run passed 131/132 tests in 504.16 s. Its sole unexpected
+failure required the original named identity-policy step in CI; that unconditional
+step is restored, covering both code legs and the docs path. It was never removed
+from the release gate. All model/privacy per-case assertions passed, including
+four explicit late-seed Unicode regressions. The narrow identity workflow contract
+is rerun after restoring the step.
+
+Local quick timings: deadlock model 29.02 s, privacy home/allowed corpora
+14.96/12.65 s, normalization 16.64 s, punctuation 97.04 s. Punctuation's historical
+hosted full result was 78–79 s, demonstrating the host contention caveat rather
+than a same-hardware speed comparison. Typecheck, lint, identity policy (zero
+violations), publish verifier and strict YAML parse passed. Local strict health
+has the existing managed extension mismatch, tracked by pm-swarm-ci-extension-host-skew.
+No full local depth or separate coverage run was attempted. Final quick coverage,
+packed installation acceptance and deep certification remain pending CI.
