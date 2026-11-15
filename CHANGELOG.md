@@ -23,11 +23,19 @@
 
 - Migrate off parent:none SDK sentinel for pm-toolchain 2026.10.30 bump ([pm-swarm-1ii8](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-1ii8.toon))
 
+## 2026.11.3 - 2026-11-03
+
+No changes.
+
 ## 2026.11.2 - 2026-11-02
 
 ### Fixed
 
 - The identity gate now recognizes absolute home paths only at path boundaries, so prose and relative paths no longer block the GitHub issue sync ([pm-swarm-4q55](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4q55.toon))
+
+## 2026.10.31 - 2026-10-31
+
+No changes.
 
 ## 2026.10.29 - 2026-10-29
 
