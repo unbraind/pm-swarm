@@ -1,3 +1,4 @@
+import { testTime } from './support/time.ts';
 import assert from 'node:assert/strict';
 import { isPmCliExpectedError } from '@unbrained/pm-cli/sdk';
 import { spawn } from 'node:child_process';
@@ -73,7 +74,7 @@ test('no-git start warns, strict refuses overlaps, and terminal/foreign claims s
   assert.equal((await f.shared.start(empty)).id, empty, 'own claim is idempotent');
 });
 
-test('expired tracker lease refuses a stalled start before item history changes', { timeout: 60000 }, async t => {
+test('expired tracker lease refuses a stalled start before item history changes', { timeout: testTime(60000) }, async t => {
   const f = await sharedFixture(t); const first = await f.item(['src']); const second = await f.item(['src/code.ts']);
   let enter = () => {}; let resume = () => {};
   const entered = new Promise<void>(resolve => { enter = resolve; });
@@ -190,7 +191,7 @@ test('no-git reap previews and releases own terminal claims, preserving active a
   assert.deepEqual(f.run('swarm', 'reap', '--agent', 'foreign').released, [foreign]);
 });
 
-test('no-git watch emits lanes and overlap changes, ignores age-only changes and exits on SIGINT', { timeout: 30000 }, async t => {
+test('no-git watch emits lanes and overlap changes, ignores age-only changes and exits on SIGINT', { timeout: testTime(30000) }, async t => {
   const f = await sharedFixture(t); const a = await f.item(['src']); const b = await f.item(['src/a.ts']);
   await f.client.claim(a); await f.client.claim(b);
   const before = await f.shared.status();
@@ -201,22 +202,22 @@ test('no-git watch emits lanes and overlap changes, ignores age-only changes and
   await f.client.release(b);
   assert.ok(statusChanges(changed, await f.shared.status()).some(row => row.event === 'overlap_resolved'));
   const controller = new AbortController(); await watchStatus(f.shared, 2000, controller.signal, () => controller.abort());
-  const child = spawn(process.execPath, [f.host, 'swarm', 'status', '--watch', '--json'], { timeout: 300000, cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [f.host, 'swarm', 'status', '--watch', '--json'], { timeout: testTime(300000), cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'] });
   t.after(() => child.kill('SIGKILL')); const exit = processExit(child, 'exit'); let output = ''; let error = '';
   child.stdout.setEncoding('utf8').on('data', (data: string) => { output += data; });
   child.stderr.setEncoding('utf8').on('data', (data: string) => { error += data; });
-  const deadline = Date.now() + 15000;
+  const deadline = Date.now() + testTime(15000);
   while (!output.includes('lane_added') && child.exitCode === null && Date.now() < deadline) await delay(20);
   assert.match(output, /lane_added/); const initial = output; await delay(2300); assert.equal(output, initial);
   child.kill('SIGINT'); const [code, signal] = await exit; assert.equal(code, 0, error); assert.equal(signal, null);
 });
 
-test('real eight-process next contention keeps every claim and history valid without git', { timeout: 120000 }, async t => {
+test('real eight-process next contention keeps every claim and history valid without git', { timeout: testTime(120000) }, async t => {
   const f = await sharedFixture(t); const ids = [];
   for (let i = 0; i < 8; i++) ids.push(await f.item([`src/lane-${i}.ts`], 2, `lane-${i}`));
   const started = performance.now();
   const results = await Promise.all(ids.map(async (_, i) => {
-    const child = spawn(process.execPath, [f.host, 'swarm', 'next', '--agent', `worker-${i}`, '--json'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'], timeout: 90000 });
+    const child = spawn(process.execPath, [f.host, 'swarm', 'next', '--agent', `worker-${i}`, '--json'], { cwd: f.repo, env: f.env, stdio: ['ignore', 'pipe', 'pipe'], timeout: testTime(90000) });
     const complete = once(child, 'close');
     const stdout: Buffer[] = []; const stderr: Buffer[] = [];
     child.stdout.on('data', (chunk: Buffer) => stdout.push(chunk));

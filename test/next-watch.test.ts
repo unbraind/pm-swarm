@@ -1,3 +1,4 @@
+import { testTime } from './support/time.ts';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -173,19 +174,19 @@ test('watch compares real status, stays quiet on unchanged data, reports resolut
   await watchStatus(f.swarm, 2000, controller.signal, () => assert.fail('aborted watcher emitted'));
 });
 
-for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines' : 'TOON blocks'} for a pushed conflict and exits on SIGINT`, { timeout: 60000 }, async t => {
+for (const json of [true, false]) test(`watch child streams ${json ? 'JSON lines' : 'TOON blocks'} for a pushed conflict and exits on SIGINT`, { timeout: testTime(60000) }, async t => {
   const { f, ids, left, right } = await pairedLanes(t);
   f.write('same.txt', 'left\n', left.worktree); f.save(['same.txt'], left.worktree);
   git(right.worktree, ['switch', '--detach']);
   const sender = join(f.root, 'sender');
   repoGit(f.root, ['clone', '--branch', right.branch, f.repo, sender]);
-  const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { timeout: 300000, cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test', PM_SWARM_TEST_POLL_HEARTBEAT: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [join(import.meta.dirname, '../node_modules/.bin/pm'), 'swarm', 'status', '--watch', '--interval', '0.1', ...(json ? ['--json'] : [])], { timeout: testTime(300000), cwd: f.repo, env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test', PM_SWARM_TEST_POLL_HEARTBEAT: '1' }), stdio: ['ignore', 'pipe', 'pipe'] });
   const exit = processExit(child, 'exit'); t.after(() => { child.kill('SIGKILL'); });
   let output = ''; let error = ''; child.stdout.on('data', data => { output += String(data); }); child.stderr.on('data', data => { error += String(data); });
   /** Decode only complete frames so separate pipe chunks cannot race assertions. */
   const records = () => output.split(json ? '\n' : '\n\n').slice(0, -1).filter(part => part.trim() !== '').map(part => (json ? JSON.parse(part) : decodeToon(part)) as { event: string; data: { id?: string } });
   /** Wait for semantic output, with bounded failure diagnostics. */
-  const until = async (predicate: () => boolean) => { const deadline = Date.now() + 15000; while (!predicate() && Date.now() < deadline) await delay(30); assert.ok(predicate(), output + error); };
+  const until = async (predicate: () => boolean) => { const deadline = Date.now() + testTime(15000); while (!predicate() && Date.now() < deadline) await delay(30); assert.ok(predicate(), output + error); };
   await until(() => error.includes('pm-swarm:test:poll-complete\n') && ids.every(id => records().some(row => row.event === 'lane_added' && row.data.id === id)));
   /** Observe two completed serial polls after the current output, independent of Git speed. */
   const twoPolls = async () => { const count = error.split('pm-swarm:test:poll-complete\n').length - 1; await until(() => error.split('pm-swarm:test:poll-complete\n').length - 1 >= count + 2); };

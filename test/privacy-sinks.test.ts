@@ -1,3 +1,4 @@
+import { testDepth } from './support/depth.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -158,7 +159,7 @@ test('lossless percent canonicalization preserves every encoded home beside rand
   const noise = garbage(0x8badf00d); let checks = 0; let corpusChecks = 0;
   const explicit = `%ff${encodeURIComponent(['', 'home', 'private', 'work'].join('\uff0f'))}`;
   assert.equal(containsPrivatePath(explicit), true, 'malformed byte before encoded fullwidth separators');
-  for (let index = 0; index < 128; index++) {
+  for (let index = 0; index < testDepth(128); index++) {
     const home = ['', 'home', `private-${index}`, `case-${index}`].join('/');
     const canonical = canonicalize(home)!;
     for (const [name, encoded] of rejectedCorpus) {
@@ -171,7 +172,7 @@ test('lossless percent canonicalization preserves every encoded home beside rand
       }
     }
   }
-  console.log(JSON.stringify({ decoder_seed: '0x8badf00d', random_homes: 128, encodings: rejectedCorpus.length, property_checks: checks, noisy_corpus_refusals: corpusChecks, lost_paths: 0 }));
+  console.log(JSON.stringify({ decoder_seed: '0x8badf00d', random_homes: testDepth(128), encodings: rejectedCorpus.length, property_checks: checks, noisy_corpus_refusals: corpusChecks, lost_paths: 0 }));
 });
 
 for (const mode of ['shared', 'Git'] as const) {
