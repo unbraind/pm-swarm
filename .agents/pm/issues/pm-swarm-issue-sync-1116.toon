@@ -7,14 +7,15 @@ status: in_progress
 priority: 1
 tags[2]: ci,issue-sync
 created_at: "2026-11-16T10:42:21.889Z"
-updated_at: "2026-11-16T11:02:33.360Z"
+updated_at: "2026-11-16T11:39:12.348Z"
 deadline: "2026-11-17T00:00:00.000Z"
 author: codex-sol
 estimated_minutes: 90
 acceptance_criteria: Record the exact failed command and verify the current fix or upstream blocker without weakening tracker governance.
-comments[2]{created_at,author,text}:
+comments[3]{created_at,author,text}:
   "2026-11-16T10:47:16.718Z",codex-sol,"Run 43707037608 failed the pm-github 2026.11.4 gate with two shared provenance tags. The #43 group separates sentinel migration from privacy-oracle repair; the #65 group separates durable-close recovery from coverage-memory repair. Preserve these distinct items. Main already includes PR #78 pinning both callers to 2026.11.15. The current pinned gated dry-run passes: 6 planned, 0 skipped, 2 matched, 0 adopted, 4 new. No duplicate closure or second caller-pin PR is justified."
   "2026-11-16T11:01:53.667Z",codex-sol,"Initial review receipt: the failed workflow log and current pin are documented in docs/issue-sync-2026-11-16.md. Seeded tracker validation passes through pm test --run --progress. Typecheck and lint pass. The quick package suite remains running under shared-host load; no complete passing suite is claimed.   Publish review evidence with pending gates explicit; no scheduled success is claimed."
+  "2026-11-16T11:39:12.330Z",codex-sol,"Final bounded verification: typecheck, lint and changelog:check passed. The locked-CLI gated import preview passed (6 planned, zero skipped, 2 matched, 4 new). The broad quick suite was stopped before completion and is excluded from passing evidence. Shared-reference work remains separate; both caller pins were already repaired by merged PR 78. The new item history verifies with strict exit."
 files[1]{path,scope}:
   docs/issue-sync-2026-11-16.md,project
 tests[2]:

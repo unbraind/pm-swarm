@@ -39,3 +39,7 @@ A passing plan proves completeness and identity planning, not successful writes 
 ## Validation
 
 Typecheck and lint pass. The pinned tracker validation returns `ok: true` with existing advisories. The seeded tracker validation and gated import preview also pass through `pm test --run --progress`. Package quick tests are still running at the initial draft; no full passing package suite is claimed. Remaining results are recorded in the linked sync repair item. CI is not dispatched manually, and no successful scheduled rerun is claimed.
+
+## Final bounded verification receipt
+
+Final bounded verification: typecheck, lint and changelog:check passed. The locked-CLI gated import preview passed (6 planned, zero skipped, 2 matched, 4 new). The broad quick suite was stopped before completion and is excluded from passing evidence. Shared-reference work remains separate; both caller pins were already repaired by merged PR 78. The new item history verifies with strict exit.
