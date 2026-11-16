@@ -8,6 +8,7 @@ interface SyntaxNode {
   type: string; name?: string; value?: unknown; callee?: SyntaxNode; arguments?: SyntaxNode[];
   properties?: SyntaxNode[]; key?: SyntaxNode; property?: SyntaxNode; object?: SyntaxNode; computed?: boolean;
   expressions?: SyntaxNode[]; quasis?: { value: { cooked: string } }[];
+  argument?: SyntaxNode; left?: SyntaxNode; elements?: (SyntaxNode | null)[]; param?: SyntaxNode;
   id?: SyntaxNode; params?: SyntaxNode[]; local?: SyntaxNode; specifiers?: SyntaxNode[]; source?: SyntaxNode;
 }
 
@@ -24,7 +25,16 @@ const SHARED_TIME_HELPER = /(^|\/)support\/time(\.ts)?$/;
 function sharedTestTimeBound(program: SyntaxNode): boolean {
   let helper = false;
   let foreign = false;
-  const binds = (node: SyntaxNode | undefined): boolean => node?.type === 'Identifier' && node.name === 'testTime';
+  const binds = (node: SyntaxNode | null | undefined): boolean => {
+    if (!node) return false;
+    if (node.type === 'Identifier') return node.name === 'testTime';
+    if (node.type === 'ObjectPattern') return (node.properties ?? []).some(property =>
+      property.type === 'RestElement' ? binds(property.argument) : binds(property.value as SyntaxNode));
+    if (node.type === 'ArrayPattern') return (node.elements ?? []).some(binds);
+    if (node.type === 'AssignmentPattern') return binds(node.left);
+    if (node.type === 'RestElement') return binds(node.argument);
+    return false;
+  };
   const visit = (raw: unknown): void => {
     if (Array.isArray(raw)) { for (const entry of raw) visit(entry); return; }
     if (typeof raw !== 'object' || raw === null) return;
@@ -34,9 +44,9 @@ function sharedTestTimeBound(program: SyntaxNode): boolean {
         if (typeof node.source?.value === 'string' && SHARED_TIME_HELPER.test(node.source.value)) helper = true;
         else foreign = true;
       }
-    } else if ((node.type === 'VariableDeclarator' || node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && binds(node.id)) {
+    } else if (['VariableDeclarator', 'FunctionDeclaration', 'FunctionExpression', 'ClassDeclaration', 'ClassExpression'].includes(node.type) && binds(node.id)) {
       foreign = true;
-    } else if ((node.params ?? []).some(binds)) {
+    } else if (binds(node.param) || (node.params ?? []).some(binds)) {
       foreign = true;
     }
     for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
@@ -162,6 +172,40 @@ test('child deadline inventory credits only the shared helper binding for the te
   assert.equal(unboundedChildren(`${call}('program', [], { timeout: testTime(120000) });`, 'unbound').length, 1);
   // The shared helper import itself remains the accepted wrapper.
   assert.deepEqual(unboundedChildren(`${HELPER_IMPORT}${call}('program', [], { timeout: testTime(120000) });`, 'shared-helper'), []);
+});
+
+test('child deadline inventory refuses every shadowing binding pattern', () => {
+  const call = ['spawn', 'Sync'].join('') + "('program', [], { timeout: testTime(120000) });";
+  const helper = "import { testTime } from './support/time.ts';\n";
+  const wrappers = [
+    ['parameter', 'function run(testTime) { BODY }'],
+    ['object parameter', 'function run({ testTime }) { BODY }'],
+    ['renamed nested object', 'function run({ nested: { value: testTime } }) { BODY }'],
+    ['array parameter', 'function run([testTime]) { BODY }'],
+    ['nested array with hole', 'function run([, { nested: [testTime] }]) { BODY }'],
+    ['default parameter', 'function run(testTime = () => 0) { BODY }'],
+    ['nested default', 'function run({ value: [testTime = () => 0] } = {}) { BODY }'],
+    ['rest parameter', 'function run(...testTime) { BODY }'],
+    ['object rest', 'function run({ ...testTime }) { BODY }'],
+    ['array rest', 'function run([...testTime]) { BODY }'],
+    ['catch identifier', 'try {} catch (testTime) { BODY }'],
+    ['catch pattern', 'try {} catch ({ nested: [testTime] }) { BODY }'],
+    ['function declaration', 'function run() { function testTime() {} BODY }'],
+    ['class declaration', 'function run() { class testTime {} BODY }'],
+    ['variable declaration', 'function run() { const testTime = () => 0; BODY }'],
+    ['object declaration', 'function run() { const { nested: [testTime] } = value; BODY }'],
+    ['array declaration', 'function run() { let [testTime] = value; BODY }'],
+    ['named function expression', 'const run = function testTime() { BODY };'],
+    ['named class expression', 'const run = class testTime { method() { BODY } };'],
+    ['arrow parameter', 'const run = ({ testTime }) => { BODY };'],
+  ];
+  for (const [label, wrapper] of wrappers) {
+    assert.equal(unboundedChildren(helper + wrapper.replace('BODY', call), label).length, 1, label);
+    // A property key named testTime does not bind it when renamed to another local.
+    const safe = wrapper.replaceAll('testTime', 'other').replace('BODY', call);
+    assert.deepEqual(unboundedChildren(helper + safe, label), [], label);
+  }
+  assert.deepEqual(unboundedChildren(helper + 'function run({ testTime: other }) { ' + call + ' }', 'property-key'), []);
 });
 
 test('active recovery guides distinguish fresh execution, compensation and durable committed replay', () => {

@@ -2,10 +2,19 @@ id: pm-swarm-ci-extension-host-skew
 title: Align pinned CLI and managed extension host health versions
 description: Fleet CI v2 local strict health reports pinned CLI 2026.11.10 versus managed pm-github host 2026.11.15. Dependency alignment is outside the CI tier change. Verify a compatible pin or managed-host policy without bypassing strict health; preserve historical tracker evidence.
 type: Task
-status: open
+status: in_progress
 priority: 2
-tags[2]: ci,health
+tags[3]: ci,"gh:unbraind/pm-swarm#79",health
 created_at: "2026-11-15T21:02:29.886Z"
-updated_at: "2026-11-15T21:02:29.886Z"
+updated_at: "2026-11-16T07:29:14.384Z"
 author: codex-sol
+comments[2]{created_at,author,text}:
+  "2026-11-16T07:22:40.894Z",codex-sol,"Review round K: verify the requested coverage portability and independent-oracle findings, binding inventory, or property cap contract as applicable; add focused regressions and run the required package gates. Keep this item in progress and release the claim after recording results. No review-thread mutations or merges."
+  "2026-11-16T07:29:06.075Z",codex-sol,"Round K: PRRT_kwDOVLY-P863zl6f verified and fixed. The deadline inventory now recursively recognizes object/array/default/rest bindings, catch parameters, variable/function/class declarations and named expressions. Twenty shadowing forms each have a rejection control and a renamed binding control; property keys alone retain helper credit. Required gates passed through pm test: npm run typecheck; npm run lint; node --test --test-concurrency=2 test/review-close-contracts.test.ts test/coverage-aggregation.test.ts test/ci-routing.test.ts test/release-workflow.test.ts; git diff --check. Combined suite: 18 passed, zero failed/skipped. Tracking is disabled by project policy, so this comment records the successful execution receipt. No thread mutations. Releasing in progress for orchestrator verification."
+files[1]{path,scope}:
+  test/review-close-contracts.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  npm run typecheck && npm run lint && node --test --test-concurrency=2 test/review-close-contracts.test.ts test/coverage-aggregation.test.ts test/ci-routing.test.ts test/release-workflow.test.ts && git diff --check,project,codex-sol,"2026-11-16T07:26:27.506Z",local_mutation,ci/quick-pr-tier-deep-local-tier
+docs[1]{path,scope}:
+  .github/workflows/ci.yml,project
 body: ""
