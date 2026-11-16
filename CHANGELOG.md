@@ -6,6 +6,10 @@
 
 - Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
 
+### Other
+
+- Align pinned CLI and managed extension host health versions ([pm-swarm-ci-extension-host-skew](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-ci-extension-host-skew.toon))
+
 ## 2026.11.11 - 2026-11-11
 
 ### Added
