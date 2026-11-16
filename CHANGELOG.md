@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- Repair scheduled GitHub issue sync failure ([pm-swarm-issue-sync-1116](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-issue-sync-1116.toon))
 - Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
 
 ### Other
