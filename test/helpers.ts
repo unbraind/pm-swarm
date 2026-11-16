@@ -1,3 +1,4 @@
+import { testTime } from './support/time.ts';
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, appendFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -49,7 +50,8 @@ export async function linkFromBranch(f: Awaited<ReturnType<typeof fixture>>, id:
 /** Invoke native CLI option parsing against a real fixture with scrubbed Git targeting. */
 export function swarmCli(f: Awaited<ReturnType<typeof fixture>>, args: string[]) {
   const command = join(import.meta.dirname, '../node_modules/.bin/pm');
+  const timeout = testTime(300000);
   return spawnSync(process.execPath, [command, 'swarm', ...args, '--json'], {
-    cwd: f.repo, encoding: 'utf8', env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }), timeout: 300000,
+    cwd: f.repo, encoding: 'utf8', env: gitEnvironment({ ...process.env, PM_PATH: f.pmRoot, PM_AUTHOR: 'swarm-test' }), timeout,
   });
 }

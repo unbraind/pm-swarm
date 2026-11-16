@@ -1,3 +1,5 @@
+import { testTime } from './support/time.ts';
+import { testDepth } from './support/depth.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { spawnSync } from 'node:child_process';
@@ -8,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 /** Collect only process-local booleans/counts; configured home coordinates never enter test output. */
 function probe(home: string, count: number, seed: number) {
-  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./privacy-normalization-worker.ts', import.meta.url)), String(count), String(seed)], { timeout: 300000, encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: '' } });
+  const result = spawnSync(process.execPath, [fileURLToPath(new URL('./privacy-normalization-worker.ts', import.meta.url)), String(count), String(seed)], { timeout: testTime(300000), encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: '' } });
   assert.equal(result.status, 0, `Normalization probe failed: ${result.stderr.replaceAll(home, '[configured-home]')}`);
   return JSON.parse(result.stdout) as { private_cases: number; benign_cases: number; false_refusals: number };
 }
@@ -18,7 +20,7 @@ test('seeded dot-segment paths use both platform grammars and distinguish public
   for (let index = 0; index < 10; index++) {
     const suffix = `demo-${((seed ^ index) >>> 0).toString(36)}${index === 9 ? ' with space' : ''}`;
     const home = index % 3 === 0 ? ['', 'srv', 'profiles', suffix].join('/') : index % 3 === 1 ? ['D:', 'profiles', suffix].join('/') : ['', '', 'server', 'share', 'profiles', suffix].join('/');
-    const result = probe(home, 500, seed ^ index); refused += result.private_cases; allowed += result.benign_cases;
+    const result = probe(home, testDepth(500), seed ^ index); refused += result.private_cases; allowed += result.benign_cases;
   }
   console.log(JSON.stringify({ seed: '0x6d2b79f5', configured_homes: 10, normalized_private_refusals: refused, normalized_benign_allowed: allowed, false_refusals: 0 }));
 });
@@ -37,11 +39,11 @@ for (const value of variants) { await assert.rejects(f.shared.handoff(id,'receiv
 assert.equal(containsPrivatePath(home+'2/project'),false); const handed=await f.shared.handoff(id,'receiver',home+'2/project',receipt.token); assert.equal(handed.context.note,home+'2/project');
 process.stdout.write(JSON.stringify({actual_handoff_refusals:variants.length,public_sibling_handoffs:1,tracker_changes_on_refusal:0})); } finally {for (const cleanup of cleanups.reverse()) await cleanup();}`;
   for (const configured of [home, `${home}/`, `${home}/pad/../.`]) {
-    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { timeout: 300000, encoding: 'utf8', env: { ...process.env, HOME: configured, USERPROFILE: '', PROBE_HOME: home } });
+    const child = spawnSync(process.execPath, ['--input-type=module', '-e', code], { timeout: testTime(300000), encoding: 'utf8', env: { ...process.env, HOME: configured, USERPROFILE: '', PROBE_HOME: home } });
     assert.equal(child.status, 0, `Real normalized-home handoff failed: ${child.stderr.replaceAll(root, '[fixture]')}`);
     assert.deepEqual(JSON.parse(child.stdout), { actual_handoff_refusals: 6, public_sibling_handoffs: 1, tracker_changes_on_refusal: 0 });
   }
-  const rootOnly = spawnSync(process.execPath, ['--input-type=module', '-e', `import {containsPrivatePath} from ${JSON.stringify(module)}; process.stdout.write(JSON.stringify(containsPrivatePath(${JSON.stringify(['D:', 'public'].join('/'))})));`], { timeout: 300000, encoding: 'utf8', env: { ...process.env, HOME: ['D:', ''].join('/'), USERPROFILE: '' } });
+  const rootOnly = spawnSync(process.execPath, ['--input-type=module', '-e', `import {containsPrivatePath} from ${JSON.stringify(module)}; process.stdout.write(JSON.stringify(containsPrivatePath(${JSON.stringify(['D:', 'public'].join('/'))})));`], { timeout: testTime(300000), encoding: 'utf8', env: { ...process.env, HOME: ['D:', ''].join('/'), USERPROFILE: '' } });
   assert.equal(rootOnly.status, 0); assert.equal(rootOnly.stdout, 'false');
   console.log(JSON.stringify({ configured_root_forms: 3, real_handoff_refusals: 18, sibling_handoffs: 3, tracker_changes_on_refusal: 0 }));
 });

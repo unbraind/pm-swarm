@@ -1,3 +1,4 @@
+import { testDepth } from './support/depth.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
@@ -253,7 +254,7 @@ async function fuzzFixture(t: TestContext) {
 test('seeded compositional home paths are refused by every mutator and both renderers', async t => {
   const f = await fuzzFixture(t); const { sdk, host } = f;
   const before = snapshot(f.pmRoot); const seed = 0x51a7c0de;
-  const cases = homeFuzz(seed, 5000);
+  const cases = homeFuzz(seed, testDepth(5000));
   for (const [index, value] of cases.entries()) {
     assert.equal(containsPrivatePath(value), true, `absolute seed=${seed} case=${index} ${JSON.stringify(value)}`);
     for (const [command, args, options] of fuzzCommands()) {
@@ -268,7 +269,7 @@ test('seeded compositional home paths are refused by every mutator and both rend
 
 test('seeded relative paths and web URLs have no false privacy refusals', async t => {
   const f = await fuzzFixture(t); const { sdk, host } = f;
-  const seed = 0x6a09e667; const cases = allowedFuzz(seed, 5000);
+  const seed = 0x6a09e667; const cases = allowedFuzz(seed, testDepth(5000));
   for (const [index, value] of cases.entries()) {
     assert.equal(containsPrivatePath(value), false, `allowed seed=${seed} case=${index} ${JSON.stringify(value)}`);
     for (const [command, args, options] of fuzzCommands()) validateCommandInputs(command, { command: `swarm ${command}`, args, options: { ...options }, global: { author: value }, sdk, pm_root: f.pmRoot, source_workspace_root: f.repo });

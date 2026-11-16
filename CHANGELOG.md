@@ -2,17 +2,25 @@
 
 ## Unreleased
 
-### Other
-
-- Close delivered pm items and reserve in progress for active work (2026-10-24) ([pm-swarm-b5p4](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-b5p4.toon))
-
-## 2026.11.11 - 2026-11-11
-
 ### Fixed
 
 - Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
-- PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
+
+### Other
+
+- Align pinned CLI and managed extension host health versions ([pm-swarm-ci-extension-host-skew](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-ci-extension-host-skew.toon))
+
+## 2026.11.11 - 2026-11-11
+
+### Added
+
+- Durable multi-item close recovery ([pm-swarm-durable-close-recovery](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-durable-close-recovery.toon))
+
+### Fixed
+
 - Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository ([pm-swarm-aa9h](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-aa9h.toon))
+- Resume durable native close compensation across dependents ([pm-swarm-durable-compensation](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-durable-compensation.toon))
+- PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
 
 ## 2026.11.4 - 2026-11-04
 
@@ -24,11 +32,19 @@
 
 - Migrate off parent:none SDK sentinel for pm-toolchain 2026.10.30 bump ([pm-swarm-1ii8](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-1ii8.toon))
 
+## 2026.11.3 - 2026-11-03
+
+No changes.
+
 ## 2026.11.2 - 2026-11-02
 
 ### Fixed
 
 - The identity gate now recognizes absolute home paths only at path boundaries, so prose and relative paths no longer block the GitHub issue sync ([pm-swarm-4q55](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4q55.toon))
+
+## 2026.10.31 - 2026-10-31
+
+No changes.
 
 ## 2026.10.29 - 2026-10-29
 

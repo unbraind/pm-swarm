@@ -1,3 +1,4 @@
+import { testTime } from './support/time.ts';
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, existsSync, readdirSync, symlinkSync, realpathSync } from 'node:fs';
@@ -17,7 +18,7 @@ import { assertPackedCloseOwnership } from './packed-ownership-helpers.ts';
 import { assertTrackerInvocations, assertIncomingHandoffRefusals } from './invocation-helpers.ts';
 
 /** Install and invoke the packed artifact in independent real npm and Bun consumers. */
-test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: 600000 }, async t => {
+test('packed npm/npx and native Bun/bunx run all swarm commands and retain path privacy', { timeout: testTime(600000) }, async t => {
   requireBun();
   const root = process.cwd(); const scratch = realpathSync(mkdtempSync(join(tmpdir(), 'swarm-install-')));
   t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
@@ -35,7 +36,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
   /** Run an isolated consumer command, refusing activation warnings even on success. */
   const run = (cwd: string, bin: string, args: string[]) => {
     if (bin === 'git' && args[0] !== 'init') assertFixtureRepo(cwd);
-    const result = spawnSync(bin, args, { timeout: 300000, cwd, env: environment(cwd), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+    const result = spawnSync(bin, args, { timeout: testTime(300000), cwd, env: environment(cwd), encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
     assert.doesNotMatch(result.stdout + result.stderr, /Extension activation failures/);
     assert.equal(result.status, 0, `${bin} ${args.join(' ')}\n${result.stdout}\n${result.stderr}`); return result.stdout;
   };
@@ -85,13 +86,13 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     for (const json of [false, true]) {
       const watchArgs = [host, 'swarm', 'status', '--watch', '--interval', '0.1'];
       if (json) watchArgs.push('--json');
-      const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: { ...environment(cwd), PM_SWARM_TEST_POLL_HEARTBEAT: '1' }, cwd, timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawn(runtime === 'npm' ? process.execPath : 'bun', watchArgs, { env: { ...environment(cwd), PM_SWARM_TEST_POLL_HEARTBEAT: '1' }, cwd, timeout: testTime(120000), stdio: ['ignore', 'pipe', 'pipe'] });
       const exit = processExit(child, 'exit');
       const stream = { output: '', error: '' };
       child.stdout.on('data', chunk => { stream.output += chunk.toString(); });
       child.stderr.on('data', chunk => { stream.error += chunk.toString(); });
       try {
-        const deadline = Date.now() + 15000;
+        const deadline = Date.now() + testTime(15000);
         while ((!stream.output.includes(json ? '\n' : '\n\n') || !stream.error.includes('pm-swarm:test:poll-complete\n')) && child.exitCode === null && Date.now() < deadline) await delay(30);
         assert.doesNotMatch(stream.output + stream.error, /Extension activation failures|Unknown command/);
         assert.ok(stream.error.includes('pm-swarm:test:poll-complete\n'), stream.output + stream.error);
@@ -100,7 +101,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
         assert.equal(event.event, 'lane_added'); assert.equal(event.data.id, id);
         const initial = stream.output;
         const polls = stream.error.split('pm-swarm:test:poll-complete\n').length - 1;
-        const pollDeadline = Date.now() + 15000;
+        const pollDeadline = Date.now() + testTime(15000);
         while (stream.error.split('pm-swarm:test:poll-complete\n').length - 1 < polls + 2 && child.exitCode === null && Date.now() < pollDeadline) await delay(30);
         assert.ok(stream.error.split('pm-swarm:test:poll-complete\n').length - 1 >= polls + 2, stream.output + stream.error);
         assert.equal(stream.output, initial, 'unchanged packed watch polls are silent');
@@ -151,7 +152,7 @@ test('built artifact has zero runtime dependencies beyond Node and the pm SDK', 
 
 
 /** Exercise the actual tarball on a plain tracker through Node and native Bun. */
-for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball runs every command on a fresh non-git tracker`, { timeout: 600000 }, async t => {
+for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball runs every command on a fresh non-git tracker`, { timeout: testTime(600000) }, async t => {
   const { bun, repo, pmRoot, host, env, invoke } = await packedNonGitConsumer(t, manager);
   invoke(process.execPath, ['swarm', 'settings', '--progress-orchestrator', 'coordinator', '--apply']);
   for (const runtime of [manager === 'npm' ? process.execPath : bun]) {
@@ -186,7 +187,7 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
     invoke(runtime, ['swarm', 'deadlocks', resource, '--action', 'request', '--token', String(reserved.token), '--resources', wanted, '--revision', String(observed.revision), '--apply']);
     assert.deepEqual(invoke(runtime, ['swarm', 'deadlocks']).cycles, []);
     invoke(runtime, ['swarm', 'resource', resource, '--action', 'release', '--token', String(reserved.token)]);
-    const land = spawnSync(runtime, [host, 'swarm', 'land', '--json'], { timeout: 300000, cwd: repo, env, encoding: 'utf8' });
+    const land = spawnSync(runtime, [host, 'swarm', 'land', '--json'], { timeout: testTime(300000), cwd: repo, env, encoding: 'utf8' });
     assert.equal(land.status, 2); assert.match(land.stdout + land.stderr, /needs a git repository/);
 
     // A terminal item can retain a stale claim after import or explicit override.
@@ -217,7 +218,7 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} tarball r
 });
 
 /** Verify one immutable pack through actual npm-global and Bun-global host symlinks. */
-test('packed deadlock commands use the SDK supplied by global npm and Bun hosts', { timeout: 600000 }, async t => {
+test('packed deadlock commands use the SDK supplied by global npm and Bun hosts', { timeout: testTime(600000) }, async t => {
   requireBun();
   const root = process.cwd(); const scratch = mkdtempSync(join(tmpdir(), 'swarm-global-witness-'));
   t.after(() => rm(scratch, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
@@ -226,7 +227,7 @@ test('packed deadlock commands use the SDK supplied by global npm and Bun hosts'
   for (const key of Object.keys(environment)) if (/token|secret|password|credential|api_key|npm_media_server/i.test(key)) delete environment[key];
   /** Run each public package manager or host without inherited credentials or user configuration. */
   const invoke = (cwd: string, bin: string, args: string[], extra: NodeJS.ProcessEnv = {}) => {
-    const result = spawnSync(bin, args, { cwd, env: { ...environment, ...extra }, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: 300000 });
+    const result = spawnSync(bin, args, { cwd, env: { ...environment, ...extra }, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, timeout: testTime(300000) });
     assert.equal(result.status, 0, result.stdout + result.stderr); return result.stdout;
   };
   const packed = JSON.parse(invoke(root, 'npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch])) as { filename: string; shasum: string }[];
@@ -258,7 +259,7 @@ test('packed deadlock commands use the SDK supplied by global npm and Bun hosts'
 });
 
 /** Crash recovery has its own consumer so its matrix does not extend the command-smoke deadline. */
-for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} recovers every native compensation member boundary`, { timeout: 1800000 }, async t => {
+for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} recovers every native compensation member boundary`, { timeout: testTime(1800000) }, async t => {
   const { bun, repo, env } = await packedNonGitConsumer(t, manager);
   assertPackedCrashRecovery(manager === 'npm' ? process.execPath : bun, repo, env);
 });
