@@ -11,6 +11,7 @@ import { SharedTracker } from '../src/shared-tracker.ts';
 import { Swarm } from '../src/swarm.ts';
 import { fixture, swarmCli } from './helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { testTime } from './support/time.ts';
 
 /** Publish a real Git lane with an existing linked footprint. */
 async function gitLaneFixture(t: TestContext) {
@@ -94,7 +95,7 @@ for (const mode of ['shared', 'Git'] as const) {
     // Keep a real stalled subprocess, scaling only its timeout to avoid a five-minute test.
     const intercepted = t.mock.method(childProcess, 'spawnSync', (file: string, args: string[], options: SpawnSyncOptionsWithStringEncoding) => {
       assert.equal(file, process.execPath); assert.ok(args.includes(join(import.meta.dirname, '../node_modules/.bin/pm')));
-      assert.equal(options.timeout, 300000);
+      assert.equal(options.timeout, mode === 'Git' ? testTime(300000) : 300000);
       return spawnSync(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { ...options, timeout: 25 });
     });
     syncBuiltinESMExports();
