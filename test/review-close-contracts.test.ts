@@ -8,6 +8,8 @@ interface SyntaxNode {
   type: string; name?: string; value?: unknown; callee?: SyntaxNode; arguments?: SyntaxNode[];
   properties?: SyntaxNode[]; key?: SyntaxNode; property?: SyntaxNode; object?: SyntaxNode; computed?: boolean;
   expressions?: SyntaxNode[]; quasis?: { value: { cooked: string } }[];
+  argument?: SyntaxNode; left?: SyntaxNode; elements?: (SyntaxNode | null)[]; param?: SyntaxNode;
+  id?: SyntaxNode; params?: SyntaxNode[]; local?: SyntaxNode; specifiers?: SyntaxNode[]; source?: SyntaxNode;
 }
 
 /** Child-process APIs share the deadline contract across direct, namespace and computed calls. */
@@ -15,6 +17,43 @@ const CHILD_APIS = ['spawn', 'spawnSync', 'fork', 'execFile', 'execFileSync', 'e
 
 /** Fixed child API syntax is compiled once; input text never supplies regex syntax. */
 const CHILD_CALL = /\b(?:spawn|spawnSync|fork|execFile|execFileSync|exec|execSync)\s*(?:['"]\])?\s*(?:\?\.)?\s*\(/;
+
+/** The shared scale helper's module specifier, the only binding accepted for testTime. */
+const SHARED_TIME_HELPER = /(^|\/)support\/time(\.ts)?$/;
+
+/** Credit testTime only when the program binds that name exactly to the shared helper import. */
+function sharedTestTimeBound(program: SyntaxNode): boolean {
+  let helper = false;
+  let foreign = false;
+  const binds = (node: SyntaxNode | null | undefined): boolean => {
+    if (!node) return false;
+    if (node.type === 'Identifier') return node.name === 'testTime';
+    if (node.type === 'ObjectPattern') return (node.properties ?? []).some(property =>
+      property.type === 'RestElement' ? binds(property.argument) : binds(property.value as SyntaxNode));
+    if (node.type === 'ArrayPattern') return (node.elements ?? []).some(binds);
+    if (node.type === 'AssignmentPattern') return binds(node.left);
+    if (node.type === 'RestElement') return binds(node.argument);
+    return false;
+  };
+  const visit = (raw: unknown): void => {
+    if (Array.isArray(raw)) { for (const entry of raw) visit(entry); return; }
+    if (typeof raw !== 'object' || raw === null) return;
+    const node = raw as SyntaxNode;
+    if (node.type === 'ImportDeclaration') {
+      for (const specifier of node.specifiers ?? []) if (binds(specifier.local)) {
+        if (typeof node.source?.value === 'string' && SHARED_TIME_HELPER.test(node.source.value)) helper = true;
+        else foreign = true;
+      }
+    } else if (['VariableDeclarator', 'FunctionDeclaration', 'FunctionExpression', 'ClassDeclaration', 'ClassExpression'].includes(node.type) && binds(node.id)) {
+      foreign = true;
+    } else if (binds(node.param) || (node.params ?? []).some(binds)) {
+      foreign = true;
+    }
+    for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
+  };
+  visit(program);
+  return helper && !foreign;
+}
 
 /** Resolve direct and member call names, including optional and string-computed members. */
 function callName(node: SyntaxNode | undefined): string | undefined {
@@ -40,6 +79,7 @@ function interpolation(node: SyntaxNode, prefix: string): string {
 /** Find unbounded calls in executable sources and embedded driver programs without trusting outer timeouts. */
 function unboundedChildren(source: string, label: string): string[] {
   const failures: string[] = [];
+  const program = parse(source, { sourceType: 'module', plugins: ['typescript'], allowReturnOutsideFunction: true }) as SyntaxNode;
   /** Visit actual syntax and recursively parse embedded executable programs. */
   const visit = (raw: unknown): void => {
     if (typeof raw !== 'object' || raw === null) return;
@@ -49,7 +89,13 @@ function unboundedChildren(source: string, label: string): string[] {
     if (['CallExpression', 'OptionalCallExpression'].includes(node.type) && CHILD_APIS.includes(name ?? '')) {
       const options = node.arguments?.find(argument => argument.type === 'ObjectExpression');
       const timeout = options?.properties?.find(property => property.key?.name === 'timeout' || property.key?.value === 'timeout');
-      const value = timeout?.value;
+      const expression = timeout?.value as SyntaxNode | undefined;
+      // The shared helper validates its scale during module evaluation and
+      // rounds an explicitly positive base deadline before the child launches.
+      // Only the helper's own binding counts: a shadowed local or a same-name
+      // member on another object is an unvalidated wrapper.
+      const value = expression?.type === 'CallExpression' && expression.callee?.type === 'Identifier' && expression.callee.name === 'testTime'
+        && expression.arguments?.length === 1 && sharedTestTimeBound(program) ? expression.arguments[0] : expression;
       const positive = typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'NumericLiteral' && Number((value as SyntaxNode).value) > 0;
       const parameter = timeout?.type === 'ObjectProperty' && typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'Identifier' && (value as SyntaxNode).name === 'timeout';
       if (!positive && !parameter) failures.push(`${label}:${name}: missing positive per-child timeout`);
@@ -64,7 +110,7 @@ function unboundedChildren(source: string, label: string): string[] {
     }
     for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
   };
-  visit(parse(source, { sourceType: 'module', plugins: ['typescript'], allowReturnOutsideFunction: true }));
+  visit(program);
   return failures;
 }
 
@@ -97,6 +143,69 @@ test('child deadline inventory rejects any missing, zero or negative deadline ev
     }
     assert.deepEqual(unboundedChildren(`${name}(${args}, { timeout: 120000 });`, 'control'), []);
   }
+});
+
+test('child deadline inventory permits scaled positive budgets and refuses invalid scaled arguments', () => {
+  const call = ['spawn', 'Sync'].join('');
+  const HELPER_IMPORT = "import { testTime } from './support/time.ts';\n";
+  for (const budget of ['120000', 'timeout']) {
+    const source = `${HELPER_IMPORT}${call}('program', [], { timeout: testTime(${budget}) });`;
+    assert.deepEqual(unboundedChildren(source, 'scaled'), []);
+  }
+  for (const budget of ['', '0', '-1', 'NaN', 'Infinity', 'unknown', '1, 2']) {
+    const source = `${HELPER_IMPORT}${call}('program', [], { timeout: testTime(${budget}) });`;
+    assert.equal(unboundedChildren(source, 'invalid-scaled').length, 1, budget);
+  }
+  assert.equal(unboundedChildren(`${call}('program', [], { timeout: unvalidated(120000) });`, 'foreign-helper').length, 1);
+});
+
+test('child deadline inventory credits only the shared helper binding for the testTime wrapper', () => {
+  const call = ['spawn', 'Sync'].join('');
+  const HELPER_IMPORT = "import { testTime } from './support/time.ts';\n";
+  // A same-name shadowed local binding replaces the helper and is rejected.
+  assert.equal(unboundedChildren(`const testTime = () => 0;\n${call}('program', [], { timeout: testTime(120000) });`, 'shadowed-local').length, 1);
+  // A same-name import from any other module is a foreign helper and is rejected.
+  assert.equal(unboundedChildren(`import { testTime } from './unrelated/time.ts';\n${call}('program', [], { timeout: testTime(120000) });`, 'foreign-helper').length, 1);
+  // An unrelated member call is rejected even when the shared helper is imported.
+  assert.equal(unboundedChildren(`${HELPER_IMPORT}${call}('program', [], { timeout: other.testTime(120000) });`, 'member-helper').length, 1);
+  // A same-name call with no binding at all is rejected.
+  assert.equal(unboundedChildren(`${call}('program', [], { timeout: testTime(120000) });`, 'unbound').length, 1);
+  // The shared helper import itself remains the accepted wrapper.
+  assert.deepEqual(unboundedChildren(`${HELPER_IMPORT}${call}('program', [], { timeout: testTime(120000) });`, 'shared-helper'), []);
+});
+
+test('child deadline inventory refuses every shadowing binding pattern', () => {
+  const call = ['spawn', 'Sync'].join('') + "('program', [], { timeout: testTime(120000) });";
+  const helper = "import { testTime } from './support/time.ts';\n";
+  const wrappers = [
+    ['parameter', 'function run(testTime) { BODY }'],
+    ['object parameter', 'function run({ testTime }) { BODY }'],
+    ['renamed nested object', 'function run({ nested: { value: testTime } }) { BODY }'],
+    ['array parameter', 'function run([testTime]) { BODY }'],
+    ['nested array with hole', 'function run([, { nested: [testTime] }]) { BODY }'],
+    ['default parameter', 'function run(testTime = () => 0) { BODY }'],
+    ['nested default', 'function run({ value: [testTime = () => 0] } = {}) { BODY }'],
+    ['rest parameter', 'function run(...testTime) { BODY }'],
+    ['object rest', 'function run({ ...testTime }) { BODY }'],
+    ['array rest', 'function run([...testTime]) { BODY }'],
+    ['catch identifier', 'try {} catch (testTime) { BODY }'],
+    ['catch pattern', 'try {} catch ({ nested: [testTime] }) { BODY }'],
+    ['function declaration', 'function run() { function testTime() {} BODY }'],
+    ['class declaration', 'function run() { class testTime {} BODY }'],
+    ['variable declaration', 'function run() { const testTime = () => 0; BODY }'],
+    ['object declaration', 'function run() { const { nested: [testTime] } = value; BODY }'],
+    ['array declaration', 'function run() { let [testTime] = value; BODY }'],
+    ['named function expression', 'const run = function testTime() { BODY };'],
+    ['named class expression', 'const run = class testTime { method() { BODY } };'],
+    ['arrow parameter', 'const run = ({ testTime }) => { BODY };'],
+  ];
+  for (const [label, wrapper] of wrappers) {
+    assert.equal(unboundedChildren(helper + wrapper.replace('BODY', call), label).length, 1, label);
+    // A property key named testTime does not bind it when renamed to another local.
+    const safe = wrapper.replaceAll('testTime', 'other').replace('BODY', call);
+    assert.deepEqual(unboundedChildren(helper + safe, label), [], label);
+  }
+  assert.deepEqual(unboundedChildren(helper + 'function run({ testTime: other }) { ' + call + ' }', 'property-key'), []);
 });
 
 test('active recovery guides distinguish fresh execution, compensation and durable committed replay', () => {

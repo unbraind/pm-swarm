@@ -1,3 +1,5 @@
+import { testTime } from './support/time.ts';
+import { testDepth } from './support/depth.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { readFileSync } from 'node:fs';
@@ -96,7 +98,7 @@ test('declaration refuses every SDK mutation interleaving boundary and preserves
   }
 });
 
-test('500 seeded operation sequences compare SDK read-back to an independent request model', { timeout: 1200000 }, async t => {
+test('500 seeded operation sequences compare SDK read-back to an independent request model', { timeout: testTime(1200000) }, async t => {
   const f = await pair(t); const [a, b] = f.resources; const w = f.witnesses[0];
   const scope = (await f.client.create({ type: 'Feature', title: 'Native relationship scope', unset: ['parent'] })).item.id;
   const otherScope = (await f.client.create({ type: 'Feature', title: 'Ambient focus scope', unset: ['parent'] })).item.id;
@@ -105,7 +107,7 @@ test('500 seeded operation sequences compare SDK read-back to an independent req
   const old: { revision: string; value: { version: 1; token: string; resources: string[] } }[] = [];
   /** Reproducible generator independent of declaration normalization. */
   const random = () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed; };
-  for (let sequence = 0; sequence < 500; sequence++) {
+  for (let sequence = 0; sequence < testDepth(500); sequence++) {
     if (sequence % 50 === 0) await f.client.focus((random() >>> 16 & 1) === 1 ? scope : otherScope);
     const active = (random() >>> 16 & 1) === 1;
     const canonical = { version: 1 as const, token: '1', resources: active ? [b] : [] };
@@ -171,7 +173,7 @@ test('custom status registry roles determine active and terminal waits under arb
 
 test('seeded extreme declaration producers all validate and serialize without numeric coercion', () => {
   let seed = 0xfeedbacc;
-  for (let i = 0; i < 1000; i++) {
+  for (let i = 0; i < testDepth(1000); i++) {
     seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
     const count = seed % 17; const digits = 1 + (seed >>> 8) % 80;
     const resources = Array.from({ length: count }, (_, j) => `resource-${j.toString().padStart(2, '0')}`);

@@ -1,3 +1,4 @@
+import { testDepth } from './support/depth.ts';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import childProcess from 'node:child_process';
@@ -13,7 +14,7 @@ test('the linked-test coordinator preserves explicit long budgets and supplies a
 
 test('every generated linked-test sequence fits inside its coordinator deadline', () => {
   let seed = 0x71de;
-  for (let sequence = 0; sequence < 200; sequence++) {
+  for (let sequence = 0; sequence < testDepth(200); sequence++) {
     const tests: { timeout_seconds?: number }[] = [];
     for (let index = 0; index <= sequence % 20; index++) {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
@@ -46,7 +47,7 @@ test('the real merged-test child receives every declared test budget plus coordi
 
 test('fractional linked-test budgets always produce valid whole millisecond deadlines without truncation', () => {
   let seed = 0x81de;
-  for (let count = 1; count <= 200; count++) {
+  for (let count = 1; count <= testDepth(200); count++) {
     const tests = Array.from({ length: count % 21 + 1 }, () => {
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       return { timeout_seconds: seed / 1048576 + 0.0000001 };

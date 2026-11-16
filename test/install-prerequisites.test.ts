@@ -17,8 +17,8 @@ test('the packed host install spec is derived from the declared peer dependency 
 test('changing the declared floor changes both real packed install paths without editing helper code', t => {
   const root = mkdtempSync(join(tmpdir(), 'swarm-host-floor-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  mkdirSync(join(root, 'test')); mkdirSync(join(root, 'src'));
-  for (const file of ['test/install-helpers.ts', 'src/git-environment.ts']) {
+  mkdirSync(join(root, 'test/support'), { recursive: true }); mkdirSync(join(root, 'src'));
+  for (const file of ['test/install-helpers.ts', 'test/support/time.ts', 'src/git-environment.ts']) {
     writeFileSync(join(root, file), readFileSync(new URL(`../${file}`, import.meta.url)));
   }
   for (const floor of ['2026.10.23', '2027.1.7', '2040.12.31']) {
