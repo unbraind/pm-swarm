@@ -8,6 +8,7 @@ interface SyntaxNode {
   type: string; name?: string; value?: unknown; callee?: SyntaxNode; arguments?: SyntaxNode[];
   properties?: SyntaxNode[]; key?: SyntaxNode; property?: SyntaxNode; object?: SyntaxNode; computed?: boolean;
   expressions?: SyntaxNode[]; quasis?: { value: { cooked: string } }[];
+  id?: SyntaxNode; params?: SyntaxNode[]; local?: SyntaxNode; specifiers?: SyntaxNode[]; source?: SyntaxNode;
 }
 
 /** Child-process APIs share the deadline contract across direct, namespace and computed calls. */
@@ -15,6 +16,34 @@ const CHILD_APIS = ['spawn', 'spawnSync', 'fork', 'execFile', 'execFileSync', 'e
 
 /** Fixed child API syntax is compiled once; input text never supplies regex syntax. */
 const CHILD_CALL = /\b(?:spawn|spawnSync|fork|execFile|execFileSync|exec|execSync)\s*(?:['"]\])?\s*(?:\?\.)?\s*\(/;
+
+/** The shared scale helper's module specifier, the only binding accepted for testTime. */
+const SHARED_TIME_HELPER = /(^|\/)support\/time(\.ts)?$/;
+
+/** Credit testTime only when the program binds that name exactly to the shared helper import. */
+function sharedTestTimeBound(program: SyntaxNode): boolean {
+  let helper = false;
+  let foreign = false;
+  const binds = (node: SyntaxNode | undefined): boolean => node?.type === 'Identifier' && node.name === 'testTime';
+  const visit = (raw: unknown): void => {
+    if (Array.isArray(raw)) { for (const entry of raw) visit(entry); return; }
+    if (typeof raw !== 'object' || raw === null) return;
+    const node = raw as SyntaxNode;
+    if (node.type === 'ImportDeclaration') {
+      for (const specifier of node.specifiers ?? []) if (binds(specifier.local)) {
+        if (typeof node.source?.value === 'string' && SHARED_TIME_HELPER.test(node.source.value)) helper = true;
+        else foreign = true;
+      }
+    } else if ((node.type === 'VariableDeclarator' || node.type === 'FunctionDeclaration' || node.type === 'ClassDeclaration') && binds(node.id)) {
+      foreign = true;
+    } else if ((node.params ?? []).some(binds)) {
+      foreign = true;
+    }
+    for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
+  };
+  visit(program);
+  return helper && !foreign;
+}
 
 /** Resolve direct and member call names, including optional and string-computed members. */
 function callName(node: SyntaxNode | undefined): string | undefined {
@@ -40,6 +69,7 @@ function interpolation(node: SyntaxNode, prefix: string): string {
 /** Find unbounded calls in executable sources and embedded driver programs without trusting outer timeouts. */
 function unboundedChildren(source: string, label: string): string[] {
   const failures: string[] = [];
+  const program = parse(source, { sourceType: 'module', plugins: ['typescript'], allowReturnOutsideFunction: true }) as SyntaxNode;
   /** Visit actual syntax and recursively parse embedded executable programs. */
   const visit = (raw: unknown): void => {
     if (typeof raw !== 'object' || raw === null) return;
@@ -52,8 +82,10 @@ function unboundedChildren(source: string, label: string): string[] {
       const expression = timeout?.value as SyntaxNode | undefined;
       // The shared helper validates its scale during module evaluation and
       // rounds an explicitly positive base deadline before the child launches.
-      const value = expression?.type === 'CallExpression' && callName(expression.callee) === 'testTime' && expression.arguments?.length === 1
-        ? expression.arguments[0] : expression;
+      // Only the helper's own binding counts: a shadowed local or a same-name
+      // member on another object is an unvalidated wrapper.
+      const value = expression?.type === 'CallExpression' && expression.callee?.type === 'Identifier' && expression.callee.name === 'testTime'
+        && expression.arguments?.length === 1 && sharedTestTimeBound(program) ? expression.arguments[0] : expression;
       const positive = typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'NumericLiteral' && Number((value as SyntaxNode).value) > 0;
       const parameter = timeout?.type === 'ObjectProperty' && typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'Identifier' && (value as SyntaxNode).name === 'timeout';
       if (!positive && !parameter) failures.push(`${label}:${name}: missing positive per-child timeout`);
@@ -68,7 +100,7 @@ function unboundedChildren(source: string, label: string): string[] {
     }
     for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
   };
-  visit(parse(source, { sourceType: 'module', plugins: ['typescript'], allowReturnOutsideFunction: true }));
+  visit(program);
   return failures;
 }
 
@@ -105,15 +137,31 @@ test('child deadline inventory rejects any missing, zero or negative deadline ev
 
 test('child deadline inventory permits scaled positive budgets and refuses invalid scaled arguments', () => {
   const call = ['spawn', 'Sync'].join('');
+  const HELPER_IMPORT = "import { testTime } from './support/time.ts';\n";
   for (const budget of ['120000', 'timeout']) {
-    const source = `${call}('program', [], { timeout: testTime(${budget}) });`;
+    const source = `${HELPER_IMPORT}${call}('program', [], { timeout: testTime(${budget}) });`;
     assert.deepEqual(unboundedChildren(source, 'scaled'), []);
   }
   for (const budget of ['', '0', '-1', 'NaN', 'Infinity', 'unknown', '1, 2']) {
-    const source = `${call}('program', [], { timeout: testTime(${budget}) });`;
+    const source = `${HELPER_IMPORT}${call}('program', [], { timeout: testTime(${budget}) });`;
     assert.equal(unboundedChildren(source, 'invalid-scaled').length, 1, budget);
   }
   assert.equal(unboundedChildren(`${call}('program', [], { timeout: unvalidated(120000) });`, 'foreign-helper').length, 1);
+});
+
+test('child deadline inventory credits only the shared helper binding for the testTime wrapper', () => {
+  const call = ['spawn', 'Sync'].join('');
+  const HELPER_IMPORT = "import { testTime } from './support/time.ts';\n";
+  // A same-name shadowed local binding replaces the helper and is rejected.
+  assert.equal(unboundedChildren(`const testTime = () => 0;\n${call}('program', [], { timeout: testTime(120000) });`, 'shadowed-local').length, 1);
+  // A same-name import from any other module is a foreign helper and is rejected.
+  assert.equal(unboundedChildren(`import { testTime } from './unrelated/time.ts';\n${call}('program', [], { timeout: testTime(120000) });`, 'foreign-helper').length, 1);
+  // An unrelated member call is rejected even when the shared helper is imported.
+  assert.equal(unboundedChildren(`${HELPER_IMPORT}${call}('program', [], { timeout: other.testTime(120000) });`, 'member-helper').length, 1);
+  // A same-name call with no binding at all is rejected.
+  assert.equal(unboundedChildren(`${call}('program', [], { timeout: testTime(120000) });`, 'unbound').length, 1);
+  // The shared helper import itself remains the accepted wrapper.
+  assert.deepEqual(unboundedChildren(`${HELPER_IMPORT}${call}('program', [], { timeout: testTime(120000) });`, 'shared-helper'), []);
 });
 
 test('active recovery guides distinguish fresh execution, compensation and durable committed replay', () => {
