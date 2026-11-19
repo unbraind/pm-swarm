@@ -18,7 +18,7 @@ for (const changed of ['worktree', 'dirty worktree', 'branch'] as const) test(`f
       f.write('peer.txt', 'Public peer work', path); peer = changed === 'worktree' ? f.save(['peer.txt'], path) : git(path, ['rev-parse', 'HEAD']); throw new Error('Stop after peer worktree commit');
     }
     if (changed === 'branch' && transition === 'branch_created') {
-      peer = git(f.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'Public peer branch']);
+      peer = git(f.repo, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit-tree', 'HEAD^{tree}', '-p', 'HEAD', '-m', 'Public peer branch']);
       git(f.repo, ['update-ref', `refs/heads/${branch}`, peer]); throw new Error('Stop after peer ref transition');
     }
   }, () => f.swarm.start(id)), error => error instanceof SettingsRefusal && error.code === 'swarm_document_changed');

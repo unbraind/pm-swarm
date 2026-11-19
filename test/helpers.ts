@@ -32,7 +32,7 @@ export async function fixture(t: TestContext, base = tmpdir()) {
   /** Write a relative fixture source file. */
   const write = (name: string, body: string, cwd = repo) => { assertFixtureRepo(cwd); const path = join(cwd, name); mkdirSync(dirname(path), { recursive: true }); writeFileSync(path, body); };
   /** Commit explicit fixture paths under a public automation identity. */
-  const save = (paths = ['.agents/pm', '.gitattributes', '.gitignore'], cwd = repo) => { git(cwd, ['add', '--', ...paths]); git(cwd, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '--allow-empty', '-m', 'Record fixture']); return git(cwd, ['rev-parse', 'HEAD']); };
+  const save = (paths = ['.agents/pm', '.gitattributes', '.gitignore'], cwd = repo) => { git(cwd, ['add', '--', ...paths]); git(cwd, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '--allow-empty', '-m', 'Record fixture']); return git(cwd, ['rev-parse', 'HEAD']); };
   save();
   /** Create an SDK task and attach an optional linked footprint. */
   const item = async (files: string[] = []) => { const id = (await client.create({ type: 'Task', title: 'Fixture work' })).item.id; if (files.length > 0) await client.files(id, { add: files }); return id; };

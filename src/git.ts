@@ -55,7 +55,7 @@ export function predict(repo: string, left: string, right: string): Prediction {
 }
 /** Create an unreferenced merge commit so subsequent simulations retain ancestry. */
 export function chain(repo: string, left: string, right: string, tree: string): string {
-  return git(repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit-tree', tree, '-p', left, '-p', right], 'Simulate swarm landing\n');
+  return git(repo, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit-tree', tree, '-p', left, '-p', right], 'Simulate swarm landing\n');
 }
 /** Inspect every driver declared by tracked attributes in the worktree's context. */
 export function missingDrivers(repo: string): string[] {
