@@ -67,7 +67,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     writeFileSync(join(cwd, 'verify.test.js'), "import {test} from 'node:test';import assert from 'node:assert/strict';test('packed lane',()=>assert.equal(2+2,4));\n");
     pm('test', id, '--add', `command=${runtime === 'npm' ? 'node --test' : 'bun test'} verify.test.js`);
     run(cwd, 'git', ['add', '.agents/pm', '.gitignore', '.gitattributes', 'code.txt', 'package.json', 'verify.test.js', ...(existsSync(join(cwd, 'package-lock.json')) ? ['package-lock.json'] : []), ...(existsSync(join(cwd, 'bun.lock')) ? ['bun.lock'] : [])]);
-    run(cwd, 'git', ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record consumer']);
+    run(cwd, 'git', ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record consumer']);
     const plan = JSON.parse(pm('swarm', 'plan', '--json')) as { suggested_start_set: string[] }; assert.deepEqual(plan.suggested_start_set, [id]); assert.match(pm('swarm', 'plan'), /suggested_start_set/);
     assert.doesNotMatch(pm('swarm', 'plan'), /complete_list|read_output|estimated_tokens/);
     assert.match(pm('swarm', 'plan', '--full'), /complete_list/);
@@ -118,7 +118,7 @@ test('packed npm/npx and native Bun/bunx run all swarm commands and retain path 
     assert.equal((JSON.parse(pm('swarm', 'sync', id, '--json')) as { dry_run: boolean }).dry_run, true);
     assert.deepEqual((JSON.parse(pm('swarm', 'land', '--json')) as { order: string[] }).order, [id]);
     run(cwd, 'git', ['add', '.agents/pm']);
-    run(cwd, 'git', ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record lane']);
+    run(cwd, 'git', ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record lane']);
     assert.equal((JSON.parse(pm('swarm', 'land', '--execute', '--json')) as { executed: boolean }).executed, true);
     assert.equal((JSON.parse(pm('swarm', 'reap', '--dry-run', '--json')) as { removed: string[] }).removed.length, 0);
     for (const command of ['schedule', 'next']) for (const format of ['json', 'toon']) {

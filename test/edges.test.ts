@@ -43,7 +43,7 @@ test('Git failure and missing driver diagnostics remain explicit', async t => {
   const f = await fixture(t); assert.throws(() => commit(f.repo, 'absent'), /failed/); assert.throws(() => predict(f.repo, 'absent', 'main'), /unavailable/);
   git(f.repo, ['config', '--unset', 'merge.pm-item-toon.driver']); assert.ok(missingDrivers(f.repo).includes('pm-item-toon'));
   const empty = join(f.root, 'empty'); mkdirSync(empty); git(empty, ['init', '-b', 'main']); assert.deepEqual(missingDrivers(empty), ['pm merge attributes']);
-  writeFileSync(join(empty, '.gitattributes'), '# No pm drivers\n'); git(empty, ['add', '.gitattributes']); git(empty, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record attributes']); assert.deepEqual(missingDrivers(empty), ['pm merge attributes']);
+  writeFileSync(join(empty, '.gitattributes'), '# No pm drivers\n'); git(empty, ['add', '.gitattributes']); git(empty, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Record attributes']); assert.deepEqual(missingDrivers(empty), ['pm merge attributes']);
   assert.equal((await settings(join(f.root, 'missing'))).base, 'main');
 });
 
@@ -94,7 +94,7 @@ test('land bounds exhaustive search and refuses untrusted linked tests', async t
 
 test('verification refuses an empty test run and predictor refuses unrelated histories', async t => {
   const f = await fixture(t); assert.equal(await verifyLinkedTests([], f.pmRoot), false);
-  const unrelated = git(f.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit-tree', git(f.repo, ['rev-parse', 'HEAD^{tree}'])], 'Unrelated fixture\n');
+  const unrelated = git(f.repo, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit-tree', git(f.repo, ['rev-parse', 'HEAD^{tree}'])], 'Unrelated fixture\n');
   assert.throws(() => predict(f.repo, commit(f.repo, 'HEAD'), unrelated), /unavailable/);
 });
 
