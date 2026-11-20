@@ -1,9 +1,9 @@
 {
   "schema": 1,
   "repository": "unbraind/pm-swarm",
-  "baseSha": "a52cab9a13968155cf55afabfb44d71771d6cb44",
-  "version": "2026.11.16",
-  "runId": 44299181514,
+  "baseSha": "fc46400b3a7068d2eb00715481194fd18ac75806",
+  "version": "2026.11.20",
+  "runId": 44731421738,
   "runAttempt": 1,
   "configDigest": "19f861084767fcd1b42ece3bc60c873d40cadd652aba909211d2aaf4f1e1ede6"
 }
