@@ -2,16 +2,14 @@ id: pm-swarm-assignment-brief
 title: Give each swarm worker a budgeted assignment brief
 description: "Project the selected item into one budgeted, fenced work brief for the assigned agent."
 type: Feature
-status: in_progress
+status: open
 priority: 2
 tags: []
 created_at: "2026-11-21T03:19:44.094Z"
-updated_at: "2026-11-21T15:47:46.630Z"
-assignee: codex-sol
-claim_principal: codex-sol
+updated_at: "2026-11-21T16:16:49.944Z"
 author: codex-sol
 acceptance_criteria: The current owner and exact swarm generation are required in shared and Git trackers.; Only the requested item is disclosed and JSON and TOON fit the SDK-estimated token budget with exact disclosure counts.; Concurrent real worker processes verify assignment isolation and stale-fence refusal.; README documents a measured before and after from a synthetic tracker and package gates pass.
-comments[10]{created_at,author,text}:
+comments[13]{created_at,author,text}:
   "2026-11-21T03:20:13.864Z",codex-sol,"Synthetic baseline (25 tasks, core 2026.11.18): orient plus full item costs 2691 SDK-estimated JSON tokens, or 2645 with item-scoped orient. A fixed field get costs 157 but excludes recent comments and has no owner fence. Existing stale reclaim recovered one item; its 342-token receiver packet omitted acceptance criteria, and scoped core handoff context cost 849. Existing footprint planning excluded all 8 contenders with zero observed overlap admissions; fair scheduling also excluded the single skill mismatch. Implement a one-item SDK projection using the existing owner and generation, whole fields or rows, exact omission counts and the SDK estimator in both native formats. Preserve selection and add concurrent real worker acceptance."
   "2026-11-21T03:27:50.053Z",codex-sol,"Measured one assignment before handoff on the 25-task fixture: brief 479 estimated JSON tokens at a 512 cap, down 2212 (82.2%) from orient plus full get and 525 (52.3%) from explicit fields including comments. Scoped orient plus full get was 2645. The same explicit fields refused at 512. The brief retains the criteria, footprint and eight progress comments, with 11 comment rows omitted. The unchanged selection receipt was 772 tokens."
   "2026-11-21T03:27:53.544Z",codex-sol,"The new read uses the SDK guard or the exact bound provider client, checks active owner and decimal generation, and sizes complete JSON and TOON using the SDK estimator. Fenced Git transfers work without changing legacy Git acquisition or sync behavior. Follow-ups are pm-swarm-reclaim-digest and pm-swarm-git-fenced-acquisition. The PM-linked test ran 3/3 with no skips. Full coverage is running."
@@ -22,6 +20,9 @@ comments[10]{created_at,author,text}:
   "2026-11-21T15:40:38.950Z",codex-sol,"Review thread PRRT_kwDOVLY-P866TpHg on PR #96. Apply the shared private-path scanner and SDK secret guard to brief output, keep the identity privacy refusal, and record privacy withholding without exposing the withheld content. Verify against real tracker fixtures."
   "2026-11-21T15:44:31.844Z",codex-sol,"Privacy omission is field-wide, including collection rows. Budget counts continue for otherwise safe fields. Exercise identity refusals, private progress and acceptance text, stored and normalized footprints, and SDK credential findings in a linked test and custom status. Confirm JSON and TOON fit with omission markers and preserve the durable tracker snapshot."
   "2026-11-21T15:47:46.629Z",codex-sol,"Typecheck, lint, docstring and duplication gates passed. Focused c8 measured 100% statements, branches, functions and lines for src/assignment-brief.ts with five passing tracker tests. The JSON and TOON receipts retained public context and a numeric budget omission while withholding all detected fields. Package-wide coverage and command references are still running."
+  "2026-11-21T15:48:14.084Z",codex-sol,CodeRabbit thread PRRT_kwDOVLY-P866TpHg on PR #96 maps to commit 505170f1f833c7bdb41bd4ee497c4183143177cf. The brief withholds flagged output fields with a privacy receipt and keeps privacy refusal for the required identity. README and real tracker regression tests are in that commit.
+  "2026-11-21T15:54:14.632Z",codex-sol,Node 26.13.0 verification passed 15 of 15 tests in the two requested suites and 130 of 130 tests in the ten referencing command and dispatcher suites. Both commands are linked. The package coverage run uses the PR CI quick depth and the original one-hour local deadline.
+  "2026-11-21T16:16:48.555Z",codex-sol,"The package coverage gate passed before the local deadline with PM_TEST_DEPTH=quick, matching PR CI. All 43 configured source files met 100 percent in every dimension. Coverage was 4665 of 4665 statements and lines, 3338 of 3338 branches, and 367 of 367 functions. The changed brief module was fully covered."
 files[6]{path,scope}:
   index.ts,project
   src/admission.ts,project
