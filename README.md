@@ -24,6 +24,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | sync | `pm swarm sync task-id --files src/a.ts,src/b.ts --dry-run` | Preview explicit changed-file links, or derive them from Git; `--apply` writes through the SDK |
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
+| brief | `pm swarm brief task-id --agent worker --token 1 --token-budget 512` | Read one fenced assignment with budget and privacy omissions |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
 | close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fenced native close with durable crash compensation |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
@@ -273,6 +274,71 @@ the tracker, not arbitrary external database/deployment writes: those sinks must
 also validate fencing if they allow delayed writes after resource expiry.
 
 For the typed SDK example, see [resource reservations](docs/resource-reservations.md).
+
+## Budgeted assignment briefs
+
+Use `brief` after a shared-tracker `next`, `schedule`, or `start`. Pass the assigned
+item ID and the exact decimal token from the claim receipt. A dispatcher can
+retain the selection diagnostics and send the worker just the brief.
+
+```sh
+pm swarm next --agent parser-worker --json
+# Use the selected item ID and token from the previous response.
+pm swarm brief parser-task --agent parser-worker --token 1 --token-budget 512 --json
+```
+
+The brief reads the current SDK item and requires its current owner and token.
+A brief reflects one observed snapshot and does not renew liveness. Keep using
+the regular heartbeat and fenced write commands. An explicit handoff or reclaim
+to an agent also issues a token that works with `brief`, including for Git lanes.
+A fresh Git lane with only a legacy core claim needs a fenced transfer before it
+can use `brief`.
+
+The response includes the item ID, owner, token and status. Its work context
+prioritizes the title, acceptance criteria, description, declared blocker and
+dependencies, file paths, documentation paths, linked test commands or paths,
+body and newest comments. Dependency rows carry their ID and kind. The default
+budget is 512 estimated tokens and accepts integers from 1 through 8192. One
+projection fits both JSON and TOON under the SDK UTF-8 token estimator.
+
+The brief applies the swarm private-path scanner and the SDK secret scanner to
+its output fields before packing. A privacy finding in the item ID, claim token
+or agent identity refuses the brief. A finding in any other field withholds the
+whole field, including all rows if it is a collection. The `omission_receipt`
+records that field as `"withheld: privacy"`. The brief ignores tracker fields
+outside its projection, such as notes.
+
+For safe fields omitted for budget, the receipt gives the number of omitted
+entries, with one entry for an omitted scalar field. An empty map means all
+populated work fields fit and passed the privacy scan. Increase the budget to
+recover budget omissions, or use `pm get <id> --depth full` to read the
+underlying item.
+
+### Measured example
+
+A synthetic shared tracker held 25 tasks. The selected parser task had one
+linked file, a description, acceptance criteria and 18 progress comments. The
+other tasks included eight overlapping footprints and 16 independent ones. The
+table measures emitted bytes with the pm SDK estimator, which rounds UTF-8
+byte length divided by four up to the next integer. The commands read the same
+assigned item before any handoff. The packed extension and core commands ran
+on pm 2026.11.18. The pinned host SDK reproduced the JSON counts.
+
+| Worker context after selection | Estimated JSON tokens | Estimated TOON tokens |
+| --- | ---: | ---: |
+| `pm context --for orient --token-budget 2000 --no-extension-health` plus `pm get <id> --depth full` | 2,691 | 1,796 |
+| The same commands with orient scoped using `--parent <id>` | 2,645 | 1,757 |
+| `pm get <id> --depth full` | 1,830 | 1,302 |
+| `pm get <id> --fields title,status,description,acceptance_criteria,body,linked,dependencies,comments --output-budget 1024` | 1,004 | 1,016 |
+| `pm swarm brief <id> --agent parser-worker --token 1 --token-budget 512` | 479 | 474 |
+
+Against tracker orientation plus the full item, the brief saved 2,212 estimated
+JSON tokens (82.2%) or 1,322 TOON tokens (73.6%). Against the field-selected core
+read, it saved 525 JSON tokens (52.3%) or 542 TOON tokens (53.3%). It retained the
+acceptance criteria, file path and eight recent progress comments. Its omission
+receipt reported 11 older comment rows, including the original swarm claim entry.
+The field-selected core JSON read refused at a 512-token budget in this fixture.
+The common selection step took 772 estimated JSON tokens.
 
 ## Heartbeats, takeover and handoff
 
