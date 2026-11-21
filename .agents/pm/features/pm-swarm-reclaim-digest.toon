@@ -1,0 +1,12 @@
+id: pm-swarm-reclaim-digest
+title: Return a resume digest with stale swarm recovery
+description: "A stale replacement receives bounded handoff context today, but needs a second read for acceptance criteria and linked tests."
+type: Feature
+status: open
+priority: 2
+tags: []
+created_at: "2026-11-21T03:27:42.829Z"
+updated_at: "2026-11-21T03:27:42.829Z"
+author: codex-sol
+acceptance_criteria: "An explicit recovery destination can obtain a budgeted, generation-bound resume digest in the recovery call.; A real process takeover verifies the current generation and bounded omission evidence."
+body: ""

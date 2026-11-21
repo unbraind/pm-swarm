@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- Give each swarm worker a budgeted assignment brief ([pm-swarm-assignment-brief](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/features/pm-swarm-assignment-brief.toon))
+
 ## 2026.11.16 - 2026-11-18
 
 ### Fixed

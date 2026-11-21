@@ -24,7 +24,7 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   }
   validateActionInputs(command, ctx.options);
   const options = ctx.options as Record<string, string | boolean | undefined>;
-  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
+  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress', 'brief'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
   if (options.token !== undefined && !/^\d+$/.test(String(options.token))) invalid('Use the decimal --token returned by the last successful claim.');
   if (['settings', 'start', 'plan'].includes(command)) {
     const config = resolveSwarmSettings({}, {

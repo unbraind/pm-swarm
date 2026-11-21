@@ -1,0 +1,30 @@
+id: pm-swarm-assignment-brief
+title: Give each swarm worker a budgeted assignment brief
+description: "Project the selected item into one budgeted, fenced work brief for the assigned agent."
+type: Feature
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-11-21T03:19:44.094Z"
+updated_at: "2026-11-21T03:28:22.271Z"
+assignee: codex-sol
+claim_principal: codex-sol
+author: codex-sol
+acceptance_criteria: The current owner and exact swarm generation are required in shared and Git trackers.; Only the requested item is disclosed and JSON and TOON fit the SDK-estimated token budget with exact disclosure counts.; Concurrent real worker processes verify assignment isolation and stale-fence refusal.; README documents a measured before and after from a synthetic tracker and package gates pass.
+comments[4]{created_at,author,text}:
+  "2026-11-21T03:20:13.864Z",codex-sol,"Synthetic baseline (25 tasks, core 2026.11.18): orient plus full item costs 2691 SDK-estimated JSON tokens, or 2645 with item-scoped orient. A fixed field get costs 157 but excludes recent comments and has no owner fence. Existing stale reclaim recovered one item; its 342-token receiver packet omitted acceptance criteria, and scoped core handoff context cost 849. Existing footprint planning excluded all 8 contenders with zero observed overlap admissions; fair scheduling also excluded the single skill mismatch. Implement a one-item SDK projection using the existing owner and generation, whole fields or rows, exact omission counts and the SDK estimator in both native formats. Preserve selection and add concurrent real worker acceptance."
+  "2026-11-21T03:27:50.053Z",codex-sol,"Measured one assignment before handoff on the 25-task fixture: brief 479 estimated JSON tokens at a 512 cap, down 2212 (82.2%) from orient plus full get and 525 (52.3%) from explicit fields including comments. Scoped orient plus full get was 2645. The same explicit fields refused at 512. The brief retains the criteria, footprint and eight progress comments, with 11 comment rows omitted. The unchanged selection receipt was 772 tokens."
+  "2026-11-21T03:27:53.544Z",codex-sol,"The new read uses the SDK guard or the exact bound provider client, checks active owner and decimal generation, and sizes complete JSON and TOON using the SDK estimator. Fenced Git transfers work without changing legacy Git acquisition or sync behavior. Follow-ups are pm-swarm-reclaim-digest and pm-swarm-git-fenced-acquisition. The PM-linked test ran 3/3 with no skips. Full coverage is running."
+  "2026-11-21T03:28:22.271Z",codex-sol,"Ranked gaps per worker loop: assignment context first (2212 estimated tokens saved from orient plus full get), richer recovery second (one extra criteria and artifact lookup avoided on each stale replacement), footprint prediction third (zero incremental prevention on the measured known overlaps). In a separate concurrent two-item fixture sharing one file, core 2026.11.18 claim-next assigned both items to different agents and existing swarm next assigned only one. The package already supplies cross-item footprint admission and skill-aware fairness."
+files[5]{path,scope}:
+  index.ts,project
+  src/admission.ts,project
+  src/assignment-brief.ts,project
+  src/commands.ts,project
+  test/assignment-brief.test.ts,project
+tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,source_ref}}:
+  node --test test/assignment-brief.test.ts,project,300,codex-sol,"2026-11-21T03:25:31.116Z",local_mutation,feat/assignment-brief
+docs[2]{path,scope}:
+  CHANGELOG.md,project
+  README.md,project
+body: ""

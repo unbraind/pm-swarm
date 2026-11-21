@@ -1,0 +1,12 @@
+id: pm-swarm-git-fenced-acquisition
+title: Issue a swarm fence on fresh Git lane acquisition
+description: Git next and start currently publish a core claim and Git lane metadata. A fence first appears after transfer or recovery.
+type: Feature
+status: open
+priority: 2
+tags: []
+created_at: "2026-11-21T03:27:46.371Z"
+updated_at: "2026-11-21T03:27:46.371Z"
+author: codex-sol
+acceptance_criteria: "Provide an opt-in or migration-compatible initial generation without breaking existing Git sync callers.; Test old clients, concurrent acquisition, publication failure cleanup and transferred generations using real Git lanes."
+body: ""
