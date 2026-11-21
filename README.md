@@ -310,24 +310,26 @@ fields fit. Increase the budget if the item needs more context, or use
 A synthetic shared tracker held 25 tasks. The selected parser task had one
 linked file, a description, acceptance criteria and 18 progress comments. The
 other tasks included eight overlapping footprints and 16 independent ones. The
-table measures emitted JSON bytes with the pm SDK estimator, which rounds
-UTF-8 byte length divided by four up to the next integer. The commands read
-the same assigned item before any handoff. Core commands used pm 2026.11.18.
-Swarm used the package's pinned host SDK.
+table measures emitted bytes with the pm SDK estimator, which rounds UTF-8
+byte length divided by four up to the next integer. The commands read the same
+assigned item before any handoff. The packed extension and core commands ran
+on pm 2026.11.18. The pinned host SDK reproduced the JSON counts.
 
-| Worker context after selection | Estimated tokens |
-| --- | ---: |
-| `pm context --for orient --token-budget 2000 --no-extension-health` plus `pm get <id> --depth full` | 2,691 |
-| The same commands with orient scoped using `--parent <id>` | 2,645 |
-| `pm get <id> --fields title,status,description,acceptance_criteria,body,linked,dependencies,comments --output-budget 1024` | 1,004 |
-| `pm swarm brief <id> --agent parser-worker --token 1 --token-budget 512` | 479 |
+| Worker context after selection | Estimated JSON tokens | Estimated TOON tokens |
+| --- | ---: | ---: |
+| `pm context --for orient --token-budget 2000 --no-extension-health` plus `pm get <id> --depth full` | 2,691 | 1,796 |
+| The same commands with orient scoped using `--parent <id>` | 2,645 | 1,757 |
+| `pm get <id> --depth full` | 1,830 | 1,302 |
+| `pm get <id> --fields title,status,description,acceptance_criteria,body,linked,dependencies,comments --output-budget 1024` | 1,004 | 1,016 |
+| `pm swarm brief <id> --agent parser-worker --token 1 --token-budget 512` | 479 | 474 |
 
-The brief saved 2,212 estimated tokens (82.2%) against tracker orientation plus
-the full item and 525 (52.3%) against the field-selected core read. It retained the
+Against tracker orientation plus the full item, the brief saved 2,212 estimated
+JSON tokens (82.2%) or 1,322 TOON tokens (73.6%). Against the field-selected core
+read, it saved 525 JSON tokens (52.3%) or 542 TOON tokens (53.3%). It retained the
 acceptance criteria, file path and eight recent progress comments. Its omission
 receipt reported 11 older comment rows, including the original swarm claim entry.
-The field-selected core read refused at a 512-token budget in this fixture.
-The common selection step was measured separately at 772 estimated tokens.
+The field-selected core JSON read refused at a 512-token budget in this fixture.
+The common selection step took 772 estimated JSON tokens.
 
 ## Heartbeats, takeover and handoff
 
