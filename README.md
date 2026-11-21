@@ -24,7 +24,7 @@ For local review, build and pack this checkout, then `pm install ./pm-swarm-2026
 | sync | `pm swarm sync task-id --files src/a.ts,src/b.ts --dry-run` | Preview explicit changed-file links, or derive them from Git; `--apply` writes through the SDK |
 | heartbeat | `pm swarm heartbeat --agent worker` | Renew agent liveness; optional item ID plus `--token` verifies a held generation |
 | reclaim | `pm swarm reclaim --stale-after 120 --to recovery-worker` | Atomically return stale claims to the open pool (omit `--to`) or transfer them with recovery evidence |
-| brief | `pm swarm brief task-id --agent worker --token 1 --token-budget 512` | Read one fenced assignment with a budget and omission counts |
+| brief | `pm swarm brief task-id --agent worker --token 1 --token-budget 512` | Read one fenced assignment with budget and privacy omissions |
 | handoff | `pm swarm handoff task-id --agent worker --token 1 --to reviewer --note "Tests linked; review parser"` | Atomically transfer ownership and compact context; shared-tracker receiver obtains it from `next` |
 | close | `pm swarm close task-id --agent worker --token 1 --note "Tests pass"` | Fenced native close with durable crash compensation |
 | progress | `pm swarm progress PLAN_ID --orchestrator coordinator` | Read revision-bound claimed, produced, reviewed and accepted Plan evidence; explicit witness writes use `--apply` |
@@ -299,11 +299,20 @@ prioritizes the title, acceptance criteria, description, declared blocker and
 dependencies, file paths, documentation paths, linked test commands or paths,
 body and newest comments. Dependency rows carry their ID and kind. The default
 budget is 512 estimated tokens and accepts integers from 1 through 8192. One
-projection fits both JSON and TOON under the SDK UTF-8 token estimator. The
-`omission_receipt` maps budgeted fields to the number of omitted entries, with
-one entry for an omitted scalar field. An empty map means all populated work
-fields fit. Increase the budget if the item needs more context, or use
-`pm get <id> --depth full` for the complete item.
+projection fits both JSON and TOON under the SDK UTF-8 token estimator.
+
+The brief applies the swarm private-path scanner and the SDK secret scanner to
+its output fields before packing. A privacy finding in the item ID, claim token
+or agent identity refuses the brief. A finding in any other field withholds the
+whole field, including all rows if it is a collection. The `omission_receipt`
+records that field as `"withheld: privacy"`. The brief ignores tracker fields
+outside its projection, such as notes.
+
+For safe fields omitted for budget, the receipt gives the number of omitted
+entries, with one entry for an omitted scalar field. An empty map means all
+populated work fields fit and passed the privacy scan. Increase the budget to
+recover budget omissions, or use `pm get <id> --depth full` to read the
+underlying item.
 
 ### Measured example
 

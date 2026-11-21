@@ -2,10 +2,11 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { estimatePmOutputTokens, getHistoryPath, PmClient } from '@unbrained/pm-cli/sdk';
+import { estimatePmOutputTokens, getHistoryPath, getItemPath, PmClient, readSettings } from '@unbrained/pm-cli/sdk';
 import { readAssignmentBrief } from '../index.ts';
 import type { AssignmentBrief } from '../index.ts';
 import { fixture, swarmCli } from './helpers.ts';
+import { durableSnapshot } from './privacy-snapshot.ts';
 import { runProcess } from './process-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 
@@ -68,7 +69,7 @@ test('concurrent agents receive only their fenced item and cannot use a transfer
   assert.equal(parserBrief.omission_receipt.body, 1);
   const deliveredComments = parserBrief.context.comments ?? [];
   assert.ok(deliveredComments[0]?.startsWith('Swarm claim token'));
-  assert.equal((parserBrief.omission_receipt.comments ?? 0) + deliveredComments.length, 7);
+  assert.equal(parserBrief.omission_receipt.comments, 7 - deliveredComments.length);
   assert.deepEqual(rendererBrief.omission_receipt, {});
   assert.doesNotMatch(parserJson.stdout + parserToon.stdout, /Renderer assignment|src\/renderer/);
   assert.doesNotMatch(rendererJson.stdout, /Parser assignment|src\/parser/);
@@ -111,7 +112,7 @@ test('Git work uses the same brief and service discovery retains the bound item 
   assert.equal('worktree' in receipt, false);
 });
 
-test('invalid budgets, ordinary core claims, resources, terminal work and private text are refused', async t => {
+test('invalid budgets, ordinary core claims, resources and terminal work are refused', async t => {
   const f = await sharedFixture(t);
   const id = await f.item();
   const engine = f.shared.engine;
@@ -134,13 +135,73 @@ test('invalid budgets, ordinary core claims, resources, terminal work and privat
   await assert.rejects(readAssignmentBrief(engine, resource, String(held.token)), /active work item/);
 
   const independent = new PmClient({ cwd: f.repo, pmRoot: f.pmRoot, author: 'shared-test', noExtensions: true });
-  const privateText = ['Inspect ', 'home', 'synthetic-private', 'artifact'].join('/');
-  await independent.update(id, { comment: [privateText] });
-  const refused = f.cli('swarm', 'brief', id, '--token', claim.token, '--json');
-  assert.equal(refused.status, 2);
-  assert.match(refused.stderr + refused.stdout, /swarm_private_path/);
-  assert.ok(!(refused.stderr + refused.stdout).includes(privateText));
   await independent.update(id, { status: 'canceled' });
   await independent.claim(id, { force: true });
   await assert.rejects(readAssignmentBrief(engine, id, claim.token), /active work item/);
+});
+
+test('brief withholds private fields from real tracker snapshots in JSON and TOON', async t => {
+  const f = await sharedFixture(t);
+  const id = await f.item(['src/public.ts']);
+  const { token } = await f.shared.start(id);
+  const independent = new PmClient({ cwd: f.repo, pmRoot: f.pmRoot, author: 'shared-test', noExtensions: true });
+  const [comment, criteria, file, note] = ['progress', 'acceptance', 'footprint', 'note'].map(name => ['', 'home', 'synthetic-private', name].join('/'));
+  const credential = ['ghp_', 'x'.repeat(36)].join('');
+  await independent.update(id, {
+    comment: [`Progress at ${comment}`, 'Public progress row'], acceptanceCriteria: `Verify ${criteria}`,
+    description: 'Keep this public description.', body: 'Public detail. '.repeat(300),
+  });
+  await independent.files(id, { add: [file] });
+  await independent.notes(id, { add: note });
+  await independent.run('test', { id, options: { add: [`command=echo ${credential}`] } });
+  const before = durableSnapshot(f.pmRoot);
+
+  const expected = { acceptance_criteria: 'withheld: privacy', files: 'withheld: privacy', tests: 'withheld: privacy', body: 1, comments: 'withheld: privacy' };
+  for (const format of [[], ['--json']]) {
+    const result = f.cli('swarm', 'brief', id, '--token', token, '--token-budget', '256', ...format);
+    assert.equal(result.status, 0, result.stderr);
+    for (const value of [comment, criteria, file, note, credential, 'Public progress row', 'src/public.ts']) {
+      assert.ok(!(result.stdout + result.stderr).includes(value));
+    }
+    assert.match(result.stdout, /withheld: privacy/);
+    assert.match(result.stdout, /Keep this public description\./);
+    assert.ok(estimatePmOutputTokens(Buffer.byteLength(result.stdout)) <= 256);
+    if (format.length > 0) {
+      const brief = JSON.parse(result.stdout) as AssignmentBrief;
+      assert.deepEqual(brief.omission_receipt, expected);
+      assert.deepEqual(brief.context, { title: 'Shared work', description: 'Keep this public description.' });
+    }
+  }
+  assert.equal(durableSnapshot(f.pmRoot), before);
+});
+
+test('brief scans custom statuses and normalized footprints while refusing unsafe identity', async t => {
+  const f = await sharedFixture(t);
+  const id = await f.item();
+  const { token } = await f.shared.start(id);
+  const privatePath = ['', 'home', 'synthetic-private', 'identity'].join('/');
+  const credential = ['ghp_', 'x'.repeat(36)].join('');
+  const engine = f.shared.engine;
+  for (const [requestedId, requestedToken] of [[privatePath, token], [id, privatePath]]) {
+    await assert.rejects(readAssignmentBrief(engine, requestedId, requestedToken), { code: 'swarm_private_path' });
+  }
+  await assert.rejects(readAssignmentBrief(engine, credential, token), /Remove credential-shaped text/);
+  const refused = f.cli('swarm', 'brief', id, '--agent', credential, '--token', token, '--json');
+  assert.equal(refused.status, 2);
+  assert.match(refused.stderr + refused.stdout, /Remove credential-shaped text/);
+  assert.ok(!(refused.stderr + refused.stdout).includes(credential));
+
+  const prefs = await readSettings(f.pmRoot);
+  writeFileSync(join(f.pmRoot, 'schema/statuses.json'), JSON.stringify([...prefs.schema.statuses, { id: credential, roles: ['active'] }]));
+  await f.client.update(id, { status: credential });
+  await f.client.files(id, { add: ['src/legacy.ts'] });
+  // Native writes normalize paths. Simulate a legacy row that still needs read-time normalization.
+  const itemPath = getItemPath(f.pmRoot, 'Task', id, prefs.item_format);
+  const stored = readFileSync(itemPath, 'utf8');
+  assert.match(stored, /src\/legacy\.ts/);
+  writeFileSync(itemPath, stored.replace('src/legacy.ts', 'src/../~'));
+  const brief = await readAssignmentBrief(engine, id, token);
+  assert.equal(brief.status, undefined);
+  assert.equal(brief.context.files, undefined);
+  assert.deepEqual(brief.omission_receipt, { status: 'withheld: privacy', files: 'withheld: privacy' });
 });
