@@ -1,4 +1,5 @@
 import { validateCommandInputs } from './admission.ts';
+import { readAssignmentBrief } from './assignment-brief.ts';
 import { ResourceDeadlocks, DeadlockRefusal, RESOURCE_REQUEST_FIELD } from './deadlocks.ts';
 import { SchedulingRefusal } from './fair-scheduling.ts';
 import { admitReceipt, assertReceiptSafe } from './receipts.ts';
@@ -61,7 +62,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
   if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
   const sdk = ctx.sdk; assertSdkInstance(sdk.client);
   const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks'].includes(command) ? undefined : repositoryRoot(workspace);
+  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief'].includes(command) ? undefined : repositoryRoot(workspace);
   const client = sdk.client;
   const opts = overrides(ctx.options);
   const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
@@ -99,6 +100,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       return compact;
     }
     case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true }) };
+    case 'brief': return { ...await readAssignmentBrief((swarm as SharedTracker).engine, id, textOption(ctx.options.token), ctx.options.tokenBudget === undefined ? undefined : Number(ctx.options.tokenBudget)) };
     case 'next': {
       const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
       return laneOperation(operation, repo);
@@ -162,6 +164,7 @@ export const swarmCommandDefinitions = {
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
   schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
+  brief: { mutations: [], description: 'Read one fenced assignment with a bounded work context', flags: ['agent', 'token', 'token-budget'], id: true },
   next: { mutations: [{}], description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
   start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict'], id: true },
   status: { mutations: [], description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },

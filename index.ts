@@ -18,6 +18,10 @@ export { Swarm } from './src/swarm.ts';
 export { START_TRANSITIONS, withStartTransitionObserver } from './src/swarm.ts';
 /** Expose claim coordination for trackers without Git worktree lanes. */
 export { SharedTracker } from './src/shared-tracker.ts';
+/** Read a bounded work brief from the current swarm assignment. */
+export { readAssignmentBrief } from './src/assignment-brief.ts';
+/** Portable assignment and exact omission receipt. */
+export type { AssignmentBrief } from './src/assignment-brief.ts';
 /** Compact shared selection and incoming-handoff result contract. */
 export type { SharedNextReceipt } from './src/shared-tracker.ts';
 /** Trusted crash-observer options for resumable SDK claim completion. */
