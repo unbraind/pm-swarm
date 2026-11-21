@@ -18,9 +18,9 @@
 
 ### Fixed
 
+- PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
 - Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository ([pm-swarm-aa9h](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-aa9h.toon))
 - Resume durable native close compensation across dependents ([pm-swarm-durable-compensation](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-durable-compensation.toon))
-- PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
 
 ## 2026.11.4 - 2026-11-04
 
@@ -41,6 +41,11 @@ No changes.
 ### Fixed
 
 - The identity gate now recognizes absolute home paths only at path boundaries, so prose and relative paths no longer block the GitHub issue sync ([pm-swarm-4q55](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4q55.toon))
+
+### Closed
+
+- Closed: Failed start with noExtensions leaves its newly acquired claim held (Node 22/26) ([pm-swarm-github-44bd244dd53c-28](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-28.toon))
+- Closed: Identity gate rejects harmless imported “mismatch/root cause” prose as an absolute home path ([pm-swarm-github-44bd244dd53c-30](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-30.toon))
 
 ## 2026.10.31 - 2026-10-31
 
