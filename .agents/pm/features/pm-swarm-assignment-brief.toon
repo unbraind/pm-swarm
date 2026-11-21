@@ -2,11 +2,11 @@ id: pm-swarm-assignment-brief
 title: Give each swarm worker a budgeted assignment brief
 description: "Project the selected item into one budgeted, fenced work brief for the assigned agent."
 type: Feature
-status: in_progress
+status: open
 priority: 2
 tags: []
 created_at: "2026-11-21T03:19:44.094Z"
-updated_at: "2026-11-21T05:02:16.028Z"
+updated_at: "2026-11-21T05:25:54.961Z"
 author: codex-sol
 acceptance_criteria: The current owner and exact swarm generation are required in shared and Git trackers.; Only the requested item is disclosed and JSON and TOON fit the SDK-estimated token budget with exact disclosure counts.; Concurrent real worker processes verify assignment isolation and stale-fence refusal.; README documents a measured before and after from a synthetic tracker and package gates pass.
 comments[7]{created_at,author,text}:
