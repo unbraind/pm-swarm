@@ -1,0 +1,21 @@
+id: pm-swarm-github-44bd244dd53c-51
+title: Release workflow retries forbidden rebase merges for 30 minutes and misclassifies the blocker
+description: "GH issue #51: https://github.com/unbraind/pm-swarm/issues/51 · author @unbraind · created 2026-11-01T15:43:21Z · updated 2026-11-01T15:43:21Z"
+type: Issue
+status: open
+priority: 2
+tags[2]: "gh:unbraind/pm-swarm#51","github_author:unbraind"
+created_at: "2026-11-01T15:43:21Z"
+updated_at: "2026-11-21T11:14:40.988Z"
+author: pm-github
+github_close_reason: ""
+github_closed_at: ""
+github_created_at: "2026-11-01T15:43:21Z"
+github_link_only: false
+github_number: 51
+github_release: ""
+github_state: open
+github_state_reason: unspecified
+github_updated_at: "2026-11-01T15:43:21Z"
+github_url: "https://github.com/unbraind/pm-swarm/issues/51"
+body: "## Evidence\nAt commit `071133a4c7370ab1f412b25c92ea365844b70ba4`, [release job 124879572560](https://github.com/unbraind/pm-swarm/actions/runs/41308056337/job/124879572560) repeatedly reports `Rebase merges are not allowed on this repository. (HTTP405)`. The release PR [#50](https://github.com/unbraind/pm-swarm/pull/50), head `6039088b6d99a37ff2a5ac3eaa36f63f4338d453`, was still open/CLEAN at 15:41 UTC on November 1; the job reports no settling or failing checks.\n\nThe [workflow hardcodes merge_method=rebase](https://github.com/unbraind/pm-swarm/blob/071133a4c7370ab1f412b25c92ea365844b70ba4/.github/workflows/release.yml#L539-L543). After retrying for 30 minutes, its [generic timeout diagnostic](https://github.com/unbraind/pm-swarm/blob/071133a4c7370ab1f412b25c92ea365844b70ba4/.github/workflows/release.yml#L590-L594) attributes failure to missing checks/review rather than the deterministic unsupported merge method.\n\n## Expected, actual and impact\nExpected: preserve repository merge policy and branch protection, and either use an already permitted, policy-compliant method or identify the unsupported method promptly.\nActual: deterministic HTTP405 responses are retried as if the PR were still settling, blocking this release-metadata merge and occupying a runner unnecessarily. No claim is made about data loss or whether a package was published through another run.\n\nThis conflicts with reliable release-readiness behavior tracked in the existing [pm-swarm-release-gate record](https://github.com/unbraind/pm-swarm/blob/071133a4c7370ab1f412b25c92ea365844b70ba4/.agents/pm/chores/pm-swarm-release-gate.toon). That record is closed and does not cover this method mismatch. All-status issues/PRs and canonical PM records were checked before filing.\n\n## Acceptance and regression criteria\n- Preserve existing repository merge policy/protection; do not enable rebase or weaken required checks just to pass.\n- Select an already allowed policy-compliant merge method, or fail immediately with a precise unsupported-method diagnostic.\n- Do not retry deterministic method-policy rejection as pending checks.\n- Cover CLEAN + forbidden method, genuinely pending checks and rejected checks in bounded regression tests.\n- Preserve immutable-head/tree/provenance verification before publication and existing coverage requirements.\n\nClassification: hosted-log plus exact static-source finding. No local execution, source modification, merge, repository setting change or deployment was performed."
