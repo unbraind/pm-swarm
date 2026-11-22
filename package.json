@@ -1,6 +1,6 @@
 {
   "name": "pm-swarm",
-  "version": "2026.11.11",
+  "version": "2026.11.22",
   "description": "Coordinate many agents on one shared tracker with heartbeats, fenced claims and context handoff; Git lanes optional",
   "repository": {
     "type": "git",
@@ -51,15 +51,15 @@
     "@unbrained/pm-cli": ">=2026.10.23"
   },
   "devDependencies": {
-    "@babel/eslint-parser": "8.0.7",
+    "@babel/eslint-parser": "8.1.2",
     "@babel/plugin-syntax-typescript": "8.0.3",
     "@types/node": "26.6.6",
-    "@unbrained/pm-cli": "2026.11.10",
+    "@unbrained/pm-cli": "2026.11.14",
     "c8": "^12.0.0",
-    "eslint": "10.14.0",
+    "eslint": "10.15.0",
     "fast-glob": "3.3.3",
     "jscpd": "5.4.3",
-    "pm-changelog": "2026.11.10",
+    "pm-changelog": "2026.11.13",
     "pm-ops": "2026.11.14",
     "typescript": "7.0.2",
     "yaml": "2.9.1"

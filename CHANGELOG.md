@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2026.11.22 - 2026-11-22
+
+### Dependencies
+
+- Bump unbraind/pm-github/.github/workflows/pm-github-closeout.yml ([#91](https://github.com/unbraind/pm-swarm/pull/91))
+- Bump unbraind/pm-ops/.github/workflows/daily-release.yml ([#92](https://github.com/unbraind/pm-swarm/pull/92))
+- Bump unbraind/pm-github/.github/workflows/pm-github-sync.yml ([#93](https://github.com/unbraind/pm-swarm/pull/93))
+
+## 2026.11.16 - 2026-11-18
 
 ### Fixed
 

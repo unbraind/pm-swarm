@@ -356,7 +356,7 @@ export class Swarm {
       for (const lane of order) {
         this.assertLandingBase(config.base, expected);
         if (commit(this.repo, lane.branch) !== lane.sha || !predict(this.repo, expected, lane.sha).clean) throw new Error('Lane changed during landing; simulate again');
-        git(this.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'merge', '--no-ff', '--no-edit', lane.sha]);
+        git(this.repo, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'merge', '--no-ff', '--no-edit', lane.sha]);
         expected = commit(this.repo, 'HEAD');
       }
     }

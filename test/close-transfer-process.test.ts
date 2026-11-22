@@ -144,7 +144,7 @@ for (const phase of ['applying', 'compensating', 'malformed'] as const) test(`ev
 for (const phase of ['applying', 'compensating', 'malformed'] as const) test(`Git lane acquisition preserves a ${phase} close episode`, async t => {
   const { f, id } = await interruptedTransferFixture(t, phase);
   fixtureGit(f.repo, ['init', '-b', 'main']);
-  fixtureGit(f.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '--allow-empty', '-m', 'Fixture base']);
+  fixtureGit(f.repo, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '--allow-empty', '-m', 'Fixture base']);
   const before = closeBytes(f, [id]);
   await assert.rejects(f.shared.engine.start(id), { code: 'swarm_close_transfer_refused' });
   assert.deepEqual(closeBytes(f, [id]), before);

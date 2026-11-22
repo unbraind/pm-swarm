@@ -18,6 +18,10 @@ export { Swarm } from './src/swarm.ts';
 export { START_TRANSITIONS, withStartTransitionObserver } from './src/swarm.ts';
 /** Expose claim coordination for trackers without Git worktree lanes. */
 export { SharedTracker } from './src/shared-tracker.ts';
+/** Read a bounded work brief from the current swarm assignment. */
+export { readAssignmentBrief } from './src/assignment-brief.ts';
+/** Portable assignment and exact omission receipt. */
+export type { AssignmentBrief } from './src/assignment-brief.ts';
 /** Compact shared selection and incoming-handoff result contract. */
 export type { SharedNextReceipt } from './src/shared-tracker.ts';
 /** Trusted crash-observer options for resumable SDK claim completion. */
@@ -40,7 +44,7 @@ export { settings, updateSettings, resolveSwarmSettings, swarmSettingsSection, S
 /** Expose portable lane contracts. */
 export type { Candidate, Lane, Prediction, Separation, SwarmSettings } from './src/types.ts';
 /** Activate the swarm command family and its extension fields. */
-export default defineExtension({ name: 'pm-swarm', version: "2026.11.11", description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
+export default defineExtension({ name: 'pm-swarm', version: "2026.11.22", description: 'Many agents on one tracker with fenced claims and context handoff; Git lanes optional', activate: register });
 
 /** Typed settings mutation, refusal and verification contracts. */
 export type { SettingsReceipt, SettingsMutationOptions, SettingsBoundary, SettingsRefusalCode } from './src/settings.ts';

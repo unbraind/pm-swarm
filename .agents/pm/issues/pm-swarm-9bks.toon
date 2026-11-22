@@ -6,13 +6,12 @@ status: in_progress
 priority: 2
 tags[5]: ci,coverage,"gh:unbraind/pm-swarm#65","gh:unbraind/pm-swarm#79",performance
 created_at: "2026-11-10T08:52:59.206Z"
-updated_at: "2026-11-16T15:28:42.100Z"
+updated_at: "2026-11-16T05:24:19.403Z"
 author: codex-agent
-comments[16]{created_at,author,text}:
+comments[14]{created_at,author,text}:
   "2026-11-10T16:17:09.265Z",codex-agent,"Final scoped PR 65 continuation explicitly authorizes fixing the observed CI failure. Current head 7e59834 test (26), run 42814446970, passed all 1198 source tests then c8 exhausted its approximately 4 GiB heap during report aggregation; test (22) passed. Installed c8 12 already provides --merge-async: its synchronous loader retains every raw process report before filtering, whereas the asynchronous merger reads, filters and merges one report at a time. Enable that supported streaming mode without changing source/test scope, thresholds, worker count or the production heap cap. A synthetic 125-dump corpus with large excluded vendor coverage and an actually measured authored source will exercise the real reporter under a 64 MiB heap, failing when the flag is reverted. No dependency or workflow change is required."
   "2026-11-10T16:41:26.155Z",codex-agent,"Implemented the observed Node 26 CI failure fix with c8's supported --merge-async mode. No larger production heap, dependency change, coverage exclusion or threshold reduction. Real reporter stress: 125 large raw process dumps plus measured authored source pass within a 64 MiB reporter heap and retain 100 percent of all four dimensions. Removing only --merge-async reproduces heap out of memory and the regression exits 1; restoring the flag passes. The pinned linked stress command passes 1/1; it also passes within the 471/471 importer group. Prior-head CI test (22) is successful; test (26) passed 1198 source tests and failed only during synchronous report aggregation. New Node 26 final-head CI certification remains pending."
   "2026-11-10T17:16:16.060Z",codex-agent,"Final implementation 05b0023: real incremental reporter stress passes 1/1 on Node 26.13.0 (exact failed CI runtime), with the reporter constrained to 64 MiB and all authored fixture coverage dimensions at 100 percent. It also passes on Node 24.19.0. Removing only --merge-async reproduces heap out of memory; restoring it passes. The single bounded npm test exits 0 in 1867s with 1208/1208 tests, no failures/skips/cancellations; required importer group passes 471/471 and static checks pass. The prior Node 26 failure was report aggregation after a passing source suite, not a failing source test. Production heap, dependency pins, source scope, thresholds and worker limits are unchanged. Releasing this claim and retaining in_progress; final-head Node 22/26 release-gate certification remains for CI and orchestrator verification at https://github.com/unbraind/pm-swarm/pull/65/checks."
-  "2026-11-14T10:15:19.410Z",codex-sweep-1114,"Release-attribution correction: completed_at = 2026-11-11T09:10:50Z from https://github.com/unbraind/pm-swarm/pull/65 (merge SHA bb72f4fa6f2c30ab6b53a125aa3b1f0fc4f26b38); first containing release tag v2026.11.11, recorded release 2026.11.11."
   "2026-11-15T20:59:12.932Z",codex-sol,"Reuse existing CI/coverage item for Fleet CI v2; companion pm-cli-website-dyhg. Required test (22), test (26), and codeql remain unchanged. CodeQL remains unfiltered. Preserve identity/private-path checks, lint, duplication, full 100% coverage, install acceptance and all docs/tracker input contracts. Deep uses one gate per Node/package-manager matrix job."
   "2026-11-15T21:00:56.006Z",codex-sol,"Typecheck and lint passed; strict YAML parse passed. Required codeql remains unfiltered. Main run 43735415781 wall: Node 22 45m08s, Node 26 59m47s. Full close-crash matrix cases 74–75/106–110/143–144 s; punctuation privacy 78–79 s. Retained four deterministic late-seed Unicode fixtures. Shared harness timers scale, product linked-test/lease budgets remain unscaled. Quick model/privacy validation is bounded locally; install acceptance and exhaustive crash matrix remain in CI. No local full-depth/coverage run."
   "2026-11-15T21:02:33.503Z",codex-sol,PR #79 is open. Identity/private-path gate reports zero violations and publish verifier passes. Local strict health fails the existing managed extension host skew; follow-up pm-swarm-ci-extension-host-skew tracks it. No dependency or repository-variable changes made. New quick PR run 43761297916 is queued; final wall time unavailable.
@@ -20,19 +19,18 @@ comments[16]{created_at,author,text}:
   "2026-11-15T21:11:39.557Z",codex-sol,"Restored identity workflow contract passes on narrow retest. All other 131 tests passed in the bounded quick run. Typecheck/lint/identity/publish verifier/YAML passed. Initial hosted Node 22/26 jobs still running at final observation, so no completed PR wall time is claimed. No full local depth or separate coverage run; final quick coverage, packed installation acceptance and deep certification remain pending. No CI wait."
   "2026-11-15T22:24:31.537Z",codex-sol,"Round E: verified assigned review findings and current checks. Fix valid portability, gate-order and timeout regressions; preserve product deadlines, privacy/identity and self-host gates. Run targeted quick tests and required tooling checks before an explicit-path commit. Review threads remain untouched."
   "2026-11-15T22:38:07.527Z",codex-sol,"Round E evidence: The failed logs identify two rollout regressions: install-prerequisites copied install-helpers without its new support/time.ts dependency; the strict child-deadline audit rejected an inline testTime call. Copy the helper dependency and compute the validated positive timeout before spawnSync, preserving the audit. Review tests and tooling checks are running."
-  "2026-11-15T22:50:21.083Z",codex-sol,"Round E final verification: typecheck, lint (docstring gate where no lint script exists), touched regression tests, workflow/tooling tests, strict workflow YAML and changelog:check passed. Duplication gates passed where provided. Self-review retained docs/tracker privacy and identity checks, unscaled product deadlines, integer-rounded validated harness budgets, platform filename guards and generated-only quick thresholds. No package coverage sources were edited; no package coverage run. No review thread actions or merge. Shared-runner hold and SteveBot commit identity will be checked before push. Hosted CI is intentionally not awaited. Corrected fixture imports and scaled-deadline audit passed 18/18, retaining invalid-budget refusals; identity check reported zero violations."
+  "2026-11-15T22:50:21.083Z",codex-sol,"Round E final verification: typecheck, lint (docstring gate where no lint script exists), touched regression tests, workflow/tooling tests, strict workflow YAML and changelog:check passed. Duplication gates passed where provided. Self-review retained docs/tracker privacy and identity checks, unscaled product deadlines, integer-rounded validated harness budgets, platform filename guards and generated-only quick thresholds. No package coverage sources were edited; no package coverage run. No review thread actions or merge. Shared-runner hold and unbrained commit identity will be checked before push. Hosted CI is intentionally not awaited. Corrected fixture imports and scaled-deadline audit passed 18/18, retaining invalid-budget refusals; identity check reported zero violations."
   "2026-11-16T03:45:54.354Z",pi-glm,"Round G review thread (test/review-close-contracts.test.ts, testTime binding): verified valid. The deadline inventory accepted any callee named testTime, so a shadowed local (`const testTime = () => 0`) or a member call like other.testTime(120000) passed with no inventory failure. Fix: the visitor now requires the callee to be a direct identifier bound exactly to the shared scale helper import (support/time), and rejects shadowed locals, foreign-module same-name imports, member calls and unbound same-name calls. Added the binding-control regression test 'child deadline inventory credits only the shared helper binding for the testTime wrapper' plus a same-name foreign-helper import control. node --test test/review-close-contracts.test.ts: 9/9 pass including the full package inventory scan; typecheck (src and test configs), lint, changelog:check and identity:check all green."
   "2026-11-16T05:23:28.136Z",codex-sol,"Review PRRT_kwDOVLY-P863yBhx: align the Git helper watchdog assertion with testTime(300000). The shared helper remains an unscaled 300000 ms watchdog. Audit other timeout assertions, then run review-r6 at scales 1 and 3, typecheck and lint. Taking over the prior review claim for this explicitly assigned fix."
   "2026-11-16T05:24:18.068Z",codex-sol,"PRRT_kwDOVLY-P863yBhx fixed: Git compares its watchdog against testTime(300000); shared keeps its actual fixed watchdog. Audited all timeout assertions and scaled helper uses: the separate 3600000 coverage assertion targets an unscaled coverage deadline; no other mismatched scaled assertion found. Linked gates passed via pm test: review-r6 at PM_TEST_TIME_SCALE=1 and 3, npm run typecheck, npm run lint (29.618 seconds combined)."
-  "2026-11-16T15:28:41.841Z",codex-sol,Main synchronization drops the 2026-11-14 closure because main linked subsequent CI work to this item. Preserve the current main lifecycle and all history from both sides; the earlier merged delivery remains historical evidence.
 files[27]{path,scope}:
-  scripts/coverage-gate.ts,project
-  test/coverage-aggregation.test.ts,project
   .github/workflows/ci-deep.yml,project
   .github/workflows/ci.yml,project
   .github/workflows/codeql.yml,project
   docs/ci-tiers.md,project
+  scripts/coverage-gate.ts,project
   test/ci-routing.test.ts,project
+  test/coverage-aggregation.test.ts,project
   test/deadlocks.test.ts,project
   test/helpers.ts,project
   test/install-helpers.ts,project
@@ -68,7 +66,7 @@ tests[8]:
     provenance:
       author: codex-sol
       created_at: "2026-11-15T21:00:21.261Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
   - command: "PM_TEST_DEPTH=quick timeout -k 5s 90 node --test --test-name-pattern=\"identity policy runs\" test/tooling.test.ts"
     scope: project
@@ -76,7 +74,7 @@ tests[8]:
     provenance:
       author: codex-sol
       created_at: "2026-11-15T21:10:55.753Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
   - command: "npm run typecheck && npm run lint && npm run build && npm run build:test && PM_TEST_DEPTH=quick PM_TEST_TIME_SCALE=3 node --test --test-concurrency=2 test/install-prerequisites.test.ts test/review-close-contracts.test.ts test/tooling.test.ts test/release-workflow.test.ts && node --input-type=module -e 'import {readFileSync,readdirSync,existsSync} from '\"'\"'node:fs'\"'\"'; import assert from '\"'\"'node:assert/strict'\"'\"'; import {parseDocument} from '\"'\"'yaml'\"'\"'; for(const dir of ['\"'\"'.github/workflows'\"'\"','\"'\"'templates/backend/.github/workflows'\"'\"']) if(existsSync(dir)) for(const file of readdirSync(dir).filter(f=>/\\.ya?ml$/.test(f))) {const d=parseDocument(readFileSync(dir+'\"'\"'/'\"'\"'+file,'\"'\"'utf8'\"'\"'),{uniqueKeys:true,strict:true});assert.deepEqual(d.errors,[],file);assert.deepEqual(d.warnings,[],file);} console.log('\"'\"'Strict workflow YAML passed'\"'\"');'"
     scope: project
@@ -84,7 +82,7 @@ tests[8]:
     provenance:
       author: codex-sol
       created_at: "2026-11-15T22:28:09.195Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
   - command: "npm run typecheck && npm run lint --if-present && npm run build:test && PM_TEST_DEPTH=quick PM_TEST_TIME_SCALE=3 node --test --test-concurrency=2 test/ci-routing.test.ts && node --input-type=module -e 'import {readFileSync,readdirSync,existsSync} from \"node:fs\"; import assert from \"node:assert/strict\"; import {parseDocument} from \"yaml\"; for(const dir of [\".github/workflows\",\"templates/backend/.github/workflows\"]) if(existsSync(dir)) for(const file of readdirSync(dir).filter(f=>/\\.ya?ml$/.test(f))) {const d=parseDocument(readFileSync(dir+\"/\"+file,\"utf8\"),{uniqueKeys:true,strict:true});assert.deepEqual(d.errors,[],file);assert.deepEqual(d.warnings,[],file);} console.log(\"Strict workflow YAML passed\");'"
     scope: project
@@ -92,7 +90,7 @@ tests[8]:
     provenance:
       author: codex-sol
       created_at: "2026-11-15T22:36:46.569Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
   - command: "npm run typecheck && npm run lint && npm run build:test && PM_TEST_DEPTH=quick PM_TEST_TIME_SCALE=3 node --test --test-concurrency=2 test/install-prerequisites.test.ts test/review-close-contracts.test.ts test/ci-routing.test.ts && npm run identity:check"
     scope: project
@@ -100,14 +98,14 @@ tests[8]:
     provenance:
       author: codex-sol
       created_at: "2026-11-15T22:38:25.743Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
   - command: node --test test/review-close-contracts.test.ts
     scope: project
     provenance:
       author: pi-glm
       created_at: "2026-11-16T03:45:56.440Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
   - command: PM_TEST_DEPTH=quick PM_TEST_TIME_SCALE=1 node --test test/review-r6.test.ts && PM_TEST_DEPTH=quick PM_TEST_TIME_SCALE=3 node --test test/review-r6.test.ts && npm run typecheck && npm run lint
     scope: project
@@ -115,7 +113,7 @@ tests[8]:
     provenance:
       author: codex-sol
       created_at: "2026-11-16T05:23:31.007Z"
-      source_kind: merge_union
+      source_kind: local_mutation
       source_ref: ci/quick-pr-tier-deep-local-tier
 docs[1]{path,scope}:
   docs/ci-tiers.md,project

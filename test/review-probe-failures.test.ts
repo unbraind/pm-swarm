@@ -77,6 +77,6 @@ for (const probe of ['show-ref', 'rev-parse', 'ls-tree', 'show', 'config', 'merg
 test('missing tracked attributes remain an ordinary merge-driver absence after a real commit', async t => {
   const f = await fixture(t);
   git(f.repo, ['rm', '.gitattributes']);
-  git(f.repo, ['-c', 'user.name=SteveBot', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Remove fixture attributes']);
+  git(f.repo, ['-c', 'user.name=unbrained', '-c', 'user.email=1153461+unbraind@users.noreply.github.com', 'commit', '-m', 'Remove fixture attributes']);
   assert.deepEqual(missingDrivers(f.repo), ['pm merge attributes']);
 });
