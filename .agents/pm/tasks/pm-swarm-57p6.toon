@@ -1,0 +1,18 @@
+id: pm-swarm-57p6
+title: "Durable native close compensation across dependents: slice shipped in #65"
+description: "The part of pm-swarm-durable-compensation that #65 delivered (merged 2026-11-11T09:10:50Z, first shipped in v2026.11.11): resume durable native close compensation across dependents. The remaining acceptance stays on the parent."
+type: Task
+status: closed
+priority: 2
+tags: []
+created_at: "2026-11-23T13:19:44.646Z"
+updated_at: "2026-11-23T13:22:30.982Z"
+closed_at: "2026-11-23T13:20:00.528Z"
+completed_at: "2026-11-11T09:10:50.000Z"
+author: "harness:claude-code"
+acceptance_criteria: Delivered by #65 and shipped in v2026.11.11
+parent: pm-swarm-durable-compensation
+release: 2026.11.11
+resolution: Delivered
+close_reason: "Delivered by #65 (merge commit on main, 2026-11-11T09:10:50Z), first shipped in v2026.11.11"
+body: ""
