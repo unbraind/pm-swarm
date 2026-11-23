@@ -25,6 +25,11 @@
 - PR \#24: valid close after handoff/reclaim fails with swarm_document_changed ([pm-swarm-github-44bd244dd53c-27](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon))
 - Daily release never publishes: npm reads release-artifact/package.tgz as a GitHub repository ([pm-swarm-aa9h](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-aa9h.toon))
 
+### Other
+
+- Durable multi-item close recovery: slice shipped in \#65 ([pm-swarm-ip1q](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-ip1q.toon))
+- Durable native close compensation across dependents: slice shipped in \#65 ([pm-swarm-57p6](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-57p6.toon))
+
 ## 2026.11.4 - 2026-11-04
 
 ### Fixed
