@@ -4,22 +4,95 @@ description: "Review every in-progress and open record against merged delivery a
 type: Chore
 status: open
 priority: 2
-tags[2]: maintenance,tracker-hygiene
+tags[3]: "gh:unbraind/pm-swarm#76",maintenance,tracker-hygiene
 created_at: "2026-10-24T21:41:06.151Z"
-updated_at: "2026-10-24T21:49:20.920Z"
+updated_at: "2026-11-23T11:18:40.472Z"
 author: codex-agent
 estimated_minutes: 60
 acceptance_criteria: "Every original in-progress and open item is inspected; delivery closures name the implementing merged PR, date and merge SHA and match the recorded acceptance; inactive work is open with claims released; original history records remain append-only; tracker health, changelog and PR CI outcomes are recorded."
 risk: low
 confidence: high
-comments[3]{created_at,author,text}:
+comments[17]{created_at,author,text}:
   "2026-10-24T21:41:06.907Z",codex-agent,"Oriented context, searched existing hygiene work, and read the complete tracker. Checking every original in-progress and open item against PR title/body/commits, delivery links and acceptance. The owner authorizes evidence-backed closure in this sweep. Ambiguous claims remain open; no PR merge or history rewrite."
   "2026-10-24T21:48:48.654Z",codex-agent,"Reviewed 12 original active items. 4 verified deliveries closed and 2 inactive items returned to open. Every other original open item remains open because complete delivery or explicit supersession was not established. No cancellation by inference, software change, threshold reduction, or history rewrite. Per-item evidence is recorded in closure reasons and the PR table. Tracker, changelog and CI verification follow."
   "2026-10-24T21:49:20.920Z",codex-agent,"Local tracker verification passed: repository changelog generation and consistency check, pinned strict health with required merge drivers under isolated Git identity, changed-item history verification, independent original-history prefix checks and linked git diff --check. All original inactive work and this audit have released claims; no in-progress item remains. No production function changed, so source-function revert proof is inapplicable; per-item merged ancestry and lifecycle/history checks are the evidence. The PR will carry the full before/after/evidence table. Complete npm/Bun release checks and native platform checks run in PR CI; their final outcome is reported separately, without treating queued or skipped checks as approval."
-files[1]{path,scope,note}:
-  .agents/pm,project,Tracker lifecycle and append-only evidence
-tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
-  git diff --check,project,codex-agent,"2026-10-24T21:48:48.796Z",local_mutation,chore/pm-in-progress-sweep
-docs[1]{path,scope,note}:
-  CHANGELOG.md,project,Regenerated package release notes
+  "2026-11-14T09:01:41.862Z",codex-sweep-1114,"2026-11-14 sweep: inspected context, searched prior hygiene work, and read the complete tracker. Verify each in-progress item against acceptance, merged delivery, exact PR-head checks and linked issue state. Close complete delivery, reopen idle or partial work, preserve other live claims and all prior history."
+  "2026-11-14T09:02:00.532Z",codex-sweep-1114,"Sweep decisions: 2 delivered items closed, 2 idle or partial items reopened, 0 canceled, 0 left alone. Evidence and remaining work are recorded per item. Linked git diff --check passed. Final tracker and changelog validation follows; release gates and hosted CI are separate evidence."
+  "2026-11-14T10:15:13.185Z",codex-sweep-1114,"Release-attribution correction continuation: use each delivered item's evidenced PR merge timestamp for completed_at and its first containing release tag for release. Preserve genuinely unreleased items without a release value, all statuses and existing claims. Sweep chore completion/release and reopened work are excluded. Regenerate and verify changelog placement, append-only history and health after the last write."
+  "2026-11-14T10:15:41.078Z",codex-sweep-1114,"Release metadata corrected for 2 delivered items: 2 attributed to first containing tags and 0 left genuinely unreleased. Linked diff check passed. Independent timestamp/tag/changelog-placement validation and regenerated changelog checks follow this final tracker write. No review thread replies, resolutions or reactions."
+  "2026-11-16T15:28:51.614Z",codex-sol,"Continuation preserved the existing PR branch and merged current main. CHANGELOG.md used main before regeneration. The original merge snapshot was settled with trusted merge-driver hash evidence, without force; both source histories remain intact. Dropped the old closure for pm-swarm-9bks because main linked subsequent CI work. Verified retained delivered PRs, timestamps and first containing tags; sweep closure remains reserved for the orchestrator."
+  "2026-11-16T15:39:40.916Z",codex-sol,The tracker-only quick gate uses the repository documentation and public identity contracts. Full package npm test includes long native-state/model workloads; the initial two broader attempts were interrupted and are not passing evidence. Focused commands are linked and run to completion separately; no source coverage or full release-gate claim is made.
+  "2026-11-16T15:49:07.904Z",codex-sol,"Continuation verification: npm ci passed; focused documentation/tracker tests (PM_TEST_DEPTH=quick node --test --test-concurrency=2 test/tooling.test.ts test/changelog-pm.test.ts test/release-approval.test.ts) passed to completion. All retained delivery rows were checked against current GitHub merge state, completion timestamps and first containing tags. No active implementation PR delivers the remaining reopened roadmap work. Both source history streams are retained in timestamp order, including original records carried by audited reanchor evidence. Final released-state tracker validation, repository changelog generation/check and identity gates run before push."
+  "2026-11-22T23:50:43.986Z",codex-agent,"PR #65 delivered the linked issue. Durable close recovery and compensation remain partial, with no recent claim or commit, so they belong in open."
+  "2026-11-22T23:56:24.078Z",codex-agent,Focused linked test completed successfully through the pinned PM test runner.
+  "2026-11-23T00:02:47.972Z",codex-agent,"Exact pushed head 4acb9d7 failed Node 22 and Node 26 tracker health in https://github.com/unbraind/pm-swarm/actions/runs/45086050693. The inherited receipt for pm-swarm-9bks is pending. The pinned pm merge reconcile command refused with no_receipt_set_proves_snapshot and changed no history. The structured health output reports failure even though the no-extensions invocation exited zero."
+  "2026-11-23T09:52:01.326Z",codex-agent,"Closure follow-up: merge receipt snapshot sweep. Verify against current main and the existing PR head before recording the result."
+  "2026-11-23T09:54:49.638Z",codex-agent,"The inherited reconciled receipt be1a72c7-9339-4a8e-82b1-844b7c06e80f for pm-swarm-9bks predates the current main snapshot. The item and history are byte-identical to current main, which carries no receipt or history reference to it. Pinned reconcile dry-run refused the old receipt with no_receipt_set_proves_snapshot. Restoring main's active receipt set made the same reconcile dry-run report ok and zero pending receipts, and pinned validation passed. The old receipt remains in Git history."
+  "2026-11-23T09:58:58.292Z",codex-agent,"Pinned strict health in an isolated home reports ok after the receipt removal. The previous CI job logs list merge_receipts_pending:1 as their sole failing reason. Current main owns the item snapshot and both its bytes and its history remain untouched."
+  "2026-11-23T09:59:02.205Z",codex-agent,"Linked Node tests passed 89/89 with no skips, and the changelog check passed. Final verification will use the committed branch. CI checks for the closure follow-up are tracked at https://github.com/unbraind/pm-swarm/pull/76/checks."
+files[6]:
+  - path: .agents/pm
+    scope: project
+    note: Tracker lifecycle and append-only evidence
+  - path: .agents/pm/features/pm-swarm-durable-close-recovery.toon
+    scope: project
+  - path: .agents/pm/issues/pm-swarm-9bks.toon
+    scope: project
+  - path: .agents/pm/issues/pm-swarm-durable-compensation.toon
+    scope: project
+  - path: .agents/pm/issues/pm-swarm-github-44bd244dd53c-27.toon
+    scope: project
+  - path: CHANGELOG.md
+    scope: project
+tests[6]:
+  - command: git diff --check
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-10-24T21:48:48.796Z"
+      source_kind: local_mutation
+      source_ref: chore/pm-in-progress-sweep
+  - command: git -c core.quotePath=true diff --check
+    scope: project
+    provenance:
+      author: codex-sweep-1114
+      created_at: "2026-11-14T09:01:58.778Z"
+      source_kind: local_mutation
+      source_ref: chore/in-progress-sweep-2026-11-14
+  - command: PM_TEST_DEPTH=quick npm test
+    scope: project
+    timeout_seconds: 1200
+    provenance:
+      author: codex-sol
+      created_at: "2026-11-16T15:29:09.307Z"
+      source_kind: local_mutation
+      source_ref: chore/in-progress-sweep-2026-11-14
+  - command: PM_TEST_DEPTH=quick node --test --test-concurrency=2 test/tooling.test.ts test/changelog-pm.test.ts test/release-approval.test.ts
+    scope: project
+    timeout_seconds: 600
+    provenance:
+      author: codex-sol
+      created_at: "2026-11-16T15:39:56.156Z"
+      source_kind: local_mutation
+      source_ref: chore/in-progress-sweep-2026-11-14
+  - command: node --test --test-concurrency=2 test/privacy-invocation.test.ts test/tooling.test.ts test/changelog-pm.test.ts test/release-approval.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-22T23:50:51.146Z"
+      source_kind: local_mutation
+      source_ref: codex/closure-1122/chore/in-progress-sweep-2026-11-14
+  - command: node --test --test-concurrency=2 test/privacy-invocation.test.ts test/tooling.test.ts test/changelog-pm.test.ts test/release-approval.test.ts test/prepare-merge-driver.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-23T09:52:06.674Z"
+      source_kind: local_mutation
+      source_ref: codex/closure-1122/chore/in-progress-sweep-2026-11-14
+docs[2]:
+  - path: CHANGELOG.md
+    scope: project
+    note: Regenerated package release notes
+  - path: README.md
+    scope: project
 body: ""
