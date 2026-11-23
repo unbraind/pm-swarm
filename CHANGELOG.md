@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Deep coverage gate exhausts its 60-minute budget on eligible local runners ([pm-swarm-n901](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-n901.toon))
+- Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
+
 ## 2026.11.22 - 2026-11-22
 
 ### Dependencies
@@ -9,10 +16,6 @@
 - Bump unbraind/pm-github/.github/workflows/pm-github-sync.yml ([#93](https://github.com/unbraind/pm-swarm/pull/93))
 
 ## 2026.11.16 - 2026-11-18
-
-### Fixed
-
-- Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
 
 ### Other
 

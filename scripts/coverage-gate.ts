@@ -8,16 +8,23 @@
  * file matched by the include patterns even when no test loads it, so an
  * untested module appears at zero instead of vanishing from the percentages.
  *
- * The gate exists for three things a bare `c8 --check-coverage` cannot do:
+ * The gate exists for four things a bare `c8 --check-coverage` cannot do:
  *
  * - the thresholds it enforces (statements, branches, functions and lines) are
  *   read from the `coverageGate` block of `package.json`, so a threshold change
  *   shows up in review as a deliberate diff next to the scripts it governs;
+ *   the same block carries the wall-clock budget (`deadlineMs`) and the worker
+ *   maximum (`testConcurrency`) — both required, both sized from measured
+ *   deep-leg runtime on the runner classes that execute this gate, never
+ *   hidden constants;
  * - the report is invalidated before the run and again on every failure, so a
  *   leftover report from an earlier, broader run can never satisfy a check;
  * - the reported file list is reconciled against a fresh walk of the configured
  *   source locations, so a file the glob machinery fails to match cannot
- *   escape the measurement — it is named as a violation instead.
+ *   escape the measurement — it is named as a violation instead;
+ * - every outcome emits a receipt with the stage timings, the actual
+ *   termination reason, the worker count and the budget headroom, so an
+ *   incomplete run is diagnosable from evidence and never becomes a success.
  *
  * There is deliberately no ignore list. An executable module must be exercised
  * by the suite; a module that erases to nothing reports vacuous full coverage
@@ -31,7 +38,8 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { createRequire } from "node:module";
 import { join, relative, resolve, sep } from "node:path";
 
@@ -91,6 +99,22 @@ interface CoverageGateConfig {
   readonly tests: readonly string[];
   /** Threshold enforced per dimension; every entry must be a number. */
   readonly thresholds?: Partial<ThresholdTable>;
+  /**
+   * Wall-clock budget in milliseconds for the whole c8 execution. Required and
+   * validated as a positive integer: the deadline is a deliberate, reviewed
+   * number sized from measured deep-leg runtime on the runner classes that
+   * execute this gate, never a hidden constant, so an unsized manifest fails
+   * closed instead of inheriting a budget nobody configured.
+   */
+  readonly deadlineMs?: number;
+  /**
+   * Maximum number of `node --test` workers c8 may start. Required and
+   * validated as a positive integer; the run caps it by the parallelism the
+   * runner actually exposes (container CPU quota included), so a manifest
+   * sized for a wider host still yields at most one worker per available
+   * CPU on a smaller one.
+   */
+  readonly testConcurrency?: number;
 }
 
 /** The `package.json` fields this gate reads. */
@@ -138,6 +162,56 @@ interface SourceInventory {
  */
 class CoverageGateFailure extends Error {}
 
+/** How the c8 child ended, exactly as the gate receipt records it. */
+interface TerminationRecord {
+  /** `exit` for a delivered exit code, `signal`, `deadline` or `start-failure`. */
+  readonly kind: "exit" | "signal" | "deadline" | "start-failure";
+  /** Child exit code when it delivered one, otherwise `null`. */
+  readonly exitCode: number | null;
+  /** Terminating signal name when the runner died to one, otherwise `null`. */
+  readonly signal: string | null;
+}
+
+/** Everything the gate observed about one c8 execution. */
+interface C8RunRecord {
+  /** How the runner ended: the actual termination reason, not a guess. */
+  readonly termination: TerminationRecord;
+  /** Runner exit status to propagate; non-zero when it never delivered one. */
+  readonly status: number;
+  /** Wall-clock milliseconds the c8 execution stage consumed. */
+  readonly executionMs: number;
+  /** Worker count actually handed to `node --test` after the parallelism cap. */
+  readonly testConcurrency: number;
+  /** Start-failure diagnostic when the runner could not be launched. */
+  readonly startFailure: string | null;
+}
+
+/** One measured gate run, emitted for every outcome so budget sizing and diagnosis never rely on guesses. */
+interface GateReceipt {
+  /** Receipt schema version, so consumers can reject a shape they do not know. */
+  readonly schema: 1;
+  /** True only for a fully measured run that met every threshold. */
+  readonly complete: boolean;
+  /** Exit code the gate returns for this run. */
+  readonly exitCode: number;
+  /** The c8 child's actual termination reason. */
+  readonly termination: TerminationRecord;
+  /** Milliseconds per gate stage: configuration walk, c8 execution, reconciliation. */
+  readonly stageTimingsMs: { readonly configure: number; readonly execute: number; readonly reconcile: number };
+  /** The configured wall-clock budget that governed the execution stage. */
+  readonly deadlineMs: number;
+  /** Worker count actually used, after the runner-parallelism cap. */
+  readonly testConcurrency: number;
+  /** Budget left when the run ended before its deadline; `null` when it did not. */
+  readonly headroomMs: number | null;
+  /** Peak resident set of this gate process in kilobytes as the platform reports it. */
+  readonly gatePeakRssKb: number;
+  /** Number of required source files the report was reconciled against. */
+  readonly requiredFiles: number;
+  /** Reconciliation violations, empty for a complete run. */
+  readonly violations: readonly string[];
+}
+
 /**
  * Read and validate the `coverageGate` block of one repository root.
  *
@@ -145,7 +219,7 @@ class CoverageGateFailure extends Error {}
  * each fail closed with a remediation message, because a gate that guesses at
  * its configuration reports numbers nobody configured.
  */
-function loadConfiguration(root: string): { config: CoverageGateConfig; thresholds: ThresholdTable } {
+function loadConfiguration(root: string): { config: CoverageGateConfig; thresholds: ThresholdTable; deadlineMs: number; testConcurrency: number } {
   const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as PackageManifest;
   const config = manifest.coverageGate;
   if (config === undefined) throw new CoverageGateFailure("package.json has no `coverageGate` block.");
@@ -160,7 +234,13 @@ function loadConfiguration(root: string): { config: CoverageGateConfig; threshol
   if (!Array.isArray(config.tests) || config.tests.length === 0) {
     throw new CoverageGateFailure("coverageGate.tests must list at least one test entry.");
   }
-  return { config, thresholds };
+  if (typeof config.deadlineMs !== "number" || !Number.isInteger(config.deadlineMs) || config.deadlineMs <= 0) {
+    throw new CoverageGateFailure("coverageGate.deadlineMs is missing or not a positive integer.");
+  }
+  if (typeof config.testConcurrency !== "number" || !Number.isInteger(config.testConcurrency) || config.testConcurrency <= 0) {
+    throw new CoverageGateFailure("coverageGate.testConcurrency is missing or not a positive integer.");
+  }
+  return { config, thresholds, deadlineMs: config.deadlineMs, testConcurrency: config.testConcurrency };
 }
 
 /**
@@ -233,9 +313,17 @@ function resolveC8Launcher(): string {
 }
 
 /**
- * Run c8 over the configured tests and return the runner's exit status.
+ * Run c8 over the configured tests and report how the runner ended.
  * Incremental merging releases each raw process report before loading the next,
  * avoiding the all-reports heap exhaustion seen after a passing Node 26 suite.
+ *
+ * The wall-clock budget comes from the manifest's `deadlineMs`: sized from
+ * measured deep-leg runtime rather than a hidden constant, and enforced by
+ * `spawnSync`'s timeout, which kills the child and reports `ETIMEDOUT` so the
+ * actual termination reason reaches the receipt. The worker count is the
+ * manifest's `testConcurrency` capped by the parallelism this runner exposes
+ * (container CPU quotas included), so one manifest value sizes every eligible
+ * runner class without oversubscribing a smaller host.
  *
  * `NODE_V8_COVERAGE` and `NODE_TEST_CONTEXT` are removed from the child
  * environment: this gate itself runs inside an outer coverage run during the
@@ -244,13 +332,21 @@ function resolveC8Launcher(): string {
  * makes the inner `node --test` believe it is a recursive invocation and skip
  * every test file.
  */
-function runC8(root: string, config: CoverageGateConfig, inventory: SourceInventory, options: CoverageGateOptions): number {
+function runC8(
+  root: string,
+  config: CoverageGateConfig,
+  inventory: SourceInventory,
+  options: CoverageGateOptions,
+  timeout: number,
+  testConcurrencyLimit: number,
+): C8RunRecord {
   const runner = options.runner ?? { executable: process.execPath, script: resolveC8Launcher() };
   const env = { ...process.env, TZ: "UTC" } as NodeJS.ProcessEnv;
   delete env.NODE_V8_COVERAGE;
   delete env.NODE_TEST_CONTEXT;
   const excludes = [...C8_EXCLUDES, ...(config.skipDirs ?? []).map(name => `**/${name}/**`)];
-  const timeout = 3600000;
+  const testConcurrency = Math.max(1, Math.min(testConcurrencyLimit, availableParallelism()));
+  const executeStartedAt = Date.now();
   const result = spawnSync(
     runner.executable,
     [
@@ -269,16 +365,47 @@ function runC8(root: string, config: CoverageGateConfig, inventory: SourceInvent
       join(root, "coverage"),
       process.execPath,
       "--test",
-      "--test-concurrency=2",
+      `--test-concurrency=${testConcurrency}`,
       ...config.tests,
     ],
     { timeout, cwd: root, env, stdio: "inherit" },
   );
+  const executionMs = Date.now() - executeStartedAt;
   if (result.error !== undefined) {
-    if ((result.error as NodeJS.ErrnoException).code === "ETIMEDOUT") throw new CoverageGateFailure(`the c8 coverage run exceeded its ${timeout} ms deadline; inspect the runner output above.`);
-    throw new CoverageGateFailure(`failed to start the c8 reporter: ${result.error.message}`);
+    const code = (result.error as NodeJS.ErrnoException).code;
+    if (code === "ETIMEDOUT") {
+      return {
+        termination: { kind: "deadline", exitCode: null, signal: null },
+        status: 1,
+        executionMs,
+        testConcurrency,
+        startFailure: null,
+      };
+    }
+    return {
+      termination: { kind: "start-failure", exitCode: null, signal: null },
+      status: 1,
+      executionMs,
+      testConcurrency,
+      startFailure: result.error.message,
+    };
   }
-  return result.status ?? 1;
+  if (result.signal !== null) {
+    return {
+      termination: { kind: "signal", exitCode: null, signal: result.signal },
+      status: result.status ?? 1,
+      executionMs,
+      testConcurrency,
+      startFailure: null,
+    };
+  }
+  return {
+    termination: { kind: "exit", exitCode: result.status, signal: null },
+    status: result.status ?? 1,
+    executionMs,
+    testConcurrency,
+    startFailure: null,
+  };
 }
 
 /**
@@ -307,11 +434,66 @@ function reconcile(root: string, required: readonly string[], thresholds: Thresh
 }
 
 /**
+ * Build the receipt for one measured run.
+ *
+ * Headroom is the budget the execution stage did not consume, `null` exactly
+ * when the deadline ended the run; an incomplete run never reports headroom.
+ */
+function buildReceipt(
+  parameters: {
+    readonly deadlineMs: number;
+    readonly requiredFiles: number;
+    readonly configureMs: number;
+  },
+  run: C8RunRecord,
+  outcome: { readonly exitCode: number; readonly reconcileMs: number; readonly violations: readonly string[] },
+): GateReceipt {
+  return {
+    schema: 1,
+    complete: outcome.exitCode === 0 && outcome.violations.length === 0 && run.termination.kind === "exit" && run.termination.exitCode === 0,
+    exitCode: outcome.exitCode,
+    termination: run.termination,
+    stageTimingsMs: { configure: parameters.configureMs, execute: run.executionMs, reconcile: outcome.reconcileMs },
+    deadlineMs: parameters.deadlineMs,
+    testConcurrency: run.testConcurrency,
+    headroomMs: run.termination.kind === "deadline" ? null : Math.max(0, parameters.deadlineMs - run.executionMs),
+    gatePeakRssKb: process.resourceUsage().maxRSS,
+    requiredFiles: parameters.requiredFiles,
+    violations: outcome.violations,
+  };
+}
+
+/**
+ * Emit one run's receipt: a machine-readable line on the appropriate stream
+ * for every outcome, plus the durable `coverage/gate-receipt.json` file for a
+ * fully measured, threshold-meeting run.
+ *
+ * The line is the diagnosis channel for refused runs (deadline, start
+ * failure, suite failure, violations): the report directory is invalidated on
+ * every failure, so nothing a failed run leaves behind can satisfy a check,
+ * while the receipt still records the actual termination reason and stage
+ * timings. The file is written only next to the complete reports of a clean
+ * run, so its existence is itself evidence of a finished gate.
+ */
+function emitReceipt(root: string, receipt: GateReceipt, options: CoverageGateOptions): void {
+  const line = `coverage-gate receipt: ${JSON.stringify(receipt)}`;
+  if (receipt.complete) {
+    (options.log ?? console.log)(line);
+    writeFileSync(join(root, "coverage", "gate-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
+  } else {
+    (options.error ?? console.error)(line);
+  }
+}
+
+/**
  * Run the whole gate against one repository root and return the exit code.
  *
  * Reports are invalidated before the run and again on every failure, so a red
  * run leaves no green-looking artefact behind; a clean run leaves the json,
- * json-summary and lcov reports in place for consumers.
+ * json-summary, lcov and gate-receipt reports in place for consumers. Every
+ * outcome after the execution stage emits a receipt with stage timings, the
+ * actual termination reason and the remaining budget, so sizing the deadline
+ * from measured runs never depends on re-deriving what the runner did.
  *
  * @param root - Repository root whose `package.json` configures the gate.
  * @param options - Optional runner and stream boundaries for the suite.
@@ -322,22 +504,44 @@ export function runCoverageGate(root: string, options: CoverageGateOptions = {})
   const failure = options.error ?? console.error;
   const reports = join(root, "coverage");
   try {
-    const { config, thresholds } = loadConfiguration(root);
+    const configureStartedAt = Date.now();
+    const { config, thresholds, deadlineMs, testConcurrency } = loadConfiguration(root);
     const skipped = new Set(SKIPPED_DIRECTORY_NAMES);
     for (const name of config.skipDirs ?? []) skipped.add(name);
     const inventory = inventorySources(root, config, skipped);
     rmSync(reports, { recursive: true, force: true });
-    const status = runC8(root, config, inventory, options);
-    if (status !== 0) {
+    const configureMs = Date.now() - configureStartedAt;
+    const run = runC8(root, config, inventory, options, deadlineMs, testConcurrency);
+    const parameters = { deadlineMs, requiredFiles: inventory.required.length, configureMs };
+    if (run.termination.kind === "deadline") {
       rmSync(reports, { recursive: true, force: true });
-      return status;
+      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), options);
+      failure(`coverage-gate: the c8 coverage run exceeded its ${deadlineMs} ms deadline; inspect the runner output above.`);
+      return 1;
     }
+    if (run.termination.kind === "start-failure") {
+      rmSync(reports, { recursive: true, force: true });
+      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), options);
+      failure(`coverage-gate: failed to start the c8 reporter: ${run.startFailure}`);
+      return 1;
+    }
+    if (run.status !== 0) {
+      rmSync(reports, { recursive: true, force: true });
+      emitReceipt(root, buildReceipt(parameters, run, { exitCode: run.status, reconcileMs: 0, violations: [] }), options);
+      return run.status;
+    }
+    const reconcileStartedAt = Date.now();
     const violations = reconcile(root, inventory.required, thresholds);
+    const reconcileMs = Date.now() - reconcileStartedAt;
+    const exitCode = violations.length > 0 ? 1 : 0;
+    const receipt = buildReceipt(parameters, run, { exitCode, reconcileMs, violations });
     if (violations.length > 0) {
       rmSync(reports, { recursive: true, force: true });
+      emitReceipt(root, receipt, options);
       failure(`coverage-gate: ${violations.length} violation(s) after the run:\n${violations.join("\n")}`);
       return 1;
     }
+    emitReceipt(root, receipt, options);
     log(`coverage-gate: ${inventory.required.length} source file(s) reported; every threshold met.`);
     return 0;
   } catch (gateFailure) {

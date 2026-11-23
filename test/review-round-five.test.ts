@@ -38,7 +38,7 @@ for (const member of ['primary', 'dependent']) test(`a legacy checkpoint racing 
 test('coverage timeout reports its real budget and removes stale success reports', t => {
   const root = mkdtempSync(join(tmpdir(), 'coverage-deadline-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ coverageGate: { sources: ['entry.ts'], tests: ['absent.test.ts'], thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 } } }));
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ coverageGate: { sources: ['entry.ts'], tests: ['absent.test.ts'], thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 }, deadlineMs: 3600000, testConcurrency: 2 } }));
   writeFileSync(join(root, 'entry.ts'), 'export const value = 1;\n');
   mkdirSync(join(root, 'coverage')); writeFileSync(join(root, 'coverage/coverage-summary.json'), '{"total":"stale success"}');
   const lines: string[] = []; const spawn = childProcess.spawnSync; let observed = false;

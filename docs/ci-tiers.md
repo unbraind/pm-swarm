@@ -56,6 +56,58 @@ not a controlled quick/full benchmark. New quick and final CI timings are pendin
 Full local depth is deliberately not run on the overloaded host.
 Companion: pm-cli-website-dyhg.
 
+## Deep leg budget sizing (2026-11-23)
+
+The deep c8 coverage stage is budgeted explicitly: the `coverageGate` block
+of `package.json` carries `deadlineMs` (the wall-clock budget for the whole
+c8 execution) and `testConcurrency` (the maximum `node --test` workers).
+Both are required, validated as positive integers, and sized from measured
+deep-leg runtime on the runner classes that execute the deep tier — never a
+hidden constant. The worker maximum is capped by the parallelism the runner
+actually exposes (container CPU quotas included), so one manifest value sizes
+every runner class without oversubscribing a smaller host: a 2-CPU container
+runs at most two workers, a 3-CPU Pi container at most three.
+
+Every gate outcome emits a receipt — stage timings (configure, execute,
+reconcile), the actual termination reason (exit code, signal or deadline),
+the worker count used, the gate process peak RSS and the remaining deadline
+headroom — as a `coverage-gate receipt:` line on the stream the outcome
+belongs to. A fully measured run additionally writes
+`coverage/gate-receipt.json` next to its reports, and the deep workflow
+appends it to the step summary. A refused run invalidates every report and
+never leaves a receipt that could pass a check; the deadline itself must
+leave at least half an hour of the 120-minute deep job for every
+non-coverage stage, a contract `test/deep-budget-receipt.test.ts` enforces.
+
+The deep workflow measures queue wait separately from execution: the first
+step fetches the run's creation time from the actions API (read-only
+`actions: read`), records the runner-local start of execution, and an
+`always()` closing step appends the execution span, the container's cgroup
+`memory.peak` and the receipt to the step summary. Measurement steps are
+tolerant: they record `unknown` rather than failing the gate. Sizing
+evidence, receipts and the runner-class eligibility decision are recorded in
+issue #97 and item pm-swarm-n901.
+
+Measured deep-leg execute stages (full depth, time scale 3, Node 22, in
+containers capped exactly as the fleet controller admits them):
+
+| Runner class | Workers | Execute stage | Peak memory | Outcome |
+| --- | --- | --- | --- | --- |
+| x64 fleet host, 2-CPU 5-GiB container | 2 | 39.5 min | about 600 MiB | 1254/1256 tests, 20.5 min headroom against the 3600000 ms budget |
+| Pi 4B arm64 host, 3-CPU 2.5-GiB container | 3 | 94.0 min | about 816 MiB of 2.5 GiB | 1253/1256 tests; exceeds every budget that fits the 120-minute job |
+| Pi 4B arm64 host (CI evidence, 2-CPU) | 2 | over 60 min | not reached | deadline killed the leg with 825 passing, 39 still active |
+
+The shipped budget is 1.5x the measured x86-64 deep-leg execute stage
+(3600000 ms for a 39.5-minute stage, 50 percent headroom) with two workers,
+which saturated both CPUs of the 2-CPU container in both measured runs. The
+Pi 4B class cannot finish the stage inside the deep job even at three
+workers, so it is not an eligible runner class for this package's heavy
+gate: the fleet controller's repository routing keeps pm-swarm's deep jobs
+in the x64 pool (they queue for an admissible slot instead of spilling to a
+runner that cannot finish). Queue starvation on the shared pool is a
+separate capacity problem, tracked in its own item; deep timing records now
+separate it from execution.
+
 ## Local quick validation
 
 The bounded local run passed 131/132 tests in 504.16 s. Its sole unexpected

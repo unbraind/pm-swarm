@@ -134,6 +134,8 @@
       "functions": 100,
       "lines": 100
     },
+    "deadlineMs": 3600000,
+    "testConcurrency": 2,
     "ignore": []
   },
   "duplicationGate": {

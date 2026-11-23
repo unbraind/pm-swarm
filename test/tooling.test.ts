@@ -109,6 +109,8 @@ const FULL_THRESHOLDS = {
   sources: ["src"],
   tests: ["test/*.test.ts"],
   thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 },
+  deadlineMs: 1200000,
+  testConcurrency: 2,
 };
 
 after(() => rmSync(scratchBase, { recursive: true, force: true }));
@@ -492,6 +494,8 @@ test("coverage gate rejects a manifest without complete thresholds or tests", ()
       sources: ["src"],
       tests: ["test/*.test.ts"],
       thresholds: { statements: 100, branches: 100, functions: 100 },
+      deadlineMs: 1200000,
+      testConcurrency: 2,
     }),
   });
   const tests = fixtureProject("coverage-missing-tests", {
@@ -499,6 +503,8 @@ test("coverage gate rejects a manifest without complete thresholds or tests", ()
       sources: ["src"],
       tests: [],
       thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 },
+      deadlineMs: 1200000,
+      testConcurrency: 2,
     }),
   });
   const messages = [capturedGate(thresholds).seen, capturedGate(tests).seen].join("\n");
