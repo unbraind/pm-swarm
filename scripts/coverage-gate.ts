@@ -518,16 +518,15 @@ export function runCoverageGate(root: string, options: CoverageGateOptions = {})
     const configureMs = Date.now() - configureStartedAt;
     const run = runC8(root, config, inventory, options, deadlineMs, testConcurrency);
     const parameters = { deadlineMs, requiredFiles: inventory.required.length, configureMs };
-    if (run.termination.kind === "deadline") {
+    const launchFailure = run.termination.kind === "deadline"
+      ? `the c8 coverage run exceeded its ${deadlineMs} ms deadline; inspect the runner output above.`
+      : run.termination.kind === "start-failure"
+        ? `failed to start the c8 reporter: ${run.startFailure}`
+        : null;
+    if (launchFailure !== null) {
       rmSync(reports, { recursive: true, force: true });
       emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), log, failure);
-      failure(`coverage-gate: the c8 coverage run exceeded its ${deadlineMs} ms deadline; inspect the runner output above.`);
-      return 1;
-    }
-    if (run.termination.kind === "start-failure") {
-      rmSync(reports, { recursive: true, force: true });
-      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), log, failure);
-      failure(`coverage-gate: failed to start the c8 reporter: ${run.startFailure}`);
+      failure(`coverage-gate: ${launchFailure}`);
       return 1;
     }
     if (run.status !== 0) {
