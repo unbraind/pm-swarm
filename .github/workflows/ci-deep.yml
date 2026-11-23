@@ -32,8 +32,8 @@ jobs:
           start=$(date -u +%s)
           queue_wait=unknown
           if response=$(curl -fsSL --max-time 15 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/unbraind/pm-swarm/actions/runs/$GITHUB_RUN_ID") &&
-            created=$(printf '%s' "$response" | jq -er '.created_at | strings | select(length > 0)') &&
+            "https://api.github.com/repos/unbraind/pm-swarm/actions/runs/$GITHUB_RUN_ID/attempts/${GITHUB_RUN_ATTEMPT:-1}") &&
+            created=$(printf '%s' "$response" | jq -er '(.run_started_at // .created_at) | strings | select(length > 0)') &&
             created_epoch=$(date -u -d "$created" +%s); then
             queue_wait="$((start - created_epoch)) s"
           else
@@ -41,8 +41,8 @@ jobs:
           fi
           {
             echo "### Deep leg timing record"
-            echo "- run created: $created"
-            echo "- queue wait: $queue_wait (run creation until this runner started the job)"
+            echo "- attempt started: $created (attempt ${GITHUB_RUN_ATTEMPT:-1})"
+            echo "- queue wait: $queue_wait (this attempt's start until this runner started the job)"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "EXECUTION_START_EPOCH=$start" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

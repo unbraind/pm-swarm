@@ -83,8 +83,8 @@ test("the deep workflow measures queue wait separately from execution and record
   const steps = workflow.jobs.deep.steps;
   const queue = steps.find(step => step.name === "Record queue wait separately from execution");
   assert.ok(queue, "the deep workflow must record queue wait before any execution step");
-  assert.match(queue.run!, /api\.github\.com\/repos\/unbraind\/pm-swarm\/actions\/runs\/\$GITHUB_RUN_ID/);
-  assert.match(queue.run!, /jq -er '\.created_at/);
+  assert.match(queue.run!, /api\.github\.com\/repos\/unbraind\/pm-swarm\/actions\/runs\/\$GITHUB_RUN_ID\/attempts\/\$\{GITHUB_RUN_ATTEMPT:-1\}/);
+  assert.match(queue.run!, /jq -er '\(\.run_started_at \/\/ \.created_at\)/);
   assert.match(queue.run!, /GITHUB_STEP_SUMMARY/);
   assert.match(queue.run!, /EXECUTION_START_EPOCH=.*>> "\$GITHUB_ENV"/);
   assert.match(queue.run!, /queue wait/);
@@ -98,7 +98,7 @@ test("the deep workflow measures queue wait separately from execution and record
 });
 
 /** Execute an actual workflow run block with fixture commands and Actions output files. */
-function runMeasurementStep(name: string, commands: string): { summary: string; vars: string } {
+function runMeasurementStep(name: string, commands: string, attempt = "1"): { summary: string; vars: string } {
   const step = parseDeepWorkflow().jobs.deep.steps.find(candidate => candidate.name === name);
   assert.ok(step?.run, name);
   const root = mkdtempSync(join(tmpdir(), "deep-workflow-measurement-"));
@@ -110,7 +110,7 @@ function runMeasurementStep(name: string, commands: string): { summary: string; 
       cwd: root,
       encoding: "utf8",
       env: {
-        PATH: process.env.PATH, GH_TOKEN: "fixture", GITHUB_RUN_ID: "1",
+        PATH: process.env.PATH, GH_TOKEN: "fixture", GITHUB_RUN_ID: "1", GITHUB_RUN_ATTEMPT: attempt,
         GITHUB_STEP_SUMMARY: summary, GITHUB_ENV: vars,
       },
       timeout: testTime(30000),
@@ -137,7 +137,7 @@ test("the optional queue API request bounds a stalled transfer and discards its 
     date() { echo 120; }
   `);
   assert.match(outcome.summary, /curl timeout flags: --max-time 15/);
-  assert.match(outcome.summary, /run created: unknown/);
+  assert.match(outcome.summary, /attempt started: unknown/);
   assert.match(outcome.summary, /queue wait: unknown/);
   assert.equal(outcome.vars, "EXECUTION_START_EPOCH=120\n");
 });
@@ -153,7 +153,7 @@ test("queue wait excludes time spent fetching the run creation timestamp", workf
       fi
     }
   `);
-  assert.match(outcome.summary, /run created: 1970-01-01T00:01:40Z/);
+  assert.match(outcome.summary, /attempt started: 1970-01-01T00:01:40Z \(attempt 1\)/);
   assert.match(outcome.summary, /queue wait: 20 s/);
   assert.equal(outcome.vars, "EXECUTION_START_EPOCH=120\n");
 });
@@ -425,4 +425,14 @@ test("a runner that ends without a status or a signal still records an exit with
   assert.deepEqual(signalled.receipt!.termination, { kind: "signal", exitCode: null, signal: "SIGTERM" }, "a runner with both a signal and a status records the signal as its reason and the delivered status");
   hook.mock.restore();
   syncBuiltinESMExports();
+});
+
+test("a rerun measures queue wait from its own attempt start, not the run's original creation", workflowShell, () => {
+  const outcome = runMeasurementStep(queueStep, `
+    curl() { for a in "$@"; do last=$a; done; printf 'requested: %s\\n' "$last" >> "$GITHUB_STEP_SUMMARY"; printf '{"created_at":"1970-01-01T00:00:10Z","run_started_at":"1970-01-01T00:01:40Z"}\\n'; }
+    date() { if [ "$2" = "-d" ]; then case "$3" in *00:01:40Z) echo 100;; *) echo 10;; esac; else echo 130; fi; }
+  `, "2");
+  assert.match(outcome.summary, /requested: https:\/\/api\.github\.com\/repos\/unbraind\/pm-swarm\/actions\/runs\/1\/attempts\/2/);
+  assert.match(outcome.summary, /attempt started: 1970-01-01T00:01:40Z \(attempt 2\)/);
+  assert.match(outcome.summary, /queue wait: 30 s/, "the original creation time (10 s) must not be used on a rerun");
 });
