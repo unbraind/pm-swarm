@@ -430,7 +430,7 @@ test("a runner that ends without a status or a signal still records an exit with
 /** The rerun test exercises the workflow's real jq filter; CI images ship jq, local hosts may not. */
 const realJq = {
   skip: (process.platform === "win32" && "Deep CI runs in a POSIX shell")
-    || (childProcess.spawnSync("jq", ["--version"], { encoding: "utf8" }).status !== 0
+    || (childProcess.spawnSync("jq", ["--version"], { encoding: "utf8", timeout: testTime(30000) }).status !== 0
       && "jq is not on PATH; install jq to exercise the workflow's real attempt-start filter"),
 };
 
