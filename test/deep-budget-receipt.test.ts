@@ -264,3 +264,29 @@ test("a silent runner that exits zero without a report stays a refusal with no c
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a runner that ends without a status or a signal still records an exit without a code", { timeout: 30000 }, t => {
+  const vanishingRoot = mkdtempSync(join(tmpdir(), "deep-receipt-vanish-"));
+  t.after(() => rmSync(vanishingRoot, { recursive: true, force: true }));
+  writeEntryFixture(vanishingRoot, { deadlineMs: 1200000, testConcurrency: 1 });
+  const results: unknown[] = [null, { status: 1, signal: "SIGTERM", error: undefined }];
+  const original = childProcess.spawnSync;
+  const hook = t.mock.method(childProcess, "spawnSync", new Proxy(original, { apply(target, receiver, args: unknown[]) {
+    const result = results.shift();
+    if (result === null) return { status: null, signal: null, error: undefined, output: [] } as object;
+    return result;
+  } }));
+  syncBuiltinESMExports();
+  const vanished = capturedReceipt(vanishingRoot, { executable: process.execPath, script: "unused.mjs" });
+  assert.equal(vanished.status, 1, "a vanished runner with no delivered status must fail the gate");
+  assert.ok(vanished.receipt);
+  assert.deepEqual(vanished.receipt!.termination, { kind: "exit", exitCode: null, signal: null }, "the receipt must record the missing exit code instead of inventing one");
+  const signalledRoot = mkdtempSync(join(tmpdir(), "deep-receipt-signalled-"));
+  t.after(() => rmSync(signalledRoot, { recursive: true, force: true }));
+  writeEntryFixture(signalledRoot, { deadlineMs: 1200000, testConcurrency: 1 });
+  const signalled = capturedReceipt(signalledRoot, { executable: process.execPath, script: "unused.mjs" });
+  assert.equal(signalled.status, 1);
+  assert.deepEqual(signalled.receipt!.termination, { kind: "signal", exitCode: null, signal: "SIGTERM" }, "a runner with both a signal and a status records the signal as its reason and the delivered status");
+  hook.mock.restore();
+  syncBuiltinESMExports();
+});

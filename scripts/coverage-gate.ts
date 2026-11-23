@@ -475,13 +475,18 @@ function buildReceipt(
  * timings. The file is written only next to the complete reports of a clean
  * run, so its existence is itself evidence of a finished gate.
  */
-function emitReceipt(root: string, receipt: GateReceipt, options: CoverageGateOptions): void {
+function emitReceipt(
+  root: string,
+  receipt: GateReceipt,
+  log: (message: string) => void,
+  failure: (message: string) => void,
+): void {
   const line = `coverage-gate receipt: ${JSON.stringify(receipt)}`;
   if (receipt.complete) {
-    (options.log ?? console.log)(line);
+    log(line);
     writeFileSync(join(root, "coverage", "gate-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
   } else {
-    (options.error ?? console.error)(line);
+    failure(line);
   }
 }
 
@@ -515,19 +520,19 @@ export function runCoverageGate(root: string, options: CoverageGateOptions = {})
     const parameters = { deadlineMs, requiredFiles: inventory.required.length, configureMs };
     if (run.termination.kind === "deadline") {
       rmSync(reports, { recursive: true, force: true });
-      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), options);
+      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), log, failure);
       failure(`coverage-gate: the c8 coverage run exceeded its ${deadlineMs} ms deadline; inspect the runner output above.`);
       return 1;
     }
     if (run.termination.kind === "start-failure") {
       rmSync(reports, { recursive: true, force: true });
-      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), options);
+      emitReceipt(root, buildReceipt(parameters, run, { exitCode: 1, reconcileMs: 0, violations: [] }), log, failure);
       failure(`coverage-gate: failed to start the c8 reporter: ${run.startFailure}`);
       return 1;
     }
     if (run.status !== 0) {
       rmSync(reports, { recursive: true, force: true });
-      emitReceipt(root, buildReceipt(parameters, run, { exitCode: run.status, reconcileMs: 0, violations: [] }), options);
+      emitReceipt(root, buildReceipt(parameters, run, { exitCode: run.status, reconcileMs: 0, violations: [] }), log, failure);
       return run.status;
     }
     const reconcileStartedAt = Date.now();
@@ -537,11 +542,11 @@ export function runCoverageGate(root: string, options: CoverageGateOptions = {})
     const receipt = buildReceipt(parameters, run, { exitCode, reconcileMs, violations });
     if (violations.length > 0) {
       rmSync(reports, { recursive: true, force: true });
-      emitReceipt(root, receipt, options);
+      emitReceipt(root, receipt, log, failure);
       failure(`coverage-gate: ${violations.length} violation(s) after the run:\n${violations.join("\n")}`);
       return 1;
     }
-    emitReceipt(root, receipt, options);
+    emitReceipt(root, receipt, log, failure);
     log(`coverage-gate: ${inventory.required.length} source file(s) reported; every threshold met.`);
     return 0;
   } catch (gateFailure) {
