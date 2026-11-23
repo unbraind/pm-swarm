@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased
-
-### Other
-
-- Close delivered pm items and reserve in progress for active work (2026-10-24) ([pm-swarm-b5p4](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-b5p4.toon))
-
 ## 2026.11.22 - 2026-11-22
 
 ### Dependencies
