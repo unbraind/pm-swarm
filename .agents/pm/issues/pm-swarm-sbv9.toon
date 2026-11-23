@@ -1,0 +1,11 @@
+id: pm-swarm-sbv9
+title: "Fleet deep-tier queue starvation: pm-swarm deep legs waited 9.5-19h+ for a runner slot"
+description: "Distinct from the c8 execution budget (pm-swarm-n901, unbraind/pm-swarm#97): in CI run 45012114155 the deep legs waited up to 9 h 30 m for assignment and one leg stayed queued over 19 h, because the x64 pool had no admissible slot (one host below the disk admission floor, one reserved for the pm-cli project, one slot busy) and the arm64 overflow served them one at a time on a single Pi. The deep workflow now records queue wait separately from execution, so future evidence separates the two problems. Sizing the local-runner pool for the nightly deep tier, or staggering deep schedules across repos, is fleet ops work with the controller."
+type: Issue
+status: open
+priority: 2
+tags[4]: ci,fleet,local-runners,queueing
+created_at: "2026-11-23T06:25:24.999Z"
+updated_at: "2026-11-23T06:25:24.999Z"
+author: codex-agent
+body: ""

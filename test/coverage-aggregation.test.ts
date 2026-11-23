@@ -10,7 +10,7 @@ import { runCoverageGate } from '../scripts/coverage-gate.ts';
 test('coverage aggregates a large raw subprocess corpus inside a 64 MiB reporter heap', t => {
   const root = mkdtempSync(join(tmpdir(), 'swarm-coverage-aggregation-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  writeFileSync(join(root, 'package.json'), JSON.stringify({ type: 'module', coverageGate: { sources: ['entry.ts'], tests: ['fixture.test.mjs'], thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 } } }));
+  writeFileSync(join(root, 'package.json'), JSON.stringify({ type: 'module', coverageGate: { sources: ['entry.ts'], tests: ['fixture.test.mjs'], thresholds: { statements: 100, branches: 100, functions: 100, lines: 100 }, deadlineMs: 300000, testConcurrency: 2 } }));
   writeFileSync(join(root, 'entry.ts'), 'export const value = 1;\n');
   mkdirSync(join(root, 'node_modules'));
   writeFileSync(join(root, 'node_modules/vendor.js'), 'export const vendor = 1;\n');

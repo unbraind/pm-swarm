@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: ci-deep-${{ github.ref }}
   cancel-in-progress: true
@@ -24,6 +25,26 @@ jobs:
       PM_TEST_DEPTH: full
       PM_TEST_TIME_SCALE: 3
     steps:
+      - name: Record queue wait separately from execution
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          start=$(date -u +%s)
+          queue_wait=unknown
+          if response=$(curl -fsSL --max-time 15 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/unbraind/pm-swarm/actions/runs/$GITHUB_RUN_ID/attempts/${GITHUB_RUN_ATTEMPT:-1}") &&
+            created=$(printf '%s' "$response" | jq -er '(.run_started_at // .created_at) | strings | select(length > 0)') &&
+            created_epoch=$(date -u -d "$created" +%s); then
+            queue_wait="$((start - created_epoch)) s"
+          else
+            created=unknown
+          fi
+          {
+            echo "### Deep leg timing record"
+            echo "- attempt started: $created (attempt ${GITHUB_RUN_ATTEMPT:-1})"
+            echo "- queue wait: $queue_wait (this attempt's start until this runner started the job)"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "EXECUTION_START_EPOCH=$start" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
@@ -46,3 +67,29 @@ jobs:
         if: matrix.package-manager == 'bun'
         run: env GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_NOSYSTEM=1 bun run release:check
       - run: bun install --no-save
+      - name: Record execution span, peak memory and the coverage gate receipt
+        if: always()
+        run: |
+          end=$(date -u +%s)
+          {
+            if [ -n "${EXECUTION_START_EPOCH:-}" ]; then
+              echo "- execution: $((end - EXECUTION_START_EPOCH)) s (runner-local, excluding queue wait)"
+            else
+              echo "- execution: unknown (no runner-local start recorded)"
+            fi
+            peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null) || peak=
+            if [ -n "$peak" ]; then
+              echo "- container peak memory: $peak bytes (cgroup v2)"
+            else
+              echo "- container peak memory: unavailable (no readable cgroup v2 memory.peak)"
+            fi
+            if [ -f coverage/gate-receipt.json ] &&
+              receipt=$(sed 's/^/  /' coverage/gate-receipt.json 2>/dev/null) && [ -n "$receipt" ]; then
+              echo "- coverage gate receipt (complete run):"
+              echo '  ```json'
+              printf '%s\n' "$receipt"
+              echo '  ```'
+            else
+              echo "- coverage gate receipt: unavailable; see the gate step log for any failure receipt"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
