@@ -427,7 +427,14 @@ test("a runner that ends without a status or a signal still records an exit with
   syncBuiltinESMExports();
 });
 
-test("a rerun measures queue wait from its own attempt start, not the run's original creation", workflowShell, () => {
+/** The rerun test exercises the workflow's real jq filter; CI images ship jq, local hosts may not. */
+const realJq = {
+  skip: (process.platform === "win32" && "Deep CI runs in a POSIX shell")
+    || (childProcess.spawnSync("jq", ["--version"], { encoding: "utf8" }).status !== 0
+      && "jq is not on PATH; install jq to exercise the workflow's real attempt-start filter"),
+};
+
+test("a rerun measures queue wait from its own attempt start, not the run's original creation", realJq, () => {
   const outcome = runMeasurementStep(queueStep, `
     curl() { for a in "$@"; do last=$a; done; printf 'requested: %s\\n' "$last" >> "$GITHUB_STEP_SUMMARY"; printf '{"created_at":"1970-01-01T00:00:10Z","run_started_at":"1970-01-01T00:01:40Z"}\\n'; }
     date() { if [ "$2" = "-d" ]; then case "$3" in *00:01:40Z) echo 100;; *) echo 10;; esac; else echo 130; fi; }
