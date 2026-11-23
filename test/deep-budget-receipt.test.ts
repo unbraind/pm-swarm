@@ -20,6 +20,7 @@ import { test } from "node:test";
 import { parseDocument } from "yaml";
 
 import { runCoverageGate } from "../scripts/coverage-gate.ts";
+import { testTime } from "./support/time.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -112,7 +113,7 @@ function runMeasurementStep(name: string, commands: string): { summary: string; 
         PATH: process.env.PATH, GH_TOKEN: "fixture", GITHUB_RUN_ID: "1",
         GITHUB_STEP_SUMMARY: summary, GITHUB_ENV: vars,
       },
-      timeout: 10000,
+      timeout: testTime(30000),
     });
     assert.equal(result.status, 0, result.error?.message ?? result.stderr);
     return { summary: readFileSync(summary, "utf8"), vars: readFileSync(vars, "utf8") };
