@@ -22,7 +22,7 @@
  * - the reported file list is reconciled against a fresh walk of the configured
  *   source locations, so a file the glob machinery fails to match cannot
  *   escape the measurement — it is named as a violation instead;
- * - every outcome emits a receipt with the stage timings, the actual
+ * - every outcome after the runner returns emits a receipt with stage timings, the actual
  *   termination reason, the worker count and the budget headroom, so an
  *   incomplete run is diagnosable from evidence and never becomes a success.
  *
@@ -186,7 +186,7 @@ interface C8RunRecord {
   readonly startFailure: string | null;
 }
 
-/** One measured gate run, emitted for every outcome so budget sizing and diagnosis never rely on guesses. */
+/** One measured gate run, including refused outcomes after the runner returns. */
 interface GateReceipt {
   /** Receipt schema version, so consumers can reject a shape they do not know. */
   readonly schema: 1;
@@ -424,20 +424,26 @@ function reconcile(root: string, required: readonly string[], thresholds: Thresh
   const summary = JSON.parse(readFileSync(summaryPath, "utf8")) as CoverageSummary;
   const reported = new Set(Object.keys(summary).map(key => relative(root, resolve(root, key)).split(sep).join("/")));
   const totals = summary["total"] as { readonly [dimension in CoverageDimension]: MetricSummary };
-  return [
-    ...required
-      .filter(file => !reported.has(file))
-      .map(file => `${file}: never loaded by the suite and absent from the report; import it from a test.`),
-    ...DIMENSIONS.filter(dimension => totals[dimension].pct < thresholds[dimension])
-      .map(dimension => `${dimension}: ${totals[dimension].pct}% covered, ${thresholds[dimension]}% required.`),
-  ];
+  const violations = required
+    .filter(file => !reported.has(file))
+    .map(file => `${file}: never loaded by the suite and absent from the report; import it from a test.`);
+  for (const dimension of DIMENSIONS) {
+    const pct = totals[dimension].pct;
+    if (!Number.isFinite(pct) || pct > 100) {
+      throw new CoverageGateFailure(`${dimension}: invalid coverage percentage in the c8 summary.`);
+    }
+    if (pct < thresholds[dimension]) {
+      violations.push(`${dimension}: ${pct}% covered, ${thresholds[dimension]}% required.`);
+    }
+  }
+  return violations;
 }
 
 /**
  * Build the receipt for one measured run.
  *
  * Headroom is the budget the execution stage did not consume, `null` exactly
- * when the deadline ended the run; an incomplete run never reports headroom.
+ * when the deadline ended the run.
  */
 function buildReceipt(
   parameters: {
@@ -465,7 +471,7 @@ function buildReceipt(
 
 /**
  * Emit one run's receipt: a machine-readable line on the appropriate stream
- * for every outcome, plus the durable `coverage/gate-receipt.json` file for a
+ * after the runner returns, plus the durable `coverage/gate-receipt.json` file for a
  * fully measured, threshold-meeting run.
  *
  * The line is the diagnosis channel for refused runs (deadline, start
@@ -483,8 +489,8 @@ function emitReceipt(
 ): void {
   const line = `coverage-gate receipt: ${JSON.stringify(receipt)}`;
   if (receipt.complete) {
-    log(line);
     writeFileSync(join(root, "coverage", "gate-receipt.json"), `${JSON.stringify(receipt, null, 2)}\n`);
+    log(line);
   } else {
     failure(line);
   }
@@ -535,17 +541,25 @@ export function runCoverageGate(root: string, options: CoverageGateOptions = {})
       return run.status;
     }
     const reconcileStartedAt = Date.now();
-    const violations = reconcile(root, inventory.required, thresholds);
-    const reconcileMs = Date.now() - reconcileStartedAt;
-    const exitCode = violations.length > 0 ? 1 : 0;
-    const receipt = buildReceipt(parameters, run, { exitCode, reconcileMs, violations });
-    if (violations.length > 0) {
-      rmSync(reports, { recursive: true, force: true });
+    let reconcileMs: number | undefined;
+    try {
+      const violations = reconcile(root, inventory.required, thresholds);
+      reconcileMs = Date.now() - reconcileStartedAt;
+      const exitCode = violations.length > 0 ? 1 : 0;
+      const receipt = buildReceipt(parameters, run, { exitCode, reconcileMs, violations });
+      if (violations.length > 0) {
+        rmSync(reports, { recursive: true, force: true });
+        emitReceipt(root, receipt, log, failure);
+        failure(`coverage-gate: ${violations.length} violation(s) after the run:\n${violations.join("\n")}`);
+        return 1;
+      }
       emitReceipt(root, receipt, log, failure);
-      failure(`coverage-gate: ${violations.length} violation(s) after the run:\n${violations.join("\n")}`);
-      return 1;
+    } catch (gateFailure) {
+      emitReceipt(root, buildReceipt(parameters, run, {
+        exitCode: 1, reconcileMs: reconcileMs ?? Date.now() - reconcileStartedAt, violations: [],
+      }), log, failure);
+      throw gateFailure;
     }
-    emitReceipt(root, receipt, log, failure);
     log(`coverage-gate: ${inventory.required.length} source file(s) reported; every threshold met.`);
     return 0;
   } catch (gateFailure) {

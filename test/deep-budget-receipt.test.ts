@@ -83,8 +83,7 @@ test("the deep workflow measures queue wait separately from execution and record
   const queue = steps.find(step => step.name === "Record queue wait separately from execution");
   assert.ok(queue, "the deep workflow must record queue wait before any execution step");
   assert.match(queue.run!, /api\.github\.com\/repos\/unbraind\/pm-swarm\/actions\/runs\/\$GITHUB_RUN_ID/);
-  assert.match(queue.run!, /jq -r \.created_at/);
-  assert.doesNotMatch(queue.run!, /set -e/, "a measurement step must never fail the gate");
+  assert.match(queue.run!, /jq -er '\.created_at/);
   assert.match(queue.run!, /GITHUB_STEP_SUMMARY/);
   assert.match(queue.run!, /EXECUTION_START_EPOCH=.*>> "\$GITHUB_ENV"/);
   assert.match(queue.run!, /queue wait/);
@@ -95,6 +94,91 @@ test("the deep workflow measures queue wait separately from execution and record
   assert.match(record.run!, /memory\.peak/);
   assert.match(record.run!, /gate-receipt\.json/);
   assert.ok(steps.indexOf(record!) > steps.findIndex(step => step.name === "Full npm release gate"), "the record must follow the gate");
+});
+
+/** Execute an actual workflow run block with fixture commands and Actions output files. */
+function runMeasurementStep(name: string, commands: string): { summary: string; vars: string } {
+  const step = parseDeepWorkflow().jobs.deep.steps.find(candidate => candidate.name === name);
+  assert.ok(step?.run, name);
+  const root = mkdtempSync(join(tmpdir(), "deep-workflow-measurement-"));
+  try {
+    const summary = join(root, "step-summary");
+    const vars = join(root, "github-env");
+    writeFileSync(vars, "");
+    const result = childProcess.spawnSync("sh", ["-ec", `${commands}\n${step.run}`], {
+      cwd: root,
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH, GH_TOKEN: "fixture", GITHUB_RUN_ID: "1",
+        GITHUB_STEP_SUMMARY: summary, GITHUB_ENV: vars,
+      },
+      timeout: 10000,
+    });
+    assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+    return { summary: readFileSync(summary, "utf8"), vars: readFileSync(vars, "utf8") };
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+const queueStep = "Record queue wait separately from execution";
+const closingStep = "Record execution span, peak memory and the coverage gate receipt";
+const workflowShell = { skip: process.platform === "win32" && "Deep CI runs in a POSIX shell" };
+
+test("the optional queue API request bounds a stalled transfer and discards its partial output", workflowShell, () => {
+  const outcome = runMeasurementStep(queueStep, `
+    curl() {
+      printf 'curl timeout flags: %s %s\\n' "$2" "$3" >> "$GITHUB_STEP_SUMMARY"
+      printf '{"created_at":"1970-01-01T00:01:40Z"}\\n'
+      return 28
+    }
+    jq() { cat >/dev/null; echo '1970-01-01T00:01:40Z'; }
+    date() { echo 120; }
+  `);
+  assert.match(outcome.summary, /curl timeout flags: --max-time 15/);
+  assert.match(outcome.summary, /run created: unknown/);
+  assert.match(outcome.summary, /queue wait: unknown/);
+  assert.equal(outcome.vars, "EXECUTION_START_EPOCH=120\n");
+});
+
+test("queue wait excludes time spent fetching the run creation timestamp", workflowShell, () => {
+  const outcome = runMeasurementStep(queueStep, `
+    curl() { touch request-started; printf '{"created_at":"1970-01-01T00:01:40Z"}\\n'; }
+    jq() { cat >/dev/null; echo '1970-01-01T00:01:40Z'; }
+    date() {
+      if [ "$2" = "-d" ]; then echo 100;
+      elif [ -f request-started ]; then echo 125;
+      else echo 120;
+      fi
+    }
+  `);
+  assert.match(outcome.summary, /run created: 1970-01-01T00:01:40Z/);
+  assert.match(outcome.summary, /queue wait: 20 s/);
+  assert.equal(outcome.vars, "EXECUTION_START_EPOCH=120\n");
+});
+
+test("a failed memory peak read leaves the successful gate receipt in the step summary", workflowShell, () => {
+  const outcome = runMeasurementStep(closingStep, `
+    date() { echo 150; }
+    cat() { printf 'partial data'; return 1; }
+    EXECUTION_START_EPOCH=120
+    mkdir coverage
+    printf '{"complete":true}\\n' > coverage/gate-receipt.json
+  `);
+  assert.match(outcome.summary, /execution: 30 s/);
+  assert.match(outcome.summary, /container peak memory: unavailable/);
+  assert.match(outcome.summary, /coverage gate receipt \(complete run\):\n  ```json\n  \{"complete":true\}/);
+});
+
+test("an unreadable gate receipt leaves the measured memory peak in the step summary", workflowShell, () => {
+  const outcome = runMeasurementStep(closingStep, `
+    cat() { echo 54321; }
+    sed() { return 1; }
+    mkdir coverage
+    touch coverage/gate-receipt.json
+  `);
+  assert.match(outcome.summary, /container peak memory: 54321 bytes/);
+  assert.match(outcome.summary, /coverage gate receipt: unavailable/);
 });
 
 test("the manifest budget is explicit, positive and leaves the deep job headroom", () => {
@@ -249,21 +333,72 @@ test("threshold violations reach the receipt as an incomplete run with no surviv
   }
 });
 
-test("a silent runner that exits zero without a report stays a refusal with no complete receipt", () => {
+/** Check that a reconciliation refusal kept the runner's successful exit and emitted exactly one failure receipt. */
+function assertReconciliationFailure(outcome: ReturnType<typeof capturedReceipt>): Record<string, unknown> {
+  assert.equal(outcome.status, 1, outcome.seen);
+  assert.equal(outcome.seen.match(/coverage-gate receipt: /g)?.length, 1);
+  assert.ok(outcome.receipt);
+  assert.equal(outcome.receipt.complete, false);
+  assert.equal(outcome.receipt.exitCode, 1);
+  assert.deepEqual(outcome.receipt.termination, { kind: "exit", exitCode: 0, signal: null });
+  return outcome.receipt;
+}
+
+test("a silent runner that exits zero without a report emits one incomplete reconciliation receipt", () => {
   const root = mkdtempSync(join(tmpdir(), "deep-receipt-silent-"));
   try {
     writeEntryFixture(root, { deadlineMs: 1200000, testConcurrency: 1 });
     const quiet = join(root, "quiet.mjs");
     writeFileSync(quiet, "process.exit(0);\n");
     const outcome = capturedReceipt(root, { executable: process.execPath, script: quiet });
-    assert.equal(outcome.status, 1);
     assert.match(outcome.seen, /wrote no coverage summary/);
-    assert.doesNotMatch(outcome.seen, /"complete":true/, "an incomplete run must never become a success");
-    assert.equal(existsSync(join(root, "coverage", "gate-receipt.json")), false);
+    const receipt = assertReconciliationFailure(outcome);
+    const stages = receipt.stageTimingsMs as Record<string, number>;
+    assert.ok(stages.configure >= 0 && stages.execute > 0 && stages.reconcile >= 0);
+    assert.equal(existsSync(join(root, "coverage")), false);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("a failed receipt write emits one incomplete receipt and invalidates the reports", t => {
+  const root = mkdtempSync(join(tmpdir(), "deep-receipt-write-failure-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  writeCounterFixture(root, { deadlineMs: 1200000, testConcurrency: 2 });
+  const fixture = join(root, "test/counter.test.ts");
+  writeFileSync(fixture, `${readFileSync(fixture, "utf8")}
+import { mkdirSync } from "node:fs";
+mkdirSync("coverage/gate-receipt.json", { recursive: true });
+`);
+  const outcome = capturedReceipt(root);
+  assert.match(outcome.seen, /EISDIR/);
+  assert.doesNotMatch(outcome.seen, /"complete":true/);
+  assertReconciliationFailure(outcome);
+  assert.equal(existsSync(join(root, "coverage")), false);
+});
+
+for (const [label, pct] of [["missing", undefined], ["out-of-range", 101]] as const) {
+  test(`a ${label} coverage percentage cannot produce a complete receipt`, t => {
+    const root = mkdtempSync(join(tmpdir(), "deep-receipt-malformed-summary-"));
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    writeEntryFixture(root, { deadlineMs: 1200000, testConcurrency: 1 });
+    const summary = {
+      "entry.ts": {},
+      total: { statements: { pct }, branches: { pct: 100 }, functions: { pct: 100 }, lines: { pct: 100 } },
+    };
+    const runner = join(root, "invalid-summary.mjs");
+    writeFileSync(runner, `
+import { mkdirSync, writeFileSync } from "node:fs";
+mkdirSync("coverage");
+writeFileSync("coverage/coverage-summary.json", ${JSON.stringify(JSON.stringify(summary))});
+`);
+    const outcome = capturedReceipt(root, { executable: process.execPath, script: runner });
+    assert.equal(outcome.status, 1, outcome.seen);
+    assert.match(outcome.seen, /statements: invalid coverage percentage/);
+    assert.equal(outcome.receipt?.complete, false);
+    assert.equal(existsSync(join(root, "coverage")), false);
+  });
+}
 
 test("a runner that ends without a status or a signal still records an exit without a code", { timeout: 30000 }, t => {
   const vanishingRoot = mkdtempSync(join(tmpdir(), "deep-receipt-vanish-"));

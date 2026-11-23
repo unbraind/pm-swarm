@@ -68,25 +68,24 @@ actually exposes (container CPU quotas included), so one manifest value sizes
 every runner class without oversubscribing a smaller host: a 2-CPU container
 runs at most two workers, a 3-CPU Pi container at most three.
 
-Every gate outcome emits a receipt — stage timings (configure, execute,
-reconcile), the actual termination reason (exit code, signal or deadline),
-the worker count used, the gate process peak RSS and the remaining deadline
-headroom — as a `coverage-gate receipt:` line on the stream the outcome
-belongs to. A fully measured run additionally writes
+After the runner returns, the gate emits a `coverage-gate receipt:` line
+with stage timings (configure, execute, reconcile), the termination reason
+(exit code, signal or deadline), the worker count, the gate process peak RSS
+and the remaining deadline headroom. A fully measured run additionally writes
 `coverage/gate-receipt.json` next to its reports, and the deep workflow
 appends it to the step summary. A refused run invalidates every report and
 never leaves a receipt that could pass a check; the deadline itself must
 leave at least half an hour of the 120-minute deep job for every
 non-coverage stage, a contract `test/deep-budget-receipt.test.ts` enforces.
 
-The deep workflow measures queue wait separately from execution: the first
-step fetches the run's creation time from the actions API (read-only
-`actions: read`), records the runner-local start of execution, and an
-`always()` closing step appends the execution span, the container's cgroup
-`memory.peak` and the receipt to the step summary. Measurement steps are
-tolerant: they record `unknown` rather than failing the gate. Sizing
-evidence, receipts and the runner-class eligibility decision are recorded in
-issue #97 and item pm-swarm-n901.
+The deep workflow measures queue wait separately from execution. The first
+step records the runner-local start of execution before fetching the run's
+creation time from the Actions API (read-only `actions: read`, with a
+15-second transfer timeout). An `always()` closing step appends the
+execution span, the container's cgroup `memory.peak` and the receipt to
+the step summary. Missing measurements are reported as unavailable or
+unknown. Sizing evidence, receipts and the runner-class eligibility
+decision are recorded in issue #97 and item pm-swarm-n901.
 
 Measured deep-leg execute stages (full depth, time scale 3, Node 22, in
 containers capped exactly as the fleet controller admits them):

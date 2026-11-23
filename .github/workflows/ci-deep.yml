@@ -29,19 +29,20 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set +e
-          created=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/unbraind/pm-swarm/actions/runs/$GITHUB_RUN_ID" | jq -r .created_at)
           start=$(date -u +%s)
           queue_wait=unknown
-          if [ -n "$created" ] && [ "$created" != "null" ]; then
-            created_epoch=$(date -u -d "$created" +%s)
-            [ -n "$created_epoch" ] && queue_wait=$((start - created_epoch))
+          if response=$(curl -fsSL --max-time 15 -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/unbraind/pm-swarm/actions/runs/$GITHUB_RUN_ID") &&
+            created=$(printf '%s' "$response" | jq -er '.created_at | strings | select(length > 0)') &&
+            created_epoch=$(date -u -d "$created" +%s); then
+            queue_wait="$((start - created_epoch)) s"
+          else
+            created=unknown
           fi
           {
             echo "### Deep leg timing record"
-            echo "- run created: ${created:-unknown}"
-            echo "- queue wait: ${queue_wait} s (run creation until this runner started the job; execution starts now)"
+            echo "- run created: $created"
+            echo "- queue wait: $queue_wait (run creation until this runner started the job)"
           } >> "$GITHUB_STEP_SUMMARY"
           echo "EXECUTION_START_EPOCH=$start" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -76,18 +77,19 @@ jobs:
             else
               echo "- execution: unknown (no runner-local start recorded)"
             fi
-            peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null)
+            peak=$(cat /sys/fs/cgroup/memory.peak 2>/dev/null) || peak=
             if [ -n "$peak" ]; then
               echo "- container peak memory: $peak bytes (cgroup v2)"
             else
               echo "- container peak memory: unavailable (no readable cgroup v2 memory.peak)"
             fi
-            if [ -f coverage/gate-receipt.json ]; then
+            if [ -f coverage/gate-receipt.json ] &&
+              receipt=$(sed 's/^/  /' coverage/gate-receipt.json 2>/dev/null) && [ -n "$receipt" ]; then
               echo "- coverage gate receipt (complete run):"
               echo '  ```json'
-              sed 's/^/  /' coverage/gate-receipt.json
+              printf '%s\n' "$receipt"
               echo '  ```'
             else
-              echo "- coverage gate receipt: absent; a refused run leaves only the receipt line in the gate step log above"
+              echo "- coverage gate receipt: unavailable; see the gate step log for any failure receipt"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
