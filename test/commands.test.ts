@@ -10,6 +10,7 @@ import { runCommand } from '../src/commands.ts';
 import { fixture, swarmCli } from './helpers.ts';
 import { assertFixtureRepo, fixtureGit as git } from './git-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { hostSdk } from './settings-helpers.ts';
 
 test('registered host commands exercise SDK settings, flags and every command dispatcher', async t => {
   const f = await fixture(t); const ext = await createExtensionTestHarness(extension, { name: 'pm-swarm', capabilities: ['commands', 'schema', 'renderers', 'hooks'] });
@@ -21,7 +22,8 @@ test('registered host commands exercise SDK settings, flags and every command di
   assert.equal(prefs.swarm.branch_prefix, 'parallel/'); assert.equal(prefs.swarm.lane_limit, 2);
   await assert.rejects(run('settings', { root: f.root, apply: true }), /relative/);
   await assert.rejects(run('settings', { root: 'C:/private', apply: true }), /relative/);
-  await assert.rejects(run('settings', { base: ['bad'] }), /nonempty/);
+  await assert.rejects(run('settings', { base: ['bad'] }), { code: 'extension_flag_value_invalid', exitCode: 2, message: /--base/ });
+  await assert.rejects(run('settings', { base: ' ' }), { code: 'swarm_input_invalid', exitCode: 2, message: /nonempty/ });
   await assert.rejects(run('settings', { limit: 'bad' }), /integer/);
   const id = await f.item(['code.txt']); f.write('code.txt', 'base\n'); f.save(['.agents/pm', 'code.txt']);
   assert.ok(await run('plan', { parent: 'absent', limit: '1' }));
@@ -73,6 +75,23 @@ test('native host context resolves the default author and rejects unknown comman
   }, { name: 'context-adapter', capabilities: ['commands'] });
   assert.ok(await ext.runCommand({ command: 'fallback', pmRoot: f.pmRoot }));
   await assert.rejects(ext.runCommand({ command: 'unknown', pmRoot: f.pmRoot }), /Unknown swarm/);
+});
+
+test('host dispatch falls back to explicit repository and tracker workspace coordinates', async t => {
+  const f = await sharedFixture(t);
+  const id = await f.item(['src/example.ts']);
+  const repo = join(f.repo, 'git-workspace');
+  mkdirSync(repo);
+  git(repo, ['init', '-b', 'main']);
+  const sdk = await hostSdk(f.pmRoot);
+  const context: CommandHandlerContext = { command: 'swarm plan', args: [], options: {}, global: {}, pm_root: f.pmRoot, sdk };
+
+  const shared = await runCommand('plan', context);
+  assert.equal(shared.mode, 'shared-tracker');
+  assert.deepEqual(shared.suggested_start_set, [id]);
+  const worktrees = await runCommand('plan', { ...context, repo_root: repo });
+  assert.equal(worktrees.mode, undefined);
+  assert.deepEqual(worktrees.suggested_start_set, [id]);
 });
 
 test('plan hides certified read receipts by default and retains them for full and JSON output', async t => {

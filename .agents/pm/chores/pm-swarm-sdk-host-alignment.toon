@@ -1,0 +1,25 @@
+id: pm-swarm-sdk-host-alignment
+title: Adopt pm-cli 2026.11.24 host-aligned SDK behaviour
+description: Migrate the pinned PM toolchain and align registered commands with native host behaviour. Companion item pm-cli-website-spus.
+type: Chore
+status: in_progress
+priority: 2
+tags: []
+created_at: "2026-11-24T15:18:06.534Z"
+updated_at: "2026-11-24T18:52:00.750Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: Pin the current first-party SDK toolchain with refreshed lockfiles.; Prove registered host command behaviour and preserve native refusals and published dependency bullets.; Pass package release gates and record the exact checks.
+comments[1]{created_at,author,text}:
+  "2026-11-24T18:52:00.749Z","harness:claude-code","Finished by the orchestrator after the agent's provider login was revoked mid-run. Failure classes on pm-cli 2026.11.24: an array passed to the scalar --base flag is now refused by the host with extension_flag_value_invalid (the package's own nonempty check still refuses a blank value with swarm_input_invalid); host dispatch without repo_root falls back to the tracker workspace (new test for explicit repository and tracker coordinates). All four changelog entry points pass --dependency-updates, with a regression test. Agent-run gates before it stopped: npm release:check passed including all seven packed-install tests; Bun coverage 1,267/1,267 with 100% in all four dimensions. Orchestrator re-checks on the committed tree: typecheck, lint, changelog:check, the changelog-flag test."
+files[4]{path,scope}:
+  package-lock.json,project
+  package.json,project
+  test/changelog-dependencies.test.ts,project
+  test/commands.test.ts,project
+tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-concurrency=2 test/commands.test.ts test/changelog-dependencies.test.ts,project,600,codex-agent,"2026-11-24T15:27:24.787Z",local_mutation,deps/adopt-pm-cli-host-alignment-1122
+docs[1]{path,scope}:
+  CHANGELOG.md,project
+body: ""

@@ -7,6 +7,10 @@
 - Deep coverage gate exhausts its 60-minute budget on eligible local runners ([pm-swarm-n901](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-n901.toon))
 - Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
 
+### Other
+
+- Adopt pm-cli 2026.11.24 host-aligned SDK behaviour ([pm-swarm-sdk-host-alignment](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-sdk-host-alignment.toon))
+
 ## 2026.11.22 - 2026-11-22
 
 ### Dependencies
@@ -21,6 +25,19 @@
 
 - Align pinned CLI and managed extension host health versions ([pm-swarm-ci-extension-host-skew](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-ci-extension-host-skew.toon))
 
+### Dependencies
+
+- Bump eslint ([#87](https://github.com/unbraind/pm-swarm/pull/87))
+- Bump @unbrained/pm-cli ([#86](https://github.com/unbraind/pm-swarm/pull/86))
+- Bump the pm-toolchain group across 1 directory with 2 updates ([#83](https://github.com/unbraind/pm-swarm/pull/83))
+- Bump @babel/eslint-parser ([#84](https://github.com/unbraind/pm-swarm/pull/84))
+- Bump the pm-toolchain group across 1 directory with 2 updates ([#75](https://github.com/unbraind/pm-swarm/pull/75))
+- Bump unbraind/pm-github/.github/workflows/pm-github-closeout.yml ([#73](https://github.com/unbraind/pm-swarm/pull/73))
+- Bump unbraind/pm-github/.github/workflows/pm-github-sync.yml ([#72](https://github.com/unbraind/pm-swarm/pull/72))
+- Bump the codeql-action group with 2 updates ([#71](https://github.com/unbraind/pm-swarm/pull/71))
+- Bump @unbrained/pm-cli ([#69](https://github.com/unbraind/pm-swarm/pull/69))
+- Bump jscpd ([#70](https://github.com/unbraind/pm-swarm/pull/70))
+
 ## 2026.11.11 - 2026-11-11
 
 ### Fixed
@@ -33,6 +50,15 @@
 - Durable multi-item close recovery: slice shipped in \#65 ([pm-swarm-ip1q](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-ip1q.toon))
 - Durable native close compensation across dependents: slice shipped in \#65 ([pm-swarm-57p6](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/tasks/pm-swarm-57p6.toon))
 
+### Dependencies
+
+- Bump the pm-toolchain group with 3 updates ([#67](https://github.com/unbraind/pm-swarm/pull/67))
+- Bump the pm-toolchain group with 2 updates ([#66](https://github.com/unbraind/pm-swarm/pull/66))
+- Bump @unbrained/pm-cli ([#64](https://github.com/unbraind/pm-swarm/pull/64))
+- Bump unbraind/pm-github/.github/workflows/pm-github-closeout.yml ([#63](https://github.com/unbraind/pm-swarm/pull/63))
+- Bump unbraind/pm-github/.github/workflows/pm-github-sync.yml ([#62](https://github.com/unbraind/pm-swarm/pull/62))
+- Bump the pm-toolchain group with 3 updates ([#61](https://github.com/unbraind/pm-swarm/pull/61))
+
 ## 2026.11.4 - 2026-11-04
 
 ### Fixed
@@ -43,9 +69,15 @@
 
 - Migrate off parent:none SDK sentinel for pm-toolchain 2026.10.30 bump ([pm-swarm-1ii8](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-1ii8.toon))
 
+### Dependencies
+
+- Bump the pm-toolchain group across 1 directory with 3 updates ([#43](https://github.com/unbraind/pm-swarm/pull/43))
+
 ## 2026.11.3 - 2026-11-03
 
-No changes.
+### Dependencies
+
+- Bump the dependencies group with 2 updates ([#54](https://github.com/unbraind/pm-swarm/pull/54))
 
 ## 2026.11.2 - 2026-11-02
 
@@ -55,7 +87,11 @@ No changes.
 
 ## 2026.10.31 - 2026-10-31
 
-No changes.
+### Dependencies
+
+- Bump unbraind/pm-github/.github/workflows/pm-github-sync.yml ([#41](https://github.com/unbraind/pm-swarm/pull/41))
+- Bump the codeql-action group across 1 directory with 2 updates ([#40](https://github.com/unbraind/pm-swarm/pull/40))
+- Bump unbraind/pm-github/.github/workflows/pm-github-closeout.yml ([#42](https://github.com/unbraind/pm-swarm/pull/42))
 
 ## 2026.10.29 - 2026-10-29
 
@@ -67,6 +103,10 @@ No changes.
 ### Fixed
 
 - Resume fenced close with an SDK workspace transaction ([pm-swarm-atomic-close](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-atomic-close.toon))
+
+### Dependencies
+
+- Bump the pm-toolchain group with 3 updates ([#37](https://github.com/unbraind/pm-swarm/pull/37))
 
 ## 2026.10.28 - 2026-10-28
 
@@ -91,3 +131,10 @@ No changes.
 ### Other
 
 - Release readiness behind PM_RELEASE_APPROVED ([pm-swarm-release-gate](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-release-gate.toon))
+
+### Dependencies
+
+- Bump the pm-toolchain group with 3 updates ([#33](https://github.com/unbraind/pm-swarm/pull/33))
+- Bump the pm-toolchain group with 2 updates ([#26](https://github.com/unbraind/pm-swarm/pull/26))
+- Bump jscpd ([#22](https://github.com/unbraind/pm-swarm/pull/22))
+- Bump the pm-toolchain group across 1 directory with 2 updates ([#20](https://github.com/unbraind/pm-swarm/pull/20))
