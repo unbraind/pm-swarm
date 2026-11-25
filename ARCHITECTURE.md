@@ -131,10 +131,11 @@ latest observation. Both projections use observation timestamps. The current
 clock determines freshness and whether the window is still active. The policy
 defaults to the larger projection and can select either one explicitly.
 Admission counts nonterminal assigned lanes from the same local tracker while
-holding the operation lease. It reports occupied lane pools,
-recorded or measured exhaustion, and forecasts at or above the limit
-separately. Git and shared starts publish their capacity with lane metadata
-and fencing information. Preview evaluates the same policy.
+holding the operation lease. A retained claim counts again once its
+interruption expires. Admission reports occupied lane pools, recorded or
+measured exhaustion, and forecasts at or above the limit separately. Git and shared starts publish their capacity with lane metadata
+and fencing information. Attaching or resuming Git work checks any retained
+provider against the same capacity registry. Preview evaluates the same policy.
 
 A stopped lane records its claim generation and the exhausted reset time in one
 revision-guarded work-item update. That record also drives the capacity's

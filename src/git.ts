@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import { statSync } from 'node:fs';
 import { gitEnvironment } from './git-environment.ts';
 import type { Prediction } from './types.ts';
 
@@ -28,6 +29,23 @@ export function commit(repo: string, ref: string): string {
 export function branchExists(repo: string, branch: string): boolean {
   return optionalGitProbe(repo, ['show-ref', '--verify', '--quiet', `refs/heads/${branch}`]).status === 0;
 }
+/** Read registered branch checkouts, preserving paths with spaces or newlines. */
+export function registeredWorktrees(repo: string): Map<string, string> {
+  const paths = new Map<string, string>();
+  const prefix = 'branch refs/heads/';
+  for (const entry of git(repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0')) {
+    const [path, ...fields] = entry.split('\0');
+    const branch = fields.find(field => field.startsWith(prefix));
+    if (branch !== undefined) paths.set(branch.slice(prefix.length), path.slice('worktree '.length));
+  }
+  return paths;
+}
+
+/** Keep missing checkouts distinct from registered, available directories. */
+export function availableWorktree(path: string | undefined): path is string {
+  return path !== undefined && statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+}
+
 /** Read changed paths relative to the true common ancestor, preserving unusual names. */
 export function changedFiles(repo: string, base: string, branch: string): string[] {
   const ancestor = git(repo, ['merge-base', base, branch]);

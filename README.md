@@ -288,8 +288,9 @@ Replay the Codex readings of 44%, 49%, 55% and 58% at 10:15 and 18:54 UTC
 on November 24, 2026, and at 00:25 and 10:24 UTC on November 25. The
 seven-day window resets on November 27 at 22:20 UTC. The commands shift those
 timestamps together so the replay can run in a scratch tracker. For live
-observations, supply the actual reset and observation times or omit `--at`
-to record the current time.
+observations, supply ISO timestamps with `Z` or an explicit UTC offset.
+Calendar fields must describe a real local date and time. Omit `--at` to record
+the current time.
 
 ```sh
 example_time=$(node -p 'Date.now()')
@@ -348,8 +349,10 @@ priority rules.
 
 When a provider stops a worker, keep the item's claim and mark that window
 exhausted. Other workers can reclaim stale claims normally. This lane stays
-assigned until the reset or a fenced continuation transfer. Pass the item ID
-and token from the claim response.
+assigned until the reset or a fenced continuation transfer. A lane whose
+holder and token survive the reset counts toward capacity in the new window.
+Attaching or resuming a Git lane rechecks its existing capacity when the lane
+keeps that binding. Pass the item ID and token from the claim response.
 
 ```sh
 pm swarm interrupt task-id --agent worker --token 1 \
@@ -362,7 +365,9 @@ pm swarm brief task-id --agent worker-2 --token 2 --continuation --json
 The continuation records the interruption, acceptance criteria with an
 unverified status, linked files, and changes to files, synced paths, comments
 and tests in native revision order after the claim. A Git lane also includes
-commit IDs and uncommitted paths from its worktree. The recipient gets a new
+commit IDs and uncommitted paths from its worktree. Git status and live
+continuation packets report a missing registered checkout as unavailable.
+The packet still includes the branch commits. The recipient gets a new
 token. The previous window stays exhausted until its reset. A continuation
 from an interrupted lane drops the old capacity binding when no replacement
 capacity is supplied. With no `--to`, the current token holder can read the

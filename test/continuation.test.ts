@@ -7,6 +7,8 @@ import type { ContinuationPacket } from '../index.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { fixture } from './helpers.ts';
 import { join } from 'node:path';
+import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { fixtureGit as git } from './git-helpers.ts';
 import { declareService } from './privacy-mutations.ts';
 
 /** Declare and admit a capacity through the native SDK for fixture use. */
@@ -125,4 +127,34 @@ test('continuation read uses current evidence after an ordinary handoff and requ
   assert.deepEqual(packet.context.files, ['src/initial.ts']);
   declareService(f);
   await assert.rejects(receiver.readContinuation(id, handoff.token), /local tracker with native history/);
+});
+
+
+test('review missing registered Git checkout leaves continuation and status readable', async t => {
+  const f = await fixture(t);
+  await enableCapacity(new Capacities(f.swarm), 'runner');
+  const id = await f.item(['tracked.ts']);
+  const lane = await f.swarm.start(id, {}, true, 'runner');
+  f.write('tracked.ts', 'committed work\n', lane.worktree);
+  const revision = f.save(['tracked.ts'], lane.worktree);
+  const shared = new SharedTracker(f.swarm);
+  assert.equal((await f.swarm.status()).lanes[0].git_worktree_available, true);
+  const gitFile = join(lane.worktree!, '.git');
+  const link = readFileSync(gitFile);
+  try {
+    writeFileSync(gitFile, 'invalid Git registration\n');
+    await assert.rejects(shared.readContinuation(id, lane.token), /git --no-optional-locks failed/);
+  } finally { writeFileSync(gitFile, link); }
+  renameSync(lane.worktree!, join(f.root, 'offline-checkout'));
+  assert.match(git(f.repo, ['worktree', 'list', '--porcelain']), new RegExp('branch refs/heads/' + lane.branch));
+  const read = await shared.readContinuation(id, lane.token);
+  assert.equal(read.git_worktree_available, false);
+  assert.deepEqual(read.context.commits, [revision]);
+  assert.equal(read.context.uncommitted_paths, undefined);
+  const { lanes } = await f.swarm.status();
+  assert.equal(lanes[0].git_worktree_available, false);
+  assert.deepEqual(lanes[0].changed_files, ['tracked.ts']);
+  const transferred = await shared.continuation(id, 'receiver', lane.token);
+  assert.equal(transferred.git_worktree_available, false);
+  assert.deepEqual(transferred.context.commits, [revision]);
 });

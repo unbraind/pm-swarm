@@ -6,10 +6,10 @@ status: in_progress
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#99"
 created_at: "2026-11-25T08:30:21.206Z"
-updated_at: "2026-11-25T12:13:27.045Z"
+updated_at: "2026-11-25T13:30:32.521Z"
 author: codex-agent
 acceptance_criteria: "Declare and observe windowed capacities, enforce counted admission for next and start, fence interruptions across reclaim, and transfer a bounded continuation packet in Git and shared tracker modes."
-comments[18]{created_at,author,text}:
+comments[24]{created_at,author,text}:
   "2026-11-25T08:30:46.293Z",codex-agent,"Baseline reproduced in a real non-Git tracker: capacity and interrupt were missing, capacity flags on next/start and continuation on brief were rejected, and plain next admitted two workers without a quota bound. Implementing five pushed slices with native revision checks and a real process race."
   "2026-11-25T08:33:41.905Z",codex-agent,"Slice 1: capacities are native tagged items and each observation is revision-checked and appended to the item history. The read model uses the last two in-window points when both are at most 24 hours old. Revert proof: replacing the forecast with null failed the historical 56 + 8/7 forecast assertion; restored the implementation."
   "2026-11-25T09:00:52.798Z",codex-agent,"Slice 2: next and start share primary capacity admission with dry-run and report measured refusal context and the next fallback command. Two independent next processes on disjoint work produced one admitted lane and one capacity_exhausted refusal. Revert proof: ignoring occupied slots admitted both workers; the process test failed with exits 0 and 0. The weekly replay produced 57.14 percent and three admitted lanes using the supplied readings and illustrative observation times."
@@ -28,15 +28,23 @@ comments[18]{created_at,author,text}:
   "2026-11-25T11:58:46.091Z",codex-agent,Resumed at 32618fc after the packed re-test confirmed the three earlier fixes. Reproducing the whole-window forecast drift by advancing the clock without adding observations.
   "2026-11-25T12:00:53.734Z",codex-agent,"The whole-window projection now uses the elapsed share at the latest observation. Admission and status share this calculation. The recent projection already uses observation timestamps. The 44, 49, 55 and 58 percent replay holds at 90.16656 percent and two admitted lanes at 10:24, +85 minutes and +6 hours. After staleness both projections are unknown and the else policy applies. A new observation at +6 hours permits a third lane. Reverting only the divisor in a disposable copy made the +85-minute assertion fail at 88.99985 instead of 90.16656."
   "2026-11-25T12:13:25.726Z",codex-agent,"Forecast re-test passed locally. The 28 selected dependent and privacy suites passed 319 tests. The linked fixed-clock replay passed, and packed npm and Bun each passed the delayed-observation scenario with matching JSON and TOON forecasts. Build, typecheck, lint, duplication and docstrings passed."
-files[21]{path,scope}:
+  "2026-11-25T12:55:02.158Z",codex-agent,"Resumed review at e3e635e. Read all four review threads. Plan to reproduce timestamp normalization, capacity rollover counts, disappearing Git worktrees and inherited capacity admission before editing the implementation."
+  "2026-11-25T13:03:21.632Z",codex-agent,"PRRT_kwDOVLY-P8675ve7. Capacity declaration and observation share an explicit-zone calendar round-trip parser with interruption records read by continuation. Valid offsets normalize to UTC. The rejection checks cover November 31, non-leap February 29, 24:00 and malformed forms before native history changes. Restoring the permissive Date.parse path accepted the November 31 declaration and failed the rejection assertion."
+  "2026-11-25T13:03:24.124Z",codex-agent,"PRRT_kwDOVLY-P8675vfB. Capacity counting and reclaim use the same live-interruption state at the decision time. The real tracker test admits a lane, interrupts it, checks reclaim, crosses the reset, re-declares with the same owner and token, and checks admission until reclaim frees the slot. Restoring the old occupancy predicate counted zero active lanes at reset instead of one."
+  "2026-11-25T13:03:26.816Z",codex-agent,PRRT_kwDOVLY-P8675vfH. Continuation and Git status use the same registered-checkout availability check. A missing directory retains branch commits and reports the checkout unavailable. An unrelated Git error remains visible. Removing the directory check from the continuation path made the live read fail with a Git probe error for the missing working directory.
+  "2026-11-25T13:03:29.010Z",codex-agent,"PRRT_kwDOVLY-P8675vfM. Git attachment checks the retained provider against the live item snapshot before writing a claim or worktree. Retained Git bindings also pass admission on shared selection, handoff, continuation and reclaim. The same policy applies to preview and acquisition. Bypassing inherited admission on attachment let a denied provider create the lane and failed the required refusal."
+  "2026-11-25T13:30:31.379Z",codex-agent,"Review gates passed locally. The 59 selected suites passed 757 tests and the final focused branch check passed 23 tests. Both linked commands passed, with five review regressions and two packed npm and Bun cases. Build, typecheck, lint, duplication and docstrings passed. The privacy matrix rejected 27,130 unsafe inputs with zero tracker changes or partial receipts. A second PRRT_kwDOVLY-P8675vfM revert restored selection from the older corpus binding and failed to reject the peer-rebound provider, which the current fenced read refuses."
+files[23]{path,scope}:
   index.ts,project
   src/admission.ts,project
   src/assignment-brief.ts,project
+  src/capacity-time.ts,project
   src/capacity.ts,project
   src/close.ts,project
   src/commands.ts,project
   src/continuation.ts,project
   src/fair-scheduling.ts,project
+  src/git.ts,project
   src/interruption.ts,project
   src/shared-tracker.ts,project
   src/swarm.ts,project
@@ -50,7 +58,7 @@ files[21]{path,scope}:
   test/privacy-punctuation.test.ts,project
   test/privacy-refusals.test.ts,project
   test/privacy-sinks.test.ts,project
-tests[6]:
+tests[7]:
   - command: node --test --test-concurrency=2 test/capacity.test.ts
     scope: project
     provenance:
@@ -93,6 +101,14 @@ tests[6]:
     provenance:
       author: codex-agent
       created_at: "2026-11-25T12:01:01.379Z"
+      source_kind: local_mutation
+      source_ref: feat/capacity-aware-lane-admission
+  - command: node --test --test-concurrency=2 --test-name-pattern 'review (timestamp|capacity rollover|Git attachment|Git resumption|missing registered)' test/capacity-edges.test.ts test/continuation.test.ts
+    scope: project
+    timeout_seconds: 300
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-25T13:03:37.844Z"
       source_kind: local_mutation
       source_ref: feat/capacity-aware-lane-admission
 docs[4]{path,scope}:

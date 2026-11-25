@@ -3,7 +3,7 @@ import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import { assertBriefBudget, assertBriefIdentitySafe, packBrief } from './assignment-brief.ts';
 import { currentInterruption } from './interruption.ts';
 import type { CapacityInterruption } from './interruption.ts';
-import { git, commit, branchExists } from './git.ts';
+import { git, commit, branchExists, registeredWorktrees, availableWorktree } from './git.ts';
 import { SettingsRefusal, readItemHistoryHead } from './settings.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import type { Swarm } from './swarm.ts';
@@ -122,10 +122,8 @@ function gitEvidence(engine: Swarm, item: Record<string, unknown>) {
   const base = commit(repo, item.swarm_base);
   const tip = commit(repo, branch);
   const commits = git(repo, ['rev-list', '--reverse', base + '..' + tip]).split('\n').filter(Boolean);
-  const entries = git(repo, ['worktree', 'list', '--porcelain', '-z']).split('\0\0').map(entry => entry.split('\0'));
-  const checkout = entries.find(entry => entry.includes('branch ' + branch))?.[0];
-  if (checkout === undefined) return { commits, git_worktree_available: false };
-  const worktree = checkout.slice('worktree '.length);
+  const worktree = registeredWorktrees(repo).get(item.swarm_branch);
+  if (!availableWorktree(worktree)) return { commits, git_worktree_available: false };
   const dirty = git(worktree, ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames']);
   if (git(worktree, ['symbolic-ref', 'HEAD']) !== branch || commit(repo, branch) !== tip) {
     throw new SettingsRefusal('swarm_superseded', 'The lane branch advanced while preparing the continuation. Inspect its current Git evidence and retry.');

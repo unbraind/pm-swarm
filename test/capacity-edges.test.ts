@@ -122,7 +122,7 @@ test('interrupt validates portable records, writer fences and the command shape'
   for (const invalid of [
     12, 'null', JSON.stringify([{ ...valid, capacity: 'Other' }]),
     ...[{ agent: 1 }, { agent: '' }, { agent: 'ghp_' + 'A1'.repeat(18) }, { token: false }, { token: 'bad' },
-      { reason: 'other' }, { at: 'now' }, { at: false }, { resets_at: '2026-11-30' }, { at: valid.resets_at },
+      { reason: 'other' }, { at: 'now' }, { at: false }, { at: '2026-11-31T00:00:00.000Z' }, { resets_at: '2026-11-30' }, { at: valid.resets_at },
       { forecast: -1 }, { used: '4' }].map(patch => JSON.stringify([{ ...valid, ...patch }])),
   ]) assert.throws(() => interruptions({ [INTERRUPTION_FIELD]: invalid }), /Inspect the native interruption history/);
   assert.deepEqual(interruptions({ [INTERRUPTION_FIELD]: JSON.stringify([{ ...valid, used: 3, forecast: 9 }]) }), [{ ...valid, used: 3, forecast: 9 }]);
@@ -285,4 +285,166 @@ test('empty evidence and native capacity records preserve their separate command
   const claim = await f.shared.start(task);
   const packet = await f.shared.continuation(task, 'receiver', claim.token);
   assert.equal(packet.context.activity, undefined);
+});
+
+
+test('review timestamp inputs reject impossible local dates before writing native history', async t => {
+  const f = await sharedFixture(t);
+  const now = Date.parse('2026-11-25T12:00:00Z');
+  const capacities = new Capacities(f.shared.engine, () => now);
+  const declaration = { action: 'declare', limit: 100, unit: 'percent', window: '7d' };
+  await assert.rejects(capacities.run('runner', { ...declaration, resetsAt: '2026-11-31T00:00:00Z' }), /ISO timestamp/);
+  await assert.rejects(capacities.run('runner'), /capacity_undeclared/);
+  const view = await capacities.run('runner', { ...declaration, resetsAt: '2026-12-01T01:00:00+01:00' });
+  assert.equal(view.resets_at, '2026-12-01T00:00:00.000Z');
+  const record = (await f.shared.engine.corpus()).items.find(item => item.tags.includes('swarm-capacity'))!;
+  const getHistory = () => readHistoryEntries(getHistoryPath(f.pmRoot, record.id), record.id);
+  const before = await getHistory();
+  const observation = { action: 'observe', used: 50, source: 'manual' };
+  await assert.rejects(capacities.run('runner', { ...observation, at: '2026-11-24T24:00:00Z' }), /ISO timestamp/);
+  assert.deepEqual(await getHistory(), before);
+  assert.equal((await capacities.run('runner', { ...observation, at: '2026-11-25T09:30:00.12-01:00' })).observations[0].at,
+    '2026-11-25T10:30:00.120Z');
+  for (const invalid of [
+    '2025-02-29T00:00:00Z', '2026-04-31T00:00:00+01:00', '2026-11-25T10:00:60Z',
+    '2026-11-25T10:00:00+24:00', '2026-11-25T10:00:00', '2026-11-25t10:00:00z',
+    '2026-11-25T10:00:00.0000Z', '2026-11-25T10:00:00Z\n', '0000-01-01T00:00:00+01:00',
+  ]) {
+    assert.throws(() => capacityAction({ ...observation, at: invalid }, now), /ISO timestamp/);
+    assert.throws(() => capacityAction({ ...declaration, resetsAt: invalid }, now), /ISO timestamp/);
+  }
+  assert.deepEqual(capacityAction({ ...observation, at: '2000-02-29T01:00:00+01:00' }, now), {
+    action: 'observe', observation: { used: 50, source: 'manual', at: '2000-02-29T00:00:00.000Z' },
+  });
+});
+
+test('review capacity rollover counts the retained lane again when its interruption expires', async t => {
+  const f = await sharedFixture(t);
+  const capacities = new Capacities(f.shared.engine, () => Date.now());
+  const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
+  const declaration = { action: 'declare', limit: 100, unit: 'percent', window: '7d', resetsAt };
+  await capacities.run('runner', declaration);
+  await capacities.run('runner', { action: 'policy', else: 1 });
+  const held = await f.item(['src/held.ts']);
+  const waiting = await f.item(['src/waiting.ts']);
+  const { token } = await f.shared.start(held, {}, true, 'runner');
+  const rescuer = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'rescuer'));
+  const counts = async () => {
+    const { active_lanes, available_lanes, reported_exhausted } = await capacities.run('runner');
+    return [active_lanes, available_lanes, reported_exhausted];
+  };
+  assert.deepEqual(await counts(), [1, 0, false]);
+  await assert.rejects(rescuer.start(waiting, {}, true, 'runner'), /capacity_lanes_occupied/);
+  await interruptLane(f.shared.engine, held, token, 'runner', 'capacity_exhausted');
+  assert.deepEqual(await counts(), [0, 0, true]);
+  await assert.rejects(rescuer.start(waiting, {}, true, 'runner'), /capacity_exhausted/);
+
+  let now = Date.parse(resetsAt) - 1_000;
+  const clock = t.mock.method(Date, 'now', () => now);
+  try {
+    const blocked = await rescuer.reclaim(1, undefined, true);
+    assert.equal(blocked.refused.find(row => row.id === held)?.code, 'capacity_exhausted');
+    now = Date.parse(resetsAt);
+    assert.deepEqual(await counts(), [1, 0, false]);
+    await capacities.run('runner', { ...declaration, resetsAt: new Date(now + 3_600_000).toISOString() });
+    assert.deepEqual(await counts(), [1, 0, false]);
+    const { item } = await f.client.get(held, { depth: 'full' });
+    assert.equal(item.assignee, f.shared.engine.author);
+    assert.equal(item.swarm_token, token);
+    await assert.rejects(rescuer.start(waiting, {}, true, 'runner'), /capacity_lanes_occupied/);
+    assert.equal((await rescuer.reclaim(1, undefined, true)).recovered[0]?.id, held);
+    assert.deepEqual(await counts(), [1, 0, false]);
+    assert.equal((await rescuer.reclaim(1)).recovered[0]?.id, held);
+    assert.deepEqual(await counts(), [0, 1, false]);
+    await rescuer.start(waiting, {}, true, 'runner');
+    assert.deepEqual(await counts(), [1, 0, false]);
+  } finally { clock.mock.restore(); }
+});
+
+test('review Git attachment rechecks the bound provider before writing a lane or claim', async t => {
+  const f = await fixture(t);
+  const capacities = new Capacities(f.swarm);
+  await enable(capacities, 'runner');
+  const id = await f.item(['src/owned.ts']);
+  const shared = new SharedTracker(f.swarm);
+  const claim = await shared.start(id, {}, true, 'runner');
+  const before = await readItemHistoryHead(f.pmRoot, id);
+  const worktrees = git(f.repo, ['worktree', 'list', '--porcelain']);
+  await capacities.run('runner', { action: 'policy', else: 0 });
+  await assert.rejects(f.swarm.start(id), /capacity_policy_denied/);
+  assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), before);
+  assert.equal(git(f.repo, ['worktree', 'list', '--porcelain']), worktrees);
+  const { item } = await f.client.get(id, { depth: 'full' });
+  assert.equal(item.swarm_token, claim.token);
+  assert.equal(item.swarm_branch, undefined);
+  await capacities.run('runner', { action: 'policy', else: 1 });
+  const attached = await f.swarm.start(id);
+  assert.equal(attached.capacity, 'runner');
+  assert.equal(attached.token, '2');
+  assert.equal((await capacities.run('runner')).active_lanes, 1);
+});
+
+
+test('review Git resumption reuses admission across transfer, reclaim and shared selection', async t => {
+  const f = await fixture(t);
+  const capacities = new Capacities(f.swarm);
+  await enable(capacities, 'runner');
+  const id = await f.item(['src/resume.ts']);
+  const { token } = await f.swarm.start(id, {}, true, 'runner');
+  const sender = new SharedTracker(f.swarm);
+  const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+  /** Close admission and assert preview and acquisition make the same decision. */
+  const refuseSelection = async () => {
+    await capacities.run('runner', { action: 'policy', else: 0 });
+    for (const preview of [true, false]) await assert.rejects(receiver.next(undefined, preview), /capacity_policy_denied/);
+  };
+  const before = await readItemHistoryHead(f.pmRoot, id);
+  await capacities.run('runner', { action: 'policy', else: 0 });
+  await assert.rejects(sender.handoff(id, 'receiver', 'Public checkpoint', token), /capacity_policy_denied/);
+  await assert.rejects(sender.continuation(id, 'receiver', token), /capacity_policy_denied/);
+  assert.equal((await sender.readContinuation(id, token)).capacity, 'runner');
+
+  const later = Date.now() + 60_000;
+  const clock = t.mock.method(Date, 'now', () => later);
+  try {
+    for (const dryRun of [true, false]) {
+      const reclaim = await receiver.reclaim(1, 'receiver', dryRun);
+      assert.equal(reclaim.recovered.length, 0);
+      assert.equal(reclaim.refused.find(row => row.id === id)?.code, 'capacity_policy_denied');
+    }
+  } finally { clock.mock.restore(); }
+  assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), before);
+
+  await capacities.run('runner', { action: 'policy', else: 1 });
+  const handoff = await sender.handoff(id, 'receiver', 'Public checkpoint', token);
+  const received = await readItemHistoryHead(f.pmRoot, id);
+  await refuseSelection();
+  assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), received);
+  await capacities.run('runner', { action: 'policy', else: 1 });
+  const resumed = await receiver.next();
+  assert.equal(resumed.capacity, 'runner');
+  assert.equal(resumed.token, handoff.token);
+
+  await enable(capacities, 'spare');
+  await capacities.run('spare', { action: 'policy', else: 0 });
+  const readyCandidates = receiver.engine.readyCandidates.bind(receiver.engine);
+  const peerRebind = t.mock.method(receiver.engine, 'readyCandidates', async (...args: Parameters<Swarm['readyCandidates']>) => {
+    const candidates = await readyCandidates(...args);
+    await f.client.update(id, { author: 'receiver', field: ['swarm_capacity=spare'] });
+    return candidates;
+  });
+  try {
+    await assert.rejects(receiver.next(), /capacity_policy_denied.*Capacity spare/);
+  } finally { peerRebind.mock.restore(); }
+  const peerItem = (await f.client.get(id, { depth: 'full' })).item;
+  assert.equal(peerItem.swarm_capacity, 'spare');
+  assert.equal(peerItem.swarm_token, handoff.token);
+  await f.client.update(id, { author: 'receiver', field: ['swarm_capacity=runner'] });
+
+  await f.client.release(id, { author: 'receiver' });
+  await refuseSelection();
+  await assert.rejects(receiver.start(id), /capacity_policy_denied/);
+  await capacities.run('runner', { action: 'policy', else: 1 });
+  assert.equal((await receiver.next(undefined, true)).capacity, 'runner');
+  assert.equal((await receiver.next()).capacity, 'runner');
 });

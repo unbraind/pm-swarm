@@ -1,3 +1,4 @@
+import { capacityInstant } from './capacity-time.ts';
 import { resolveRuntimeStatusRegistry, readSettings, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { Capacities, capacityDiagnosis, capacityName, CapacityRefusal, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { assertCloseIntentSettled } from './close.ts';
@@ -23,7 +24,7 @@ export interface CapacityInterruption {
 
 /** Check the canonical ISO timestamps used to compare window identities. */
 function isIsoInstant(value: unknown): value is string {
-  return typeof value === 'string' && Number.isFinite(Date.parse(value)) && new Date(value).toISOString() === value;
+  return typeof value === 'string' && capacityInstant(value) === value;
 }
 
 /** Parse and project the native record without returning foreign fields. */
@@ -55,10 +56,20 @@ export function currentInterruption(item: Record<string, unknown>) {
   return interruptions(item).filter(stop => stop.token === item.swarm_token && stop.agent === item.assignee).at(-1);
 }
 
+/** Project the binding and the live stop of the same ownership generation at one instant. */
+export function laneCapacityState(item: Record<string, unknown>, now: number) {
+  const stop = currentInterruption(item);
+  const interruption = stop !== undefined && Date.parse(stop.resets_at) > now ? stop : undefined;
+  const binding = item[LANE_CAPACITY_FIELD];
+  const capacity = interruption === undefined && typeof binding === 'string' && typeof item.assignee === 'string' && item.assignee.trim()
+    ? binding : undefined;
+  return { capacity, interruption };
+}
+
 /** Report exactly why a stopped ownership generation cannot be taken from the pool. */
 export function interruptionRefusal(item: Record<string, unknown>, now = Date.now()): CapacityRefusal | undefined {
-  const stop = currentInterruption(item);
-  if (stop === undefined || Date.parse(stop.resets_at) <= now) return undefined;
+  const { interruption: stop } = laneCapacityState(item, now);
+  if (stop === undefined) return undefined;
   const next = 'pm swarm capacity ' + stop.capacity;
   const message = 'Capacity ' + stop.capacity + ' used ' + (stop.used ?? 'unknown') + ', forecast ' + (stop.forecast ?? 'unknown') +
     ', resets at ' + stop.resets_at + '. Take a continuation or run ' + next + '.';

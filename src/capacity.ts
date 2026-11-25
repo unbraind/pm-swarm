@@ -1,6 +1,7 @@
+import { capacityInstant } from './capacity-time.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import type { FairPolicy } from './fair-scheduling.ts';
-import { currentInterruption, interruptions } from './interruption.ts';
+import { laneCapacityState, interruptions } from './interruption.ts';
 import { normalizeItemId, readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { clientMutationSnapshot, inspectItems } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
@@ -96,9 +97,9 @@ function windowLength(value: unknown): number {
 
 /** Require an ISO timestamp with an explicit time zone. */
 function instant(value: unknown, flag: string): string {
-  const time = typeof value === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(?:\.\d{1,3})?(?:Z|[+-]\d\d:\d\d)$/.test(value) ? Date.parse(value) : NaN;
-  if (!Number.isFinite(time)) throw new CapacityRefusal('capacity_invalid', `Supply an ISO timestamp with a time zone for ${flag}.`);
-  return new Date(time).toISOString();
+  const timestamp = capacityInstant(value);
+  if (timestamp === undefined) throw new CapacityRefusal('capacity_invalid', `Supply an ISO timestamp with a time zone for ${flag}.`);
+  return timestamp;
 }
 
 /** Parse a policy bound and an integer simultaneous lane count. */
@@ -131,6 +132,11 @@ export function capacityOrder(value: string | undefined): string[] {
   const names = value.split(',').map(capacityName);
   if (names.length > 16 || new Set(names).size !== names.length) throw new CapacityRefusal('capacity_invalid', 'Supply up to 16 distinct comma-separated capacity names.');
   return names;
+}
+
+/** Inherit the one stored provider when the caller supplies no explicit capacity order. */
+export function capacityOrderFor(requested: string[], binding: unknown): string[] {
+  return requested.length === 0 && typeof binding === 'string' ? [capacityName(binding)] : requested;
 }
 
 /** Capacity operations accept only their own input fields and the operator identity. */
@@ -264,14 +270,15 @@ function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegi
 }
 
 /** Count active ownership only, including across Git and shared lane modes. */
-function occupancy(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, except?: string): number {
-  return items.filter(item => item.id !== except && item[LANE_CAPACITY_FIELD] === name && typeof item.assignee === 'string' && item.assignee.trim() && !statusIsTerminal(String(item.status), statuses) && currentInterruption(item) === undefined).length;
+function occupancy(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, now: number, except?: string): number {
+  return items.filter(item => item.id !== except && item[LANE_CAPACITY_FIELD] === name &&
+    !statusIsTerminal(String(item.status), statuses) && laneCapacityState(item, now).capacity === name).length;
 }
 
 /** Project both occupation and provider exhaustion from the same native registry snapshot. */
 function registryView(state: CapacityWindow, now: number, items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, except?: string) {
   const stopped = items.some(item => interruptions(item).some(stop => stop.capacity === state.name && stop.resets_at === state.resets_at && Date.parse(stop.resets_at) > now));
-  return capacityView(state, now, occupancy(items, statuses, state.name, except), stopped);
+  return capacityView(state, now, occupancy(items, statuses, state.name, now, except), stopped);
 }
 
 /** Safely quote a value for the POSIX retry command. */
@@ -308,7 +315,7 @@ export function capacityDiagnosis(view: CapacityStatus) {
 }
 
 /** Evaluate the primary capacity under the caller's operation lease for writes. */
-export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief', retryFlags: string[]): Promise<CapacityStatus | undefined> {
+export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief' | 'handoff', retryFlags: string[]): Promise<CapacityStatus | undefined> {
   const [name, ...fallback] = order;
   if (name === undefined) return undefined;
   const { items, statuses, prefix } = await registry(engine);
