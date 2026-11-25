@@ -86,7 +86,9 @@ test('handoff reception binds capacity once, with a write-free preview and a fen
   const initial = await f.shared.start(id);
   const handoff = await f.shared.handoff(id, 'receiver', 'Continue here', initial.token);
   const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+  const beforePreview = await readItemHistoryHead(f.pmRoot, id);
   assert.equal((await receiver.next(undefined, true, undefined, 'runner')).capacity, 'runner');
+  assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), beforePreview);
   assert.equal((await capacities.run('runner')).active_lanes, 0);
   assert.equal((await receiver.next(undefined, false, undefined, 'runner')).token, handoff.token);
   assert.equal((await capacities.run('runner')).active_lanes, 1);

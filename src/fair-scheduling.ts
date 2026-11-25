@@ -174,11 +174,12 @@ export class FairPolicy {
 /** Bind fair ranking to either existing next engine, never a separate ownership path. */
 export async function scheduleNext(engine: { author: string; repo: string; pmRoot: string }, options: ScheduleOptions, invoke: (policy: FairPolicy, capacity?: string) => Promise<NextReceipt>): Promise<ScheduleReceipt> {
   assertPrivatePathSafe({ author: engine.author, options });
+  const capacity = options.capacity;
   const policy = new FairPolicy(engine.author, options);
   policy.receipt({ selected: null, reason: '', warnings: [] }, options.dryRun === true);
   const discovered = await discoverExtensions({ pmRoot: engine.pmRoot, cwd: engine.repo, settings: await readSettings(engine.pmRoot) });
   if (!discovered.effective.every(extension => extension.capabilities !== undefined && extension.capabilities.length > 0 && !extension.capabilities.includes('services'))) {
     throw new SchedulingRefusal('schedule_backend_refused', 'Use a local tracker with shared swarm coordination; service-backed storage needs a tracker-wide scheduler adapter. No local fallback was attempted.');
   }
-  return policy.receipt(await invoke(policy, options.capacity), options.dryRun === true, engine.repo);
+  return policy.receipt(await invoke(policy, capacity), options.dryRun === true, engine.repo);
 }

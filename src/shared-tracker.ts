@@ -156,10 +156,10 @@ export class SharedTracker {
         const { receipt, binding } = incoming;
         /** Use the selected binding in preview and the checked native binding when resuming. */
         const admit = (stored: unknown) => admitNextCapacity(this.engine, order, receipt.id, parent, dryRun, policy, stored);
-        const admission = lease === undefined
-          ? await admit(binding) : await this.resumeIncoming(receipt.id, receipt.token, lease, admit);
-        if (lease !== undefined) this.tokens.set(receipt.id, receipt.token);
-        return { ...receipt, ...(admission === undefined ? {} : { capacity: admission.capacity }) };
+        const checked = lease === undefined
+          ? { receipt, admission: await admit(binding) } : await this.resumeIncoming(receipt.id, receipt.token, lease, admit);
+        if (lease !== undefined) this.tokens.set(checked.receipt.id, checked.receipt.token);
+        return { ...checked.receipt, ...(checked.admission === undefined ? {} : { capacity: checked.admission.capacity }) };
       }
       const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
       const { chosen, unknown, warnings, skipped, reason } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
@@ -184,11 +184,15 @@ export class SharedTracker {
   /** Recheck the provider under the incoming fence and publish an explicit rebind if needed. */
   private async resumeIncoming(id: string, token: string, lease: Lease, admit: (stored: unknown) => Promise<CapacityStatus | undefined>) {
     const { item, historyHead } = await this.fence(id, token);
+    const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
+    if (statusIsTerminal(String(item.status), statuses)) throw new SettingsRefusal('swarm_superseded', 'The handoff became terminal. Refresh ready work before resuming.');
+    assertCloseIntentSettled(this.engine, item);
     const stopped = interruptionRefusal(item);
     if (stopped !== undefined) throw stopped;
+    const receipt = this.handoffReceipt(item, false);
     const admission = await admit(item[LANE_CAPACITY_FIELD]);
     await this.updateCapacity(item, historyHead, lease, admission?.capacity);
-    return admission;
+    return { receipt, admission };
   }
 
   /** Update only a changed binding under the original ownership and native revision. */
@@ -213,10 +217,16 @@ export class SharedTracker {
     });
     if (incoming === undefined) return { stop };
     policy?.handoff(incoming);
-    const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
-    const receipt = { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
+    return { incoming: { receipt: this.handoffReceipt(incoming, dryRun), binding: incoming[LANE_CAPACITY_FIELD] }, stop };
+  }
+
+  /** Admit receiver context from one complete item before accepting its token. */
+  private handoffReceipt(item: Record<string, unknown>, dryRun: boolean) {
+    const id = String(item.id);
+    const context = parseHandoffContext(id, String(item.swarm_handoff), item.swarm_token);
+    const receipt = { mode: 'shared-tracker', selected: id, id, agent: this.engine.author, token: String(item.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
     assertPrivatePathSafe(receipt);
-    return { incoming: { receipt, binding: incoming[LANE_CAPACITY_FIELD] }, stop };
+    return receipt;
   }
 
   /** Report ownership, claim age and declared overlaps without inventing Git measurements. */
@@ -464,17 +474,16 @@ export class SharedTracker {
         if (recovery === undefined) continue;
         const { item, historyHead } = recovery;
         if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
-        const stopped = interruptionRefusal(item);
-        if (stopped !== undefined) {
-          refused.push({ ...stopped.details, id: row.id, code: stopped.code, reason: stopped.remedy });
-          continue;
+        try {
+          const stopped = interruptionRefusal(item);
+          if (stopped !== undefined) throw stopped;
+          const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
+          if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
+          const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
+          if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
+          const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
+          recovered.push(await this.transfer(item, to, note, lease, historyHead, 'reclaim'));
         }
-        const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
-        if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
-        const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
-        if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
-        const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        try { recovered.push(await this.transfer(item, to, note, lease, historyHead, 'reclaim')); }
         catch (error) {
           if (error instanceof CapacityRefusal) {
             refused.push({ ...error.details, id: row.id, code: error.code, reason: error.remedy });

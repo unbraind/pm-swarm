@@ -139,6 +139,27 @@ test('weekly replay selects the conservative forecast and respects forecast poli
   assert.equal(updated.admitted_lane_count, 3);
 });
 
+/** Observe termination at launch and surface its diagnostic while polling a race marker. */
+function monitorCapacityWorker(result: ReturnType<typeof runProcess>, agent: string) {
+  let failure: { error: unknown } | undefined;
+  void result.then(({ code, signal, stderr, stdout }) => {
+    failure = { error: new Error(`${agent} exited before its admission marker (code ${code}, signal ${signal}): ${stderr || stdout}`) };
+  }, error => { failure = { error }; });
+  return {
+    result,
+    check() { if (failure !== undefined) throw failure.error; },
+  };
+}
+
+test('capacity race marker waits report spawn failures and early exit output', async t => {
+  const f = await sharedFixture(t);
+  const missing = monitorCapacityWorker(runProcess(join(f.repo, 'missing-race-worker'), [], f.repo, f.env, 1000), 'worker-a');
+  await assert.rejects(waitForCapacityRace(() => { missing.check(); return false; }, 'missing first marker'), { code: 'ENOENT' });
+  const early = monitorCapacityWorker(runProcess(process.execPath,
+    ['-e', "process.stderr.write('early worker output'); process.exit(23)"], f.repo, f.env, 1000), 'worker-b');
+  await assert.rejects(waitForCapacityRace(() => { early.check(); return false; }, 'missing second marker'), /worker-b.*code 23.*early worker output/);
+});
+
 test('one last capacity slot admits exactly one of two independent next processes', async t => {
   const f = await sharedFixture(t);
   const reset = declare(f, 'codex', 1);
@@ -158,22 +179,27 @@ test('one last capacity slot admits exactly one of two independent next processe
   const runtime = join(f.pmRoot, 'runtime/swarm');
   const paused = join(f.pmRoot, 'admission-paused');
   const release = join(f.pmRoot, 'admission-release');
-  const launch = (agent: string, parent: string) => runProcess(process.execPath,
-    [f.host, 'swarm', 'next', '--agent', agent, '--parent', parent, '--capacity', 'codex,ollama', '--json'], f.repo, f.env);
+  const launch = (agent: string, parent: string) => monitorCapacityWorker(runProcess(process.execPath,
+    [f.host, 'swarm', 'next', '--agent', agent, '--parent', parent, '--capacity', 'codex,ollama', '--json'], f.repo, f.env), agent);
   const first = launch('worker-a', parents[0]);
   let second: ReturnType<typeof launch> | undefined;
   try {
-    await waitForCapacityRace(() => existsSync(paused), 'First claim never paused after admission');
+    await waitForCapacityRace(() => { first.check(); return existsSync(paused); }, 'First claim never paused after admission');
     assert.ok(existsSync(join(runtime, 'operation-pin.json')));
     assert.ok(!readdirSync(runtime).some(name => name.startsWith('request-')));
-    second = launch('worker-b', parents[1]);
-    await waitForCapacityRace(() => readdirSync(runtime).some(name => name.startsWith('request-')), 'Second claim never queued while first held admission');
+    const challenger = launch('worker-b', parents[1]);
+    second = challenger;
+    await waitForCapacityRace(() => {
+      first.check();
+      challenger.check();
+      return readdirSync(runtime).some(name => name.startsWith('request-'));
+    }, 'Second claim never queued while first held admission');
     for (const id of ids) assert.equal((await f.client.get(id)).item.assignee, undefined);
   } finally {
     writeFileSync(release, '');
-    await Promise.allSettled([first, second]);
+    await Promise.allSettled([first.result, second?.result]);
   }
-  const workers = await Promise.all([first, second!]);
+  const workers = await Promise.all([first.result, second!.result]);
   assert.deepEqual(workers.map(result => result.code).sort(), [0, 2], JSON.stringify(workers));
   const won = JSON.parse(workers.find(result => result.code === 0)!.stdout) as Record<string, unknown>;
   const losing = workers.find(result => result.code === 2)!;

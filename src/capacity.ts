@@ -216,7 +216,7 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number, 
   const forecast = forecast_recent === null ? null : state.policy.forecast === 'recent' ? forecast_recent :
     state.policy.forecast === 'window' ? forecast_window : Math.max(forecast_recent, forecast_window!);
   const band = forecast === null ? undefined : state.policy.bands.map(policyBand).find(([threshold]) => forecast < threshold);
-  const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && latest.used >= state.limit;
+  const exhausted = reported_exhausted || now < start || now >= reset || latest !== undefined && !latest.stale && latest.used >= state.limit;
   const forecast_exceeded = forecast !== null && forecast >= state.limit;
   const admitted_lane_count = exhausted || forecast_exceeded ? 0 : band?.[1] ?? state.policy.otherwise;
   return {

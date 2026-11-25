@@ -98,7 +98,7 @@ export class Swarm {
 
   /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
   async schedule(options: ScheduleOptions): Promise<ScheduleReceipt> {
-    return scheduleNext(this, options, policy => this.next(options.parent, options.dryRun === true, policy, options.capacity));
+    return scheduleNext(this, options, this.next.bind(this, options.parent, options.dryRun === true));
   }
 
   /** Pick and publish under one lease; previews take no lease and perform no mutations. */
