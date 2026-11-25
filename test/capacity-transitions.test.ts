@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { mutateItem, readSettings } from '@unbrained/pm-cli/sdk';
 import { Capacities, CapacityRefusal, interruptLane, SharedTracker, Swarm } from '../index.ts';
 import { CAPACITY_TAG, LANE_CAPACITY_FIELD } from '../src/capacity.ts';
@@ -55,9 +55,15 @@ function expectedRefusal(action: Transition, binding: Binding) {
 }
 
 /** Declare an independent capacity for a targeted transition row. */
-async function declareCapacity(capacity: Capacities, name: string, resetsAt: string, lanes = 1) {
-  await capacity.run(name, { action: 'declare', limit: 100, unit: 'percent', window: '7d', resetsAt });
+async function declareCapacity(capacity: Capacities, name: string, resetsAt: string, lanes = 1, window = '7d') {
+  await capacity.run(name, { action: 'declare', limit: 100, unit: 'percent', window, resetsAt });
   await capacity.run(name, { action: 'policy', else: lanes });
+}
+
+/** Set the capacity decision clock for one isolated matrix row. */
+function mockCapacityClock(cell: TestContext, now: () => number) {
+  const clock = cell.mock.method(Date, 'now', now);
+  cell.after(() => clock.mock.restore());
 }
 
 test('capacity transitions keep every field coherent', async t => {
@@ -70,8 +76,7 @@ test('capacity transitions keep every field coherent', async t => {
       const fresh = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'fresh-worker'));
       let now = Date.now();
       const reset = now + 3_600_000;
-      const clock = cell.mock.method(Date, 'now', () => now);
-      cell.after(() => clock.mock.restore());
+      mockCapacityClock(cell, () => now);
       const capacity = new Capacities(engine);
       /** Keep a full one-lane pool meaningful for the fresh-worker check below. */
       const declare = (name: string, at: number) => capacity.run(name, {
@@ -147,8 +152,10 @@ test('capacity transitions keep every field coherent', async t => {
         assert.equal(continuation.capacity, expected ?? null);
       }
 
-      const freshId = await f.item(['src/fresh.ts']);
       for (const name of ['runner', 'spare']) {
+        const freshId = await f.item([`src/fresh-${name}.ts`]);
+        const unassigned = (await f.client.get(freshId)).item;
+        assert.equal(unassigned.assignee, undefined);
         if (name === 'runner' && action === 'native terminal edit') {
           await assert.rejects(capacity.run(name), { code: 'capacity_undeclared' });
           await assert.rejects(fresh.start(freshId, {}, true, name), { code: 'capacity_undeclared' });
@@ -206,8 +213,7 @@ test('capacity transitions keep every field coherent', async t => {
     const start = Date.parse('2026-11-25T11:30:00Z');
     const reset = start + 3_600_000;
     let now = start + 1_800_000;
-    const clock = cell.mock.method(Date, 'now', () => now);
-    cell.after(() => clock.mock.restore());
+    mockCapacityClock(cell, () => now);
     const capacity = new Capacities(f.shared.engine);
     await capacity.run('runner', { action: 'declare', limit: 100, unit: 'percent', window: '1h', resetsAt: new Date(reset).toISOString() });
     await capacity.run('runner', { action: 'policy', else: 1 });
@@ -224,6 +230,63 @@ test('capacity transitions keep every field coherent', async t => {
     assert.equal((await capacity.run('runner')).admitted_lane_count, 0);
     await assert.rejects(f.shared.start(await f.item(), {}, true, 'runner'), { code: 'capacity_exhausted' });
   });
+
+  for (const legacy of [false, true]) {
+    const row = legacy ? 'capacity / pre-window legacy stop preserves the fence without exhausting the window'
+      : 'interrupt / clock before window start';
+    await t.test(row, async cell => {
+      const f = await sharedFixture(cell);
+      const sampled = Date.now();
+      const start = sampled + (legacy ? -1_800_000 : 1_800_000);
+      const resetsAt = new Date(start + 3_600_000).toISOString();
+      let now = start + 1;
+      mockCapacityClock(cell, () => now);
+      const capacity = new Capacities(f.shared.engine);
+      await declareCapacity(capacity, 'runner', resetsAt, 1, '1h');
+      const id = await f.item(['src/window-stop.ts']);
+      const { token } = await f.shared.start(id, {}, true, 'runner');
+      const interrupt = () => interruptLane(f.shared.engine, id, token, 'runner', 'capacity_exhausted');
+      if (legacy) {
+        now = sampled;
+        const stop = { capacity: 'runner', agent: f.shared.engine.author, token, reason: 'capacity_exhausted',
+          at: new Date(start - 1).toISOString(), resets_at: resetsAt, used: null, forecast: null };
+        await f.client.update(id, { field: ['swarm_interruptions=' + JSON.stringify([stop])] });
+        const head = await readItemHistoryHead(f.pmRoot, id);
+        const view = await capacity.run('runner');
+        assert.equal(view.reported_exhausted, false);
+        assert.equal(view.available_lanes, 1);
+        await assert.rejects(f.shared.start(id), { code: 'capacity_exhausted' });
+        assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), head);
+        assert.ok((await interrupt()).interruption.at >= view.starts_at);
+        assert.equal((await capacity.run('runner')).reported_exhausted, true);
+        assert.equal((await readItemHistoryHead(f.pmRoot, id)).length, head.length + 1);
+      } else {
+        const head = await readItemHistoryHead(f.pmRoot, id);
+        now = start - 1;
+        await assert.rejects(interrupt, { code: 'capacity_invalid' });
+        assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), head);
+        now = start;
+        assert.equal((await capacity.run('runner')).reported_exhausted, false);
+      }
+    });
+  }
+
+  for (const tag of [CAPACITY_TAG, 'swarm-resource']) {
+    await t.test('next / filters incoming ' + tag + ' records in both modes', async cell => {
+      const f = await sharedFixture(cell);
+      const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+      const record = await f.item([], 1);
+      await f.client.update(record, { assignee: 'receiver', addTags: [tag],
+        field: ['swarm_token=1', 'swarm_handoff=' + JSON.stringify({ token: '1', note: 'Control record' })] });
+      const ready = await f.item(['src/ready.ts']);
+      assert.equal((await receiver.next(undefined, true)).selected, ready);
+      await f.client.update(record, { author: 'receiver', field: ['swarm_handoff={'] });
+      const head = await readItemHistoryHead(f.pmRoot, record);
+      assert.equal((await receiver.next(undefined, true)).selected, ready);
+      assert.equal((await receiver.next()).selected, ready);
+      assert.deepEqual(await readItemHistoryHead(f.pmRoot, record), head);
+    });
+  }
 
   for (const change of ['context', 'terminal status'] as const) {
     await t.test('next / native ' + change + ' change before the handoff fence', async cell => {
@@ -274,8 +337,7 @@ test('capacity transitions keep every field coherent', async t => {
     const corrupt = await readItemHistoryHead(f.pmRoot, broken);
     const healthy = await readItemHistoryHead(f.pmRoot, first);
     const later = Date.now() + 60_000;
-    const clock = cell.mock.method(Date, 'now', () => later);
-    cell.after(() => clock.mock.restore());
+    mockCapacityClock(cell, () => later);
     for (const dryRun of [true, false]) {
       const result = await rescuer.reclaim(0.001, undefined, dryRun);
       assert.deepEqual(result.recovered.map(row => row.id).sort(), [first, last].sort());

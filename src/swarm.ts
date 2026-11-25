@@ -326,7 +326,7 @@ export class Swarm {
       const tip = commit(this.repo, lane.target); const changed = changedFiles(this.repo, tip, lane.sha);
       const [behind, ahead] = git(this.repo, ['rev-list', '--left-right', '--count', `${tip}...${lane.sha}`]).split(/\s+/).map(Number);
       predictions.push({ ...predict(this.repo, lane.sha, tip), left_id: lane.id, left_branch: lane.branch, right_id: 'base', right_branch: lane.target });
-      return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, git_worktree_available: availableWorktree(checkouts.get(lane.branch)), changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
+      return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, git_worktree_available: availableWorktree(this.repo, lane.branch, checkouts.get(lane.branch)), changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
     });
     for (const [i, left] of lanes.entries()) for (const right of lanes.slice(i + 1)) predictions.push({ ...predict(this.repo, left.sha, right.sha), left_id: left.id, left_branch: left.branch, right_id: right.id, right_branch: right.branch });
     const clean_pairs = predictions.filter(row => row.clean).length;

@@ -81,7 +81,7 @@ export function laneCapacityState(item: Record<string, unknown>, now: number) {
 export function interruptionRefusal(item: Record<string, unknown>, now = Date.now()): CapacityRefusal | undefined {
   const { interruption: stop } = laneCapacityState(item, now);
   if (stop === undefined) return undefined;
-  const next = capacityCommand('capacity', stop.capacity);
+  const next = capacityCommand('capacity', '--help');
   const message = 'Capacity ' + stop.capacity + ' used ' + (stop.used ?? 'unknown') + ', forecast ' + (stop.forecast ?? 'unknown') +
     ', resets at ' + stop.resets_at + '. Take a continuation or run ' + next + '.';
   return new CapacityRefusal('capacity_exhausted', message, { ...stop, next_command: next });
@@ -114,9 +114,10 @@ export async function interruptLane(engine: Swarm, id: string, token: string | u
       throw new CapacityRefusal('capacity_invalid', 'Use an active lane bound to this capacity in its current window. Run ' + next + '.', details);
     }
     const at = new Date().toISOString();
+    if (at < view.starts_at) throw new CapacityRefusal('capacity_invalid', 'The capacity window has not started. Run ' + next + '.', details);
     if (at >= view.resets_at) throw new CapacityRefusal('capacity_exhausted', 'The capacity window has ended. Run ' + next + '.', details);
     const previous = interruptions(item).filter(stop => stop.resets_at > at);
-    const replay = previous.find((stop): stop is CapacityInterruption => stop.token === token && stop.capacity === name && stop.resets_at === view.resets_at && stop.agent === engine.author);
+    const replay = previous.find((stop): stop is CapacityInterruption => stop.token === token && stop.capacity === name && stop.resets_at === view.resets_at && stop.at >= view.starts_at && stop.agent === engine.author);
     if (replay !== undefined) return { id: canonicalId, interruption: replay };
     const interruption: CapacityInterruption = { capacity: name, agent: engine.author, token, reason, at, resets_at: view.resets_at, used: view.used, forecast: view.forecast };
     const field = [INTERRUPTION_FIELD + '=' + JSON.stringify([...previous, interruption])];

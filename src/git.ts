@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { statSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Readable } from 'node:stream';
 import { gitEnvironment } from './git-environment.ts';
 import type { Prediction } from './types.ts';
@@ -69,9 +70,14 @@ export function registeredWorktrees(repo: string): Map<string, string> {
   return paths;
 }
 
-/** Keep missing checkouts distinct from registered, available directories. */
-export function availableWorktree(path: string | undefined): path is string {
-  return path !== undefined && statSync(path, { throwIfNoEntry: false })?.isDirectory() === true;
+/** Verify the registered checkout's root, repository identity and branch before reading it. */
+export function availableWorktree(repo: string, branch: string, path: string | undefined): path is string {
+  if (path === undefined || statSync(path, { throwIfNoEntry: false })?.isDirectory() !== true ||
+      statSync(join(path, '.git'), { throwIfNoEntry: false }) === undefined) return false;
+  const common = git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  const checkout = git(path, ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir']);
+  return checkout === path + '\n' + common &&
+    optionalGitProbe(path, ['symbolic-ref', '--quiet', 'HEAD']).stdout.trimEnd() === 'refs/heads/' + branch;
 }
 
 /** Read changed paths relative to the true common ancestor, preserving unusual names. */

@@ -61,7 +61,7 @@ export class CapacityRefusal extends Error {
 
 /** Refuse to operate on a capacity record as a work item. */
 export function assertNotCapacity(item: Record<string, unknown>): void {
-  if ((item.tags as string[]).includes(CAPACITY_TAG)) throw new Error(`Capacity records require ${capacityCommand('capacity')}.`);
+  if ((item.tags as string[]).includes(CAPACITY_TAG)) throw new Error(`Capacity records require ${capacityCommand('capacity', '--help')}.`);
 }
 
 /** Keep capacity and resource control items outside both start engines. */
@@ -285,7 +285,9 @@ function occupancy(items: Record<string, unknown>[], statuses: RuntimeStatusRegi
 
 /** Project both occupation and provider exhaustion from the same native registry snapshot. */
 function registryView(state: CapacityWindow, now: number, items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, except?: string) {
-  const stopped = items.some(item => interruptions(item).some(stop => stop.capacity === state.name && stop.resets_at === state.resets_at && Date.parse(stop.resets_at) > now));
+  const start = Date.parse(state.resets_at) - state.window;
+  const stopped = items.some(item => interruptions(item).some(stop => stop.capacity === state.name && stop.resets_at === state.resets_at &&
+    Date.parse(stop.at) >= start && Date.parse(stop.resets_at) > now));
   return capacityView(state, now, occupancy(items, statuses, state.name, now, except), stopped);
 }
 

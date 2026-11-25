@@ -52,8 +52,7 @@ test('review tracker retry preserves the explicit selector and runs from the sam
   assert.equal(failure.code, 'capacity_policy_denied');
   assert.match(failure.details.next_command, /--path .*\.agents\/pm/);
   assert.ok(!failure.details.next_command.includes(f.pmRoot));
-  const environment = { ...f.env, PM_PATH: 'missing-tracker', SWARM_TEST_NODE: process.execPath, SWARM_TEST_HOST: f.host };
-  const retry = await runProcess('/bin/sh', ['-ec', 'pm() { "$SWARM_TEST_NODE" "$SWARM_TEST_HOST" "$@"; }\n' + failure.details.next_command + ' --json'], f.repo, environment);
+  const retry = await executeCapacityRemedy({ ...f, env: { ...f.env, PM_PATH: 'missing-tracker' } }, failure.details.next_command + ' --json');
   assert.equal(retry.code, 0, retry.stderr);
   assert.equal(JSON.parse(retry.stdout).capacity, 'spare');
 
@@ -251,4 +250,40 @@ test('review an applying close journal may only unset a legacy null binding', as
   await runWithAgentSessionContext({ episode: { id: closeEpisode(journal, 'journal', journal) } }, () =>
     f.client.update(id, { field: [CLOSE_INTENT + '=' + JSON.stringify(journal)], unset: ['swarm_capacity'] }));
   await assert.rejects(inspectCloseMember(f.shared.engine, journal, journal.members[0]), /swarm_compensation_partial/);
+});
+
+
+/** Execute a CLI remedy verbatim in the fixture's tracker. */
+async function executeCapacityRemedy(f: Awaited<ReturnType<typeof sharedFixture>>, command: string) {
+  return runProcess('/bin/sh', ['-ec', 'pm() { "$SWARM_TEST_NODE" "$SWARM_TEST_HOST" "$@"; }\n' + command], f.repo,
+    { ...f.env, SWARM_TEST_NODE: process.execPath, SWARM_TEST_HOST: f.host });
+}
+
+test('capacity item refusal recommends a command the host can execute', async t => {
+  const f = await sharedFixture(t);
+  await window(new Capacities(f.shared.engine), 'runner', Date.now());
+  const record = (await f.shared.engine.corpus()).items.find(row => row.tags.includes('swarm-capacity'))!;
+  const refusal = f.cli('swarm', 'start', record.id, '--json');
+  assert.equal(refusal.status, 2);
+  const body = JSON.parse(refusal.stderr || refusal.stdout);
+  const remedy = /Capacity records require (pm swarm capacity[^\n]*)\.$/.exec(String(body.detail));
+  assert.ok(remedy, JSON.stringify(body));
+  const result = await executeCapacityRemedy(f, remedy[1]);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
+});
+
+test('stopped lane remedy stays runnable when its capacity is retired', async t => {
+  const f = await sharedFixture(t);
+  await window(new Capacities(f.shared.engine), 'runner', Date.now());
+  const id = await f.item(['src/stopped.ts']);
+  const claim = await f.shared.start(id, {}, true, 'runner');
+  await interruptLane(f.shared.engine, id, claim.token, 'runner', 'capacity_exhausted');
+  const record = (await f.shared.engine.corpus()).items.find(row => row.tags.includes('swarm-capacity'))!;
+  await f.client.update(record.id, { status: 'canceled' });
+  const refusal = f.cli('swarm', 'start', id, '--json');
+  assert.equal(refusal.status, 2);
+  const body = JSON.parse(refusal.stderr || refusal.stdout);
+  assert.equal(body.code, 'capacity_exhausted');
+  const result = await executeCapacityRemedy(f, body.details.next_command);
+  assert.equal(result.code, 0, result.stderr || result.stdout);
 });

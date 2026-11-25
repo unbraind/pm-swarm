@@ -4,7 +4,13 @@
 
 ### Fixed
 
+- Capacity admission follow-ups from review six ([pm-swarm-capacity-followups-104](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-capacity-followups-104.toon))
 - Capacity-aware lane admission and continuation packets ([pm-swarm-capacity-aware-lane-admission](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-capacity-aware-lane-admission.toon))
+
+## 2026.11.25 - 2026-11-25
+
+### Fixed
+
 - Deep coverage gate exhausts its 60-minute budget on eligible local runners ([pm-swarm-n901](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-n901.toon))
 - Bound coverage reporter memory on Node 26 after a passing source suite ([pm-swarm-9bks](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-9bks.toon))
 

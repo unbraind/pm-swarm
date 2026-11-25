@@ -7,7 +7,7 @@ import type { ContinuationPacket } from '../index.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { fixture } from './helpers.ts';
 import { join } from 'node:path';
-import { readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { fixtureGit as git } from './git-helpers.ts';
 import { declareService } from './privacy-mutations.ts';
 
@@ -143,7 +143,7 @@ test('review missing registered Git checkout leaves continuation and status read
   const link = readFileSync(gitFile);
   try {
     writeFileSync(gitFile, 'invalid Git registration\n');
-    await assert.rejects(shared.readContinuation(id, lane.token), /git --no-optional-locks failed/);
+    await assert.rejects(shared.readContinuation(id, lane.token), /git rev-parse failed/);
   } finally { writeFileSync(gitFile, link); }
   renameSync(lane.worktree!, join(f.root, 'offline-checkout'));
   assert.match(git(f.repo, ['worktree', 'list', '--porcelain']), new RegExp('branch refs/heads/' + lane.branch));
@@ -154,6 +154,16 @@ test('review missing registered Git checkout leaves continuation and status read
   const { lanes } = await f.swarm.status();
   assert.equal(lanes[0].git_worktree_available, false);
   assert.deepEqual(lanes[0].changed_files, ['tracked.ts']);
+  mkdirSync(lane.worktree!);
+  writeFileSync(join(lane.worktree!, 'ordinary.txt'), 'Replacement directory\n');
+  assert.equal((await f.swarm.status()).lanes[0].git_worktree_available, false);
+  const replacement = await shared.readContinuation(id, lane.token);
+  assert.equal(replacement.git_worktree_available, false);
+  assert.deepEqual(replacement.context.commits, [revision]);
+  assert.equal(replacement.context.uncommitted_paths, undefined);
+  git(lane.worktree!, ['init', '-b', lane.branch]);
+  assert.equal((await f.swarm.status()).lanes[0].git_worktree_available, false);
+  rmSync(join(lane.worktree!, '.git'), { recursive: true });
   const transferred = await shared.continuation(id, 'receiver', lane.token);
   assert.equal(transferred.git_worktree_available, false);
   assert.deepEqual(transferred.context.commits, [revision]);

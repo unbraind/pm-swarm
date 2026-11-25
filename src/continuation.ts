@@ -123,7 +123,7 @@ async function gitEvidence(engine: Swarm, item: Record<string, unknown>) {
   const tip = commit(repo, branch);
   const commits = await gitRecords(repo, ['rev-list', '--reverse', base + '..' + tip], '\n');
   const worktree = registeredWorktrees(repo).get(item.swarm_branch);
-  if (!availableWorktree(worktree)) return { commits, git_worktree_available: false };
+  if (!availableWorktree(repo, item.swarm_branch, worktree)) return { commits, git_worktree_available: false };
   const dirty = await gitRecords(worktree, ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames'], '\0');
   if (git(worktree, ['symbolic-ref', 'HEAD']) !== branch || commit(repo, branch) !== tip) {
     throw new SettingsRefusal('swarm_superseded', 'The lane branch advanced while preparing the continuation. Inspect its current Git evidence and retry.');

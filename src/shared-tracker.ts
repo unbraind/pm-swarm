@@ -209,7 +209,8 @@ export class SharedTracker {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     let stop: CapacityRefusal | undefined;
     const incoming = items.find(item => {
-      if (item.assignee !== this.engine.author || statusIsTerminal(item.status, statuses) || (parent !== undefined && item.parent !== parent) ||
+      if (item.assignee !== this.engine.author || item.tags.includes(CAPACITY_TAG) || item.tags.includes(RESOURCE_TAG) ||
+          statusIsTerminal(item.status, statuses) || (parent !== undefined && item.parent !== parent) ||
           typeof item.swarm_handoff !== 'string' || !closeIntentSettled(this.engine, item)) return false;
       const stopped = interruptionRefusal(item);
       stop ??= stopped;

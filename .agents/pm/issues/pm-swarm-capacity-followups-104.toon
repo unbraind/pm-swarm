@@ -1,0 +1,38 @@
+id: pm-swarm-capacity-followups-104
+title: Capacity admission follow-ups from review six
+description: "Track the five acceptance items and capacity self-review for https://github.com/unbraind/pm-swarm/issues/104 in PR 102."
+type: Issue
+status: in_progress
+priority: 2
+tags[1]: "gh:unbraind/pm-swarm#104"
+created_at: "2026-11-25T20:53:47.579Z"
+updated_at: "2026-11-25T21:48:02.666Z"
+author: codex-agent
+parent: pm-swarm-capacity-aware-lane-admission
+comments[10]{created_at,author,text}:
+  "2026-11-25T20:53:52.007Z",codex-agent,"Starting from 5985d7b. Reproduce the five acceptance cases and make one pass over capacity remedies, preview selection, and window bounds."
+  "2026-11-25T21:00:56.247Z",codex-agent,"Item 1: the capacity-record guard now recommends capacity --help. Disposable baseline ran the command from the refusal through the real CLI and failed with exit 2 for a missing name. The same test passes with exit 0 after the fix."
+  "2026-11-25T21:00:59.912Z",codex-agent,"Item 2: interrupt now refuses timestamps before starts_at. Disposable baseline completed the pre-window interruption instead of rejecting it. The matrix now expects capacity_invalid and an unchanged lane history."
+  "2026-11-25T21:01:02.896Z",codex-agent,"Item 3: incoming handoff selection excludes capacity records before parsing metadata in both modes. Disposable baseline returned the capacity record in dry-run. The matrix runs dry-run and live against the same record, including malformed handoff metadata, and checks the control record history."
+  "2026-11-25T21:01:05.325Z",codex-agent,"Item 4: status, continuation reads and transfers verify the checkout root, Git common directory and registered branch. Disposable baseline reported an ordinary replacement directory as available. The real Git test checks missing, ordinary and unrelated Git replacement directories while preserving commit evidence."
+  "2026-11-25T21:01:07.492Z",codex-agent,"Item 5: the transition matrix gives each capacity its own unassigned issue with a disjoint footprint. Restoring the shared fixture fails at the second provider with the first claim owner still set."
+  "2026-11-25T21:01:09.226Z",codex-agent,"Remedy self-review: a fenced stop can outlive a retired capacity record. Its retry now recommends capacity --help, with the tracker selector preserved. Disposable baseline ran the old capacity-status command against the retired record and got capacity_undeclared and exit 2."
+  "2026-11-25T21:01:10.601Z",codex-agent,"Selection self-review: native resource records had the same dry-run handoff leak as capacity records. The disposable baseline selected the resource record. The added matrix row checks both modes, malformed metadata and unmodified control history."
+  "2026-11-25T21:01:12.121Z",codex-agent,"Time-bounds self-review: a legacy report stamped before starts_at remains in history and fences its holder, but cannot exhaust the new window or mask a valid replacement report. Disposable baseline indicated reported_exhausted. With the status guard in place, reverting only the replay bound returned the old stamp and failed the in-window assertion."
+  "2026-11-25T21:48:00.251Z",codex-agent,"Local gates passed: build, typecheck, lint, 0 duplicated lines across 192 sources, and 283 documented declarations across 49 source files. The PM-linked focused suite passed 123 tests. The 81 dependent files plus the matrix rerun passed 1167 tests, with zero failures or skips. The matrix grew from 85 to 89 cells. Privacy included 27130 refused inputs with zero tracker changes or partial receipts and 1785 SDK refusals with zero tracker changes. Coverage and full npm/Bun release verification are delegated to unchanged exact-head CI."
+files[9]{path,scope}:
+  src/capacity.ts,project
+  src/continuation.ts,project
+  src/git.ts,project
+  src/interruption.ts,project
+  src/shared-tracker.ts,project
+  src/swarm.ts,project
+  test/capacity-review.test.ts,project
+  test/capacity-transitions.test.ts,project
+  test/continuation.test.ts,project
+tests[1]{command,scope,timeout_seconds,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-concurrency=2 test/capacity-review.test.ts test/capacity-transitions.test.ts test/continuation.test.ts test/capacity-edges.test.ts,project,1200,codex-agent,"2026-11-25T21:00:53.590Z",local_mutation,feat/capacity-aware-lane-admission
+docs[2]{path,scope}:
+  ARCHITECTURE.md,project
+  README.md,project
+body: ""
