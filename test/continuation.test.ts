@@ -7,7 +7,7 @@ import type { ContinuationPacket } from '../index.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { fixture } from './helpers.ts';
 import { join } from 'node:path';
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'node:fs';
 import { fixtureGit as git } from './git-helpers.ts';
 import { declareService } from './privacy-mutations.ts';
 
@@ -138,31 +138,61 @@ test('review missing registered Git checkout leaves continuation and status read
   f.write('tracked.ts', 'committed work\n', lane.worktree);
   const revision = f.save(['tracked.ts'], lane.worktree);
   const shared = new SharedTracker(f.swarm);
-  assert.equal((await f.swarm.status()).lanes[0].git_worktree_available, true);
+  const healthy = await f.item(['healthy.ts']);
+  await f.swarm.start(healthy);
+  const statusRow = async () => {
+    const { lanes } = await f.swarm.status();
+    assert.equal(lanes.find(row => row.id === healthy)?.git_worktree_available, true);
+    return lanes.find(row => row.id === id)!;
+  };
+  assert.equal((await statusRow()).git_worktree_available, true);
   const gitFile = join(lane.worktree!, '.git');
   const link = readFileSync(gitFile);
+  for (const corrupt of [true, false]) {
+    try {
+      if (corrupt) writeFileSync(gitFile, 'invalid Git registration\n');
+      else {
+        unlinkSync(gitFile);
+        symlinkSync('.git', gitFile);
+      }
+      assert.equal((await statusRow()).git_worktree_unavailable_reason, 'checkout_unreadable');
+      const packet = await shared.readContinuation(id, lane.token);
+      assert.equal(packet.git_worktree_available, false);
+      assert.equal(packet.git_worktree_unavailable_reason, 'checkout_unreadable');
+      assert.deepEqual(packet.context.commits, [revision]);
+      assert.equal(packet.context.uncommitted_paths, undefined);
+    } finally {
+      if (!corrupt) unlinkSync(gitFile);
+      writeFileSync(gitFile, link);
+    }
+  }
+  const index = git(lane.worktree!, ['rev-parse', '--path-format=absolute', '--git-path', 'index']);
+  const savedIndex = readFileSync(index);
   try {
-    writeFileSync(gitFile, 'invalid Git registration\n');
-    await assert.rejects(shared.readContinuation(id, lane.token), /git rev-parse failed/);
-  } finally { writeFileSync(gitFile, link); }
+    writeFileSync(index, 'invalid index\n');
+    const packet = await shared.readContinuation(id, lane.token);
+    assert.equal(packet.git_worktree_unavailable_reason, 'checkout_unreadable');
+    assert.deepEqual(packet.context.commits, [revision]);
+  } finally { writeFileSync(index, savedIndex); }
   renameSync(lane.worktree!, join(f.root, 'offline-checkout'));
   assert.match(git(f.repo, ['worktree', 'list', '--porcelain']), new RegExp('branch refs/heads/' + lane.branch));
   const read = await shared.readContinuation(id, lane.token);
   assert.equal(read.git_worktree_available, false);
   assert.deepEqual(read.context.commits, [revision]);
   assert.equal(read.context.uncommitted_paths, undefined);
-  const { lanes } = await f.swarm.status();
-  assert.equal(lanes[0].git_worktree_available, false);
-  assert.deepEqual(lanes[0].changed_files, ['tracked.ts']);
+  const missing = await statusRow();
+  assert.equal(missing.git_worktree_available, false);
+  assert.equal(missing.git_worktree_unavailable_reason, 'checkout_missing');
+  assert.deepEqual(missing.changed_files, ['tracked.ts']);
   mkdirSync(lane.worktree!);
   writeFileSync(join(lane.worktree!, 'ordinary.txt'), 'Replacement directory\n');
-  assert.equal((await f.swarm.status()).lanes[0].git_worktree_available, false);
+  assert.equal((await statusRow()).git_worktree_available, false);
   const replacement = await shared.readContinuation(id, lane.token);
   assert.equal(replacement.git_worktree_available, false);
   assert.deepEqual(replacement.context.commits, [revision]);
   assert.equal(replacement.context.uncommitted_paths, undefined);
   git(lane.worktree!, ['init', '-b', lane.branch]);
-  assert.equal((await f.swarm.status()).lanes[0].git_worktree_available, false);
+  assert.equal((await statusRow()).git_worktree_unavailable_reason, 'checkout_mismatch');
   rmSync(join(lane.worktree!, '.git'), { recursive: true });
   const transferred = await shared.continuation(id, 'receiver', lane.token);
   assert.equal(transferred.git_worktree_available, false);

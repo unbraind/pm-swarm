@@ -4,7 +4,7 @@ import { RESOURCE_TAG } from './resources.ts';
 import type { FairPolicy } from './fair-scheduling.ts';
 import { laneCapacityState, interruptions } from './interruption.ts';
 import { normalizeItemId, readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
-import { clientMutationSnapshot, inspectItems } from './inspection.ts';
+import { clientMutationSnapshot } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import { assertPrivatePathSafe, commitItemMutation, commitMutation } from './settings.ts';
@@ -57,6 +57,12 @@ export class CapacityRefusal extends Error {
     this.remedy = remedy;
     this.details = details;
   }
+}
+
+/** Treat native capacity and reservation records as control data across lane readers. */
+export function isControlRecord(item: Record<string, unknown>): boolean {
+  const tags = item.tags as string[];
+  return tags.includes(CAPACITY_TAG) || tags.includes(RESOURCE_TAG);
 }
 
 /** Refuse to operate on a capacity record as a work item. */
@@ -256,7 +262,7 @@ function undeclared(name: string): CapacityRefusal {
 
 /** One write-free SDK snapshot for capacity decisions. */
 async function registry(engine: Swarm) {
-  const items = await inspectItems(engine.pmRoot, engine.repo);
+  const items = await engine.inspectCapacityItems();
   if (items === null) throw new CapacityRefusal('capacity_invalid', 'Use a local tracker with shared SDK writer fencing for capacity coordination.');
   const settings = await readSettings(engine.pmRoot);
   return { items, statuses: resolveRuntimeStatusRegistry(settings.schema), prefix: settings.id_prefix };
@@ -277,6 +283,16 @@ function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegi
   return records[0];
 }
 
+/** Reserve an explicit native identity without reusing an item whose capacity tag was removed. */
+function capacityItemId(items: Record<string, unknown>[], name: string, prefix: string): string {
+  const occupied = new Set(items.map(item => item.id));
+  let id = 'swarm-capacity-' + name;
+  for (let attempt = 1; occupied.has(normalizeItemId(id, prefix)); attempt++) {
+    id = `swarm-redeclared-capacity-${name}-${attempt}`;
+  }
+  return id;
+}
+
 /** Count active ownership only, including across Git and shared lane modes. */
 function occupancy(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, now: number, except?: string): number {
   return items.filter(item => item.id !== except && item[LANE_CAPACITY_FIELD] === name &&
@@ -286,9 +302,10 @@ function occupancy(items: Record<string, unknown>[], statuses: RuntimeStatusRegi
 /** Project both occupation and provider exhaustion from the same native registry snapshot. */
 function registryView(state: CapacityWindow, now: number, items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, except?: string) {
   const start = Date.parse(state.resets_at) - state.window;
-  const stopped = items.some(item => interruptions(item).some(stop => stop.capacity === state.name && stop.resets_at === state.resets_at &&
+  const lanes = items.filter(item => !isControlRecord(item));
+  const stopped = lanes.some(item => interruptions(item).some(stop => stop.capacity === state.name && stop.resets_at === state.resets_at &&
     Date.parse(stop.at) >= start && Date.parse(stop.resets_at) > now));
-  return capacityView(state, now, occupancy(items, statuses, state.name, now, except), stopped);
+  return capacityView(state, now, occupancy(lanes, statuses, state.name, now, except), stopped);
 }
 
 /** Create the lane binding field only when a capacity was selected. */
@@ -406,7 +423,10 @@ export class Capacities {
       const result = registryView(state, now, items, statuses);
       await lease!.write(async () => {
         if (snapshot === undefined) {
-          await commitMutation({ id: `swarm-capacity-${name}`, title: `Swarm capacity ${name}`, type: 'Task', addTags: [CAPACITY_TAG], author, field }, admitted => client.create(admitted));
+          await commitMutation({
+            id: capacityItemId(items, name, prefix), title: `Swarm capacity ${name}`,
+            type: 'Task', addTags: [CAPACITY_TAG], author, field,
+          }, admitted => client.create(admitted));
           return;
         }
         const options = { author, field, ...(reopening ? { status: statuses.open_status } : {}), message: `Swarm capacity ${change.action}` };

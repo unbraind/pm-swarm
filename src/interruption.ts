@@ -1,7 +1,7 @@
 import { capacityCommand } from './capacity-command.ts';
 import { capacityInstant } from './capacity-time.ts';
 import { resolveRuntimeStatusRegistry, readSettings, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
-import { Capacities, capacityDiagnosis, capacityFields, capacityName, capacityUnset, CapacityRefusal, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { Capacities, capacityDiagnosis, capacityFields, capacityName, capacityUnset, CapacityRefusal, isControlRecord, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { assertCloseIntentSettled } from './close.ts';
 import { clientMutationSnapshot, inspectItem } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
@@ -110,7 +110,7 @@ export async function interruptLane(engine: Swarm, id: string, token: string | u
     const view = await new Capacities(engine).run(name);
     const next = capacityCommand('capacity', name);
     const details = { ...capacityDiagnosis(view), next_command: next };
-    if (statusIsTerminal(String(item.status), statuses) || item[LANE_CAPACITY_FIELD] !== name || view.seconds_to_reset === 0) {
+    if (isControlRecord(item) || statusIsTerminal(String(item.status), statuses) || item[LANE_CAPACITY_FIELD] !== name || view.seconds_to_reset === 0) {
       throw new CapacityRefusal('capacity_invalid', 'Use an active lane bound to this capacity in its current window. Run ' + next + '.', details);
     }
     const at = new Date().toISOString();

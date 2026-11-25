@@ -330,7 +330,8 @@ record terminal, status reports it as undeclared. Run the same
 `capacity --action declare` command with a new window to reopen the
 record and preserve its native history. Reopening starts with no
 observations and a policy that admits zero lanes. Set the policy again
-before admitting work.
+before admitting work. Removing the native capacity tag releases the name.
+A later declaration creates its own record and leaves the untagged item alone.
 
 ```sh
 pm swarm capacity ollama --action declare --limit 100 --unit percent \
@@ -375,8 +376,9 @@ The continuation records the interruption, acceptance criteria with an
 unverified status, linked files, and changes to files, synced paths, comments
 and tests in native revision order after the claim. A Git lane also includes
 commit IDs and uncommitted paths from its worktree. Git status and live
-continuation packets report a missing registered checkout as unavailable.
-The packet still includes the branch commits. Large Git evidence is read
+continuation packets mark a missing, unreadable, or mismatched checkout
+unavailable and include `git_worktree_unavailable_reason`. The packet
+still includes the branch commits. Large Git evidence is read
 as complete records, with the packet budget reporting omitted paths or
 commits. The recipient gets a new token. The previous window stays exhausted
 until its reset. A continuation from an interrupted lane drops the old capacity

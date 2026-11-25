@@ -6,10 +6,10 @@ status: in_progress
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#99"
 created_at: "2026-11-25T08:30:21.206Z"
-updated_at: "2026-11-25T22:59:19.373Z"
+updated_at: "2026-11-25T23:48:53.514Z"
 author: codex-agent
 acceptance_criteria: "Declare and observe windowed capacities, enforce counted admission for next and start, fence interruptions across reclaim, and transfer a bounded continuation packet in Git and shared tracker modes."
-comments[65]{created_at,author,text}:
+comments[77]{created_at,author,text}:
   "2026-11-25T08:30:46.293Z",codex-agent,"Baseline reproduced in a real non-Git tracker: capacity and interrupt were missing, capacity flags on next/start and continuation on brief were rejected, and plain next admitted two workers without a quota bound. Implementing five pushed slices with native revision checks and a real process race."
   "2026-11-25T08:33:41.905Z",codex-agent,"Slice 1: capacities are native tagged items and each observation is revision-checked and appended to the item history. The read model uses the last two in-window points when both are at most 24 hours old. Revert proof: replacing the forecast with null failed the historical 56 + 8/7 forecast assertion; restored the implementation."
   "2026-11-25T09:00:52.798Z",codex-agent,"Slice 2: next and start share primary capacity admission with dry-run and report measured refusal context and the next fallback command. Two independent next processes on disjoint work produced one admitted lane and one capacity_exhausted refusal. Revert proof: ignoring occupied slots admitted both workers; the process test failed with exits 0 and 0. The weekly replay produced 57.14 percent and three admitted lanes using the supplied readings and illustrative observation times."
@@ -75,6 +75,18 @@ comments[65]{created_at,author,text}:
   "2026-11-25T22:45:18.196Z",codex-agent,"Seventh review: reproduce terminal capacity redeclaration first, push its guarded reopening, then verify control-record lifecycle, checkout probes and the transition matrix."
   "2026-11-25T22:46:24.714Z",codex-agent,"PRRT_kwDOVLY-P868I49L: declare reopens the terminal native record through a history-conditioned SDK update, using the configured open status and a fresh zero-lane policy. The real CLI regression executes the status remedy and then redeclares the name. With the fix absent the same declaration exited 2 because the native item already existed. The fixed cycle retains the item identity and appends one revision before policy and admission succeed."
   "2026-11-25T22:59:18.108Z",codex-agent,"Major slice local gates passed: build, typecheck, lint, zero duplicate lines, 283 documented declarations over 49 files, real CLI reopen and history-prefix regression, and 341 tests across 25 dependent and privacy test files. Privacy refused 27130 unsafe inputs without partial receipts or tracker changes. CI will verify coverage and release gates."
+  "2026-11-25T23:00:06.812Z",codex-agent,"Major fix pushed separately. Remaining verification covers control-role changes at discovery, fence and write boundaries, bounded checkout diagnostics, and stronger independent matrix assertions."
+  "2026-11-25T23:06:57.066Z",codex-agent,"PRRT_kwDOVLY-P868I49G: a shared control-record predicate now excludes capacity and resource items from occupation, exhaustion reports and shared/Git lane selection. Interrupted work retains its existing lifecycle. Disposable baseline reported one active lane after gaining either tag and refused later admission. Both Git and shared matrix paths now select ordinary work."
+  "2026-11-25T23:06:59.299Z",codex-agent,"PRRT_kwDOVLY-P868I49L class check: a capacity whose tag is removed no longer owns its logical name. Redeclaration uses an SDK-generated identity when the former canonical ID is occupied; the untagged item and its history are preserved. All three untagged timing rows failed before the fix with item_already_exists."
+  "2026-11-25T23:07:01.543Z",codex-agent,"PRRT_kwDOVLY-P868I49O: status and live continuation report a path-free availability reason. Restoring the old checkout probes makes real invalid registration abort status with git rev-parse failed before reporting its healthy sibling. The test also covers an unreadable registration and an invalid index, and preserves branch commit evidence."
+  "2026-11-25T23:07:03.604Z",codex-agent,"PRRT_kwDOVLY-P868I49W: the successful handoff matrix requires the persisted receiver and exact successor generation from the receipt. A disposable no-publication mutation passed the old live row and fails the strengthened owner assertion."
+  "2026-11-25T23:07:05.775Z",codex-agent,"PRRT_kwDOVLY-P868I49c: the unbound policy-change row independently requires zero slots and capacity_policy_denied for runner, with successful spare admission. Ignoring the zero policy passed the old row and fails the independent zero-lane assertion."
+  "2026-11-25T23:07:08.095Z",codex-agent,"PRRT_kwDOVLY-P868I49e: incoming fences already blocked newly tagged items with generic guard errors. They now explicitly report swarm_superseded before receipt/admission. The two before-fence gain rows fail on the old error and check there is no extra history write. Late gain and tag ABA cases exercise the guarded publication and retry against fresh state."
+  "2026-11-25T23:07:10.567Z",codex-agent,"PRRT_kwDOVLY-P868I49i: the unchanged-binding race now wraps one real capacity corpus read, after the handoff fence. Renaming the admission function prevented the old hook from running; the updated test still passes under that rename. Removing the actual unchanged-binding history check makes the updated test fail with Missing expected rejection."
+  "2026-11-25T23:07:12.826Z",codex-agent,"The matrix grows from 89 to 109 cells. Eleven additions failed on the Major-slice baseline: gain before discovery, fence and write for both tags; both Git occupancy rows; and all three untagged capacity-record timings. The removal and terminal timing controls passed. Test mutations and checkout proof used disposable fixtures."
+  "2026-11-25T23:43:49.265Z",codex-agent,The dependent privacy inventory requires an explicit admitted identity on every native create. The replacement declaration now chooses a free deterministic ID under the swarm lease and passes it into the same guarded create. The untagged before-discovery cell also reserves the first alternative ID and verifies that redeclaration preserves it and uses the second alternative.
+  "2026-11-25T23:48:49.890Z",codex-agent,"The 80-file dependency run passed 1078 tests and caught two write-inventory failures in the initial replacement-ID path. After making the ID explicit, the PM-linked affected rerun passed all 168 tests, with zero failures or skips, including the 109-cell matrix and both privacy-inventory checks. Build, typecheck, lint, duplication, docstring and privacy gates passed. Duplication was zero and 288 declarations across 49 files were documented. The broader privacy case refused 27130 unsafe inputs without tracker changes or partial receipts."
+  "2026-11-25T23:48:51.361Z",codex-agent,"Major-only CI run https://github.com/unbraind/pm-swarm/actions/runs/45717789106 passed Node 22 and CodeQL passed separately. Node 26 failed in git add during an existing reap fixture setup, before the test exercised capacity behavior. Its report measured 100 percent for capacity.ts. The affected reap test passed in the final local dependency run. CI will certify the final pushed head without a manual workflow rerun."
 files[32]{path,scope}:
   index.ts,project
   scripts/identity-gate.ts,project
@@ -108,7 +120,7 @@ files[32]{path,scope}:
   test/privacy-sinks.test.ts,project
   test/review-close-contracts.test.ts,project
   test/support/capacity-race-extension.ts,project
-tests[13]:
+tests[15]:
   - command: node --test --test-concurrency=2 test/capacity.test.ts
     scope: project
     provenance:
@@ -207,6 +219,22 @@ tests[13]:
     provenance:
       author: codex-agent
       created_at: "2026-11-25T22:46:23.359Z"
+      source_kind: local_mutation
+      source_ref: feat/capacity-aware-lane-admission
+  - command: node --test --test-concurrency=2 test/capacity-transitions.test.ts test/continuation.test.ts
+    scope: project
+    timeout_seconds: 1200
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-25T23:06:54.969Z"
+      source_kind: local_mutation
+      source_ref: feat/capacity-aware-lane-admission
+  - command: node --test --test-concurrency=2 test/capacity-review.test.ts test/capacity-transitions.test.ts test/capacity-edges.test.ts test/capacity.test.ts test/continuation.test.ts test/privacy-sinks.test.ts
+    scope: project
+    timeout_seconds: 1200
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-25T23:43:50.350Z"
       source_kind: local_mutation
       source_ref: feat/capacity-aware-lane-admission
 docs[4]{path,scope}:

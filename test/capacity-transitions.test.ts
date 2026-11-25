@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
 import { test, type TestContext } from 'node:test';
 import { mutateItem, readSettings } from '@unbrained/pm-cli/sdk';
-import { Capacities, CapacityRefusal, interruptLane, SharedTracker, Swarm } from '../index.ts';
+import { Capacities, CapacityRefusal, interruptLane, SharedTracker, Swarm, withItemMutationObserver } from '../index.ts';
 import { CAPACITY_TAG, LANE_CAPACITY_FIELD } from '../src/capacity.ts';
 import { interruptions } from '../src/interruption.ts';
+import { RESOURCE_TAG } from '../src/resources.ts';
 import { readItemHistoryHead } from '../src/settings.ts';
 import { runProcess } from './process-helpers.ts';
 import { fixture } from './helpers.ts';
@@ -121,15 +122,22 @@ test('capacity transitions keep every field coherent', async t => {
         finishWindow: () => { now = reset; },
         declareWindow: () => declare('runner', reset + 3_600_000),
       });
+      let receipt: Awaited<ReturnType<typeof perform>> | undefined;
       if (action.startsWith('reclaim')) {
         const result = await perform() as Awaited<ReturnType<SharedTracker['reclaim']>>;
         if (refusal === undefined) assert.ok(result.recovered.some(row => row.id === id));
         else assert.equal(result.refused.find(row => row.id === id)?.code, refusal);
-      } else if (refusal === undefined) await perform();
+      } else if (refusal === undefined) receipt = await perform();
       else await assert.rejects(perform, { code: refusal });
 
       const { item } = await f.client.get(id, { depth: 'full' });
       assert.match(String(item.swarm_token), /^\d+$/);
+      if (action === 'handoff' && refusal === undefined) {
+        assert.ok(typeof receipt === 'object' && receipt !== null && 'token' in receipt);
+        assert.equal(item.assignee, receiver.engine.author);
+        assert.equal(item.swarm_token, (BigInt(claimToken) + 1n).toString());
+        assert.equal(item.swarm_token, receipt.token);
+      }
       if (item.swarm_handoff !== undefined) assert.equal(JSON.parse(String(item.swarm_handoff)).token, item.swarm_token);
       const stops = interruptions(item);
       for (const stop of stops) {
@@ -164,7 +172,10 @@ test('capacity transitions keep every field coherent', async t => {
         const view = await capacity.run(name);
         const stopped = stops.some(stop => stop.token === item.swarm_token && Date.parse(stop.resets_at) > now);
         assert.equal(view.active_lanes, Number(expected === name && !stopped));
-        if (view.available_lanes > 0) {
+        if (name === 'runner' && action === 'policy change' && binding === 'unbound') {
+          assert.deepEqual([view.admitted_lane_count, view.available_lanes], [0, 0]);
+          await assert.rejects(fresh.start(freshId, {}, true, name), { code: 'capacity_policy_denied' });
+        } else if (view.available_lanes > 0) {
           const claim = await fresh.start(freshId, {}, true, name);
           assert.equal(claim.capacity, name);
         } else {
@@ -326,6 +337,141 @@ test('capacity transitions keep every field coherent', async t => {
     });
   }
 
+  for (const tag of [CAPACITY_TAG, RESOURCE_TAG]) {
+    for (const timing of ['before discovery', 'before fence', 'before write'] as const) {
+      for (const gain of [false, true]) {
+        await t.test('control lane / ' + tag + ' / ' + (gain ? 'gain' : 'remove') + ' / ' + timing, async cell => {
+          const f = await sharedFixture(cell);
+          const engine = new Swarm(f.repo, f.pmRoot, f.client, 'receiver');
+          const receiver = new SharedTracker(engine);
+          const capacity = new Capacities(engine);
+          const reset = new Date(Date.now() + 3_600_000).toISOString();
+          for (const name of ['runner', 'spare']) await declareCapacity(capacity, name, reset);
+          const id = await f.item(['src/control-lane.ts']);
+          const claim = await f.shared.start(id, {}, true, 'runner');
+          const handoff = await f.shared.handoff(id, 'receiver', 'Public checkpoint', claim.token);
+          const fresh = await f.item(['src/disjoint.ts']);
+          const setTag = (tagged: boolean) => f.client.update(id, { author: 'receiver', ...(tagged ? { addTags: [tag] } : { removeTags: [tag] }) });
+          if (!gain && timing !== 'before write') await setTag(true);
+          const before = await readItemHistoryHead(f.pmRoot, id);
+          let edited = false;
+          const edit = async () => {
+            edited = true;
+            // At publication an ordinary lane has already passed the fence. Test removal as an ABA.
+            if (!gain && timing === 'before write') await setTag(true);
+            await setTag(gain);
+          };
+          if (timing === 'before discovery') {
+            await edit();
+            const view = await capacity.run('runner');
+            assert.deepEqual([view.active_lanes, view.available_lanes], gain ? [0, 1] : [1, 0]);
+            if (gain) await assert.rejects(interruptLane(engine, id, handoff.token, 'runner', 'capacity_exhausted'), { code: 'capacity_invalid' });
+            assert.equal((await receiver.next(undefined, true, undefined, 'runner')).selected, gain ? fresh : id);
+            const receipt = await receiver.next(undefined, false, undefined, 'runner');
+            assert.equal(receipt.selected, gain ? fresh : id);
+            assert.equal(receipt.capacity, 'runner');
+          } else if (timing === 'before fence') {
+            const ready = engine.readyCandidates.bind(engine);
+            cell.mock.method(engine, 'readyCandidates', async (...args: Parameters<typeof ready>) => {
+              const result = await ready(...args);
+              await edit();
+              return result;
+            }, { times: 1 });
+            // A newly ordinary lane is counted in admission even if discovery already skipped it.
+            await assert.rejects(receiver.next(undefined, false, undefined, 'runner'), { code: gain ? 'swarm_superseded' : 'capacity_lanes_occupied' });
+          } else {
+            const nativeEdit = () => {
+              edited = true;
+              if (!gain) f.run('update', id, '--author', 'receiver', '--add-tags', tag);
+              f.run('update', id, '--author', 'receiver', gain ? '--add-tags' : '--remove-tags', tag);
+            };
+            await assert.rejects(withItemMutationObserver(boundary => {
+              if (boundary === 'before_commit') nativeEdit();
+            }, () => receiver.next(undefined, false, undefined, 'spare')), { code: 'swarm_superseded' });
+          }
+          assert.equal(edited, true);
+          const current = (await f.client.get(id)).item;
+          assert.deepEqual([current.tags?.includes(tag) ?? false, current.swarm_token, current.swarm_capacity], [gain, handoff.token, 'runner']);
+          const nativeWrites = !gain && timing === 'before write' ? 2 : 1;
+          assert.equal((await readItemHistoryHead(f.pmRoot, id)).length, before.length + nativeWrites);
+          if (timing !== 'before discovery') {
+            assert.equal((await capacity.run('runner')).active_lanes, Number(!gain));
+            assert.equal((await receiver.next(undefined, true, undefined, 'runner')).selected, gain ? fresh : id);
+            assert.equal((await receiver.next(undefined, false, undefined, 'runner')).selected, gain ? fresh : id);
+          }
+        });
+      }
+    }
+
+    await t.test('control lane / ' + tag + ' / Git selection and occupancy', async cell => {
+      const f = await fixture(cell);
+      const capacity = new Capacities(f.swarm);
+      await declareCapacity(capacity, 'runner', new Date(Date.now() + 3_600_000).toISOString());
+      const id = await f.item(['src/overlap.ts']);
+      await f.swarm.start(id, {}, true, 'runner');
+      await f.client.update(id, { addTags: [tag] });
+      assert.equal((await capacity.run('runner')).active_lanes, 0);
+      assert.equal((await f.swarm.status()).lanes.some(row => row.id === id), false);
+      // A control checkout and its declared footprint cannot block ordinary work.
+      const fresh = await f.item(['src/overlap.ts']);
+      for (const dryRun of [true, false]) {
+        assert.equal((await f.swarm.next(undefined, dryRun, undefined, 'runner')).selected, fresh);
+      }
+    });
+  }
+
+  for (const state of ['terminal', 'untagged'] as const) {
+    for (const timing of ['before discovery', 'before fence', 'before write'] as const) {
+      await t.test('capacity record / ' + state + ' / ' + timing, async cell => {
+        const f = await sharedFixture(cell);
+        const capacity = new Capacities(f.shared.engine);
+        const reset = Date.now() + 3_600_000;
+        await declareCapacity(capacity, 'runner', new Date(reset).toISOString());
+        const record = (await f.shared.engine.corpus()).items.find(item => item.tags.includes(CAPACITY_TAG))!;
+        const before = await readItemHistoryHead(f.pmRoot, record.id);
+        let edits = 0;
+        const edit = () => {
+          edits++;
+          const flags = state === 'terminal' ? ['--status', 'canceled'] : ['--remove-tags', CAPACITY_TAG];
+          f.run('update', record.id, ...flags);
+        };
+        const observe = () => capacity.run('runner', { action: 'observe', used: 20, source: 'manual' });
+        if (timing === 'before discovery') {
+          edit();
+        } else if (timing === 'before fence') {
+          const read = f.client.get.bind(f.client);
+          const mock = cell.mock.method(f.client, 'get', async (...args: Parameters<typeof read>) => {
+            if (args[0] === record.id && args[1]?.at === '1') edit();
+            return read(...args);
+          });
+          try { await assert.rejects(observe, { code: 'capacity_undeclared' }); }
+          finally { mock.mock.restore(); }
+        } else {
+          await assert.rejects(withItemMutationObserver(boundary => {
+            if (boundary === 'before_commit') edit();
+          }, observe), { code: 'swarm_superseded' });
+        }
+        assert.equal(edits, 1);
+        const edited = await readItemHistoryHead(f.pmRoot, record.id);
+        assert.equal(edited.length, before.length + 1);
+        await assert.rejects(capacity.run('runner'), { code: 'capacity_undeclared' });
+        const id = await f.item(['src/new-capacity.ts'], 1);
+        for (const dryRun of [true, false]) {
+          await assert.rejects(f.shared.next(undefined, dryRun, undefined, 'runner'), { code: 'capacity_undeclared' });
+        }
+        const occupied = state === 'untagged' && timing === 'before discovery';
+        if (occupied) await f.item([], 2, 'swarm-redeclared-capacity-runner-1');
+        await declareCapacity(capacity, 'runner', new Date(reset + 3_600_000).toISOString());
+        assert.equal((await f.shared.start(id, {}, true, 'runner')).capacity, 'runner');
+        if (state === 'untagged') {
+          assert.deepEqual(await readItemHistoryHead(f.pmRoot, record.id), edited);
+          const replacement = (await f.shared.engine.corpus()).items.find(item => item.tags.includes(CAPACITY_TAG))!;
+          assert.ok(replacement.id.endsWith('swarm-redeclared-capacity-runner-' + (occupied ? '2' : '1')));
+        } else assert.equal((await readItemHistoryHead(f.pmRoot, record.id)).length, edited.length + 2);
+      });
+    }
+  }
+
   await t.test('reclaim / malformed interruption beside healthy lanes', async cell => {
     const f = await sharedFixture(cell);
     const rescuer = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'rescuer'));
@@ -387,23 +533,17 @@ test('capacity transitions keep every field coherent', async t => {
     const handoff = await f.shared.handoff(id, 'receiver', 'Public checkpoint', claim.token);
     const before = await readItemHistoryHead(f.pmRoot, id);
     const engine = receiver.engine;
-    const author = Object.getOwnPropertyDescriptor(engine, 'author')!;
+    const read = engine.inspectCapacityItems.bind(engine);
     let intervened = false;
-    Object.defineProperty(engine, 'author', {
-      configurable: true,
-      get() {
-        // The fallback is formatted after the fence read, before admitting the captured binding.
-        if (!intervened && new Error().stack?.includes('at admitCapacity ')) {
-          intervened = true;
-          f.run('update', id, '--author', 'receiver', '--field', 'swarm_capacity=spare');
-        }
-        return author.value as string;
-      },
-    });
+    const edit = cell.mock.method(engine, 'inspectCapacityItems', async () => {
+      intervened = true;
+      await f.client.update(id, { author: 'receiver', field: ['swarm_capacity=spare'] });
+      return read();
+    }, { times: 1 });
     try {
       await assert.rejects(receiver.next(undefined, false, undefined, 'runner,spare'), { code: 'swarm_superseded' });
     } finally {
-      Object.defineProperty(engine, 'author', author);
+      edit.mock.restore();
       assert.equal(intervened, true);
     }
     const edited = await readItemHistoryHead(f.pmRoot, id);

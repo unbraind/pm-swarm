@@ -70,14 +70,34 @@ export function registeredWorktrees(repo: string): Map<string, string> {
   return paths;
 }
 
-/** Verify the registered checkout's root, repository identity and branch before reading it. */
-export function availableWorktree(repo: string, branch: string, path: string | undefined): path is string {
-  if (path === undefined || statSync(path, { throwIfNoEntry: false })?.isDirectory() !== true ||
-      statSync(join(path, '.git'), { throwIfNoEntry: false }) === undefined) return false;
+/** Path-free reasons why a lane checkout cannot supply current local evidence. */
+export type WorktreeUnavailableReason = 'branch_unavailable' | 'checkout_missing' | 'checkout_unreadable' | 'checkout_mismatch';
+
+/** Use the same portable checkout diagnosis for status and continuation. */
+export function unavailableWorktree(reason: WorktreeUnavailableReason) {
+  return { git_worktree_available: false as const, git_worktree_unavailable_reason: reason };
+}
+
+/** Verify the registered checkout without making a broken checkout fatal to the repository report. */
+export function inspectWorktree(repo: string, branch: string, path: string | undefined) {
+  if (path === undefined) return unavailableWorktree('checkout_missing');
   const common = git(repo, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
-  const checkout = git(path, ['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir']);
-  return checkout === path + '\n' + common &&
-    optionalGitProbe(path, ['symbolic-ref', '--quiet', 'HEAD']).stdout.trimEnd() === 'refs/heads/' + branch;
+  try {
+    if (statSync(path, { throwIfNoEntry: false })?.isDirectory() !== true ||
+        statSync(join(path, '.git'), { throwIfNoEntry: false }) === undefined) return unavailableWorktree('checkout_missing');
+    const checks: [string[], string][] = [
+      [['rev-parse', '--path-format=absolute', '--show-toplevel', '--git-common-dir'], path + '\n' + common],
+      [['symbolic-ref', '--quiet', 'HEAD'], 'refs/heads/' + branch],
+    ];
+    for (const [args, expected] of checks) {
+      const result = gitProbe(path, args);
+      if (result.status !== 0) return unavailableWorktree('checkout_unreadable');
+      if (result.stdout.trimEnd() !== expected) return unavailableWorktree('checkout_mismatch');
+    }
+    return { path };
+  } catch {
+    return unavailableWorktree('checkout_unreadable');
+  }
 }
 
 /** Read changed paths relative to the true common ancestor, preserving unusual names. */

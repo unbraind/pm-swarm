@@ -2,7 +2,7 @@ import { reissueHandoff } from './handoff-context.ts';
 import { advanceCapacity, interruptionRefusal } from './interruption.ts';
 import { SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import type { CapacityStatus } from './capacity.ts';
-import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityUnset, incrementFence, isControlRecord, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { retainFailureCause } from './failure-cause.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
@@ -17,15 +17,15 @@ import { fileURLToPath } from 'node:url';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, acquireLock, resolveLinkedTestTrustBatch, resolveLinkedTestSourceRef, acknowledgeLinkedTests, nowIso, resolveClaimPrincipal, readHistoryEntries, getHistoryPath, mutateItem } from '@unbrained/pm-cli/sdk';
 import type { PmClient, TestResult, ClaimResult } from '@unbrained/pm-cli/sdk';
 import { certifyCompleteListResult, computeActionabilityReport, selectActionableEntries } from '@unbrained/pm-cli/sdk/query';
-import { optionalGitProbe, branchExists, changedFiles, commit, git, missingDrivers, predict, chain, availableWorktree, registeredWorktrees } from './git.ts';
+import { optionalGitProbe, branchExists, changedFiles, commit, git, missingDrivers, predict, chain, inspectWorktree, registeredWorktrees } from './git.ts';
+import type { WorktreeUnavailableReason } from './git.ts';
 import { footprintPath, itemFootprint, overlaps, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
 import { maximalCleanOrder, minimalConflict } from './order.ts';
 import { lanePathRefusal } from './reap.ts';
 import { commitItemMutation, commitMutation, assertPrivatePathSafe, assertSdkInstance, settings, documentFingerprint, assertMutationReceipt, SettingsRefusal, requireActiveExtensionRead, assertClaimGeneration, assertItemHistoryHead, readItemHistoryHead } from './settings.ts';
 import { admitReceipt } from './receipts.ts';
-import { liveItemTypes, inspectItem, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
-import { RESOURCE_TAG } from './resources.ts';
+import { liveItemTypes, inspectItem, inspectItems, readItem, historySnapshot, clientMutationSnapshot, readItemIdentity } from './inspection.ts';
 import { StaleFenceError, withSwarmLease, retryLock } from './lease.ts';
 import type { Lease } from './lease.ts';
 import type { Candidate, Lane, SwarmSettings } from './types.ts';
@@ -62,6 +62,9 @@ export class Swarm {
   /** Load and certify the entire item corpus; never silently plan a partial tracker. */
   async corpus() { return certifyCompleteListResult(await this.client.listAllComplete()); }
 
+  /** Inspect the native item corpus for a write-free capacity decision. */
+  async inspectCapacityItems() { return inspectItems(this.pmRoot, this.repo); }
+
   /** Select open ready unclaimed work through SDK actionability and certified ownership. */
   async plan(parent?: string, limit?: number) {
     const config = await settings(this.pmRoot, limit === undefined ? {} : { lane_limit: limit });
@@ -77,7 +80,7 @@ export class Swarm {
     const ready = selectActionableEntries(report, statuses, {}, types).ready;
     const candidates: (Candidate & { priority: number; created_at: string })[] = [];
     for (const { item } of ready) {
-      if ((item.tags.includes(RESOURCE_TAG) || item.tags.includes(CAPACITY_TAG)) || item.status !== statuses.open_status || (gitLanes && item.swarm_branch) || (parent !== undefined && item.parent !== parent)) continue;
+      if (isControlRecord(item) || item.status !== statuses.open_status || (gitLanes && item.swarm_branch) || (parent !== undefined && item.parent !== parent)) continue;
       if (item.assignee?.trim()) continue;
       if (!closeIntentSettled(this, item)) continue;
       candidates.push({ id: item.id, files: itemFootprint(item), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
@@ -129,7 +132,7 @@ export class Swarm {
     const localIds = new Set(lanes.map(lane => lane.id));
     const gitLanes = lanes.filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
-    const assigned = corpus.items.filter(item => !item.tags.includes(RESOURCE_TAG) && !item.tags.includes(CAPACITY_TAG) && item.assignee?.trim() && !statusIsTerminal(item.status, statuses) && !localIds.has(item.id));
+    const assigned = corpus.items.filter(item => !isControlRecord(item) && item.assignee?.trim() && !statusIsTerminal(item.status, statuses) && !localIds.has(item.id));
     return [...gitLanes, ...assigned.map(item => ({ id: item.id, files: itemFootprint(item) }))];
   }
 
@@ -310,7 +313,7 @@ export class Swarm {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
     const lanes: Lane[] = [];
     for (const item of corpus.items) {
-      if (typeof item.swarm_branch !== 'string' || !branchExists(this.repo, item.swarm_branch)) continue;
+      if (isControlRecord(item) || typeof item.swarm_branch !== 'string' || !branchExists(this.repo, item.swarm_branch)) continue;
       if (typeof item.swarm_base !== 'string') throw new Error(`Lane ${item.id} has no base SHA`);
       const target = typeof item.swarm_base_ref === 'string' ? item.swarm_base_ref : config.base;
       lanes.push({ id: item.id, branch: item.swarm_branch, sha: commit(this.repo, item.swarm_branch), base: commit(this.repo, item.swarm_base), target, agent: item.assignee ?? null, files: itemFootprint(item), terminal: statusIsTerminal(item.status, statuses) });
@@ -326,7 +329,10 @@ export class Swarm {
       const tip = commit(this.repo, lane.target); const changed = changedFiles(this.repo, tip, lane.sha);
       const [behind, ahead] = git(this.repo, ['rev-list', '--left-right', '--count', `${tip}...${lane.sha}`]).split(/\s+/).map(Number);
       predictions.push({ ...predict(this.repo, lane.sha, tip), left_id: lane.id, left_branch: lane.branch, right_id: 'base', right_branch: lane.target });
-      return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, git_worktree_available: availableWorktree(this.repo, lane.branch, checkouts.get(lane.branch)), changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
+      const checkout = inspectWorktree(this.repo, lane.branch, checkouts.get(lane.branch));
+      const availability: { git_worktree_available: boolean; git_worktree_unavailable_reason?: WorktreeUnavailableReason } =
+        'path' in checkout ? { git_worktree_available: true } : checkout;
+      return { id: lane.id, branch: lane.branch, agent: lane.agent, ahead, behind, ...availability, changed_files: changed, footprint_drift: changed.filter(path => !lane.files.some(file => overlaps(file, path))) };
     });
     for (const [i, left] of lanes.entries()) for (const right of lanes.slice(i + 1)) predictions.push({ ...predict(this.repo, left.sha, right.sha), left_id: left.id, left_branch: left.branch, right_id: right.id, right_branch: right.branch });
     const clean_pairs = predictions.filter(row => row.clean).length;
