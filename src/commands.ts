@@ -108,7 +108,12 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       const shared = swarm as SharedTracker;
       const token = textOption(ctx.options.token);
       const budget = ctx.options.tokenBudget === undefined ? undefined : Number(textOption(ctx.options.tokenBudget));
-      if (ctx.options.continuation === true) return { ...await shared.continuation(id, textOption(ctx.options.to)!, token, budget, textOption(ctx.options.capacity)) };
+      if (ctx.options.continuation === true) {
+        const to = textOption(ctx.options.to);
+        return { ...await (to === undefined
+          ? shared.readContinuation(id, token, budget)
+          : shared.continuation(id, to, token, budget, textOption(ctx.options.capacity))) };
+      }
       return { ...await readAssignmentBrief(shared.engine, id, token, budget) };
     }
     case 'next': {
@@ -176,12 +181,12 @@ export const swarmCommandDefinitions = {
   deadlocks: { mutations: [{ action: 'request', apply: true }], description: 'Declare fenced resource waits or observe bounded deadlock witnesses', flags: ['agent', 'action', 'token', 'resources', 'revision', 'clear', 'apply', 'limit'], id: false },
   progress: { mutations: ['claimed', 'produced', 'reviewed', 'accepted'].map(stage => ({ stage, apply: true })), description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
   interrupt: { mutations: [{}], description: 'Record capacity exhaustion and retain the lane fence until reset or continuation', flags: ['agent', 'token', 'reason', 'capacity'], id: true },
-  capacity: { mutations: ['declare', 'observe', 'policy'].map(action => ({ action })), description: 'Declare, observe or inspect a windowed capacity', flags: ['agent', 'action', 'limit', 'unit', 'window', 'resets-at', 'used', 'source', 'at', 'band', 'else'], id: true },
+  capacity: { mutations: ['declare', 'observe', 'policy'].map(action => ({ action })), description: 'Declare, observe or inspect a windowed capacity', flags: ['agent', 'action', 'limit', 'unit', 'window', 'resets-at', 'used', 'source', 'at', 'band', 'else', 'forecast'], id: true },
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
   schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run', 'capacity'], id: false },
-  brief: { mutations: [{ continuation: true }], description: 'Read a fenced assignment or transfer it with a bounded continuation', flags: ['agent', 'token', 'token-budget', 'continuation', 'to', 'capacity'], id: true },
-  next: { mutations: [{}], description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run', 'capacity'], id: false },
+  brief: { mutations: [{ continuation: true, to: 'receiver' }], description: 'Read a fenced assignment or continuation, or transfer it with --to', flags: ['agent', 'token', 'token-budget', 'continuation', 'to', 'capacity'], id: true },
+  next: { mutations: [{}], description: 'Start ready work. A full capacity pool returns capacity_lanes_occupied.', flags: ['agent', 'parent', 'dry-run', 'capacity'], id: false },
   start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict', 'capacity'], id: true },
   status: { mutations: [], description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
   sync: { mutations: [{ apply: true }], description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files', 'token'], id: true },
@@ -213,7 +218,8 @@ const capacityHelp: Readonly<Record<string, string>> = {
   at: 'ISO observation time, defaults to now',
   band: 'Repeatable strict threshold, such as forecast<88=3',
   else: 'Allowed lanes when no band matches or forecast is unknown',
-  continuation: 'Transfer the fenced lane and emit its continuation packet',
+  forecast: 'Projection for admission: recent, window or max (default max)',
+  continuation: 'Read the current fenced continuation packet. Add --to to transfer it.',
   to: 'Receiver of the continuation fence',
   reason: 'Stop reason: capacity_exhausted',
   'token-budget': 'Maximum estimated tokens in JSON and TOON',
@@ -222,13 +228,13 @@ const capacityExamples: Readonly<Record<string, string[]>> = {
   capacity: [
     'pm swarm capacity codex --action declare --limit 100 --unit percent --window 7d --resets-at <ISO>',
     'pm swarm capacity codex --action observe --used 44 --source codexbar',
-    "pm swarm capacity codex --action policy --band 'forecast<88=3' --else 0",
+    "pm swarm capacity codex --action policy --band 'forecast<88=3' --else 0 --forecast max",
   ],
   schedule: ['pm swarm schedule --agent worker --skills typescript --capacity codex,ollama --dry-run'],
   next: ['pm swarm next --agent worker --capacity codex,ollama --json'],
   start: ['pm swarm start task-id --agent worker --capacity codex --strict --json'],
   interrupt: ['pm swarm interrupt task-id --agent worker --token 1 --reason capacity_exhausted --capacity codex'],
-  brief: ['pm swarm brief task-id --agent worker --token 1 --continuation --to worker-2 --token-budget 800'],
+  brief: ['pm swarm brief task-id --agent worker --token 1 --continuation --to worker-2 --token-budget 800', 'pm swarm brief task-id --agent worker-2 --token 2 --continuation'],
 };
 
 /** Register portable fields and command metadata for host TOON/JSON rendering. */

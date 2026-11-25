@@ -6,10 +6,10 @@ status: in_progress
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#99"
 created_at: "2026-11-25T08:30:21.206Z"
-updated_at: "2026-11-25T10:26:38.757Z"
+updated_at: "2026-11-25T11:29:32.798Z"
 author: codex-agent
 acceptance_criteria: "Declare and observe windowed capacities, enforce counted admission for next and start, fence interruptions across reclaim, and transfer a bounded continuation packet in Git and shared tracker modes."
-comments[10]{created_at,author,text}:
+comments[15]{created_at,author,text}:
   "2026-11-25T08:30:46.293Z",codex-agent,"Baseline reproduced in a real non-Git tracker: capacity and interrupt were missing, capacity flags on next/start and continuation on brief were rejected, and plain next admitted two workers without a quota bound. Implementing five pushed slices with native revision checks and a real process race."
   "2026-11-25T08:33:41.905Z",codex-agent,"Slice 1: capacities are native tagged items and each observation is revision-checked and appended to the item history. The read model uses the last two in-window points when both are at most 24 hours old. Revert proof: replacing the forecast with null failed the historical 56 + 8/7 forecast assertion; restored the implementation."
   "2026-11-25T09:00:52.798Z",codex-agent,"Slice 2: next and start share primary capacity admission with dry-run and report measured refusal context and the next fallback command. Two independent next processes on disjoint work produced one admitted lane and one capacity_exhausted refusal. Revert proof: ignoring occupied slots admitted both workers; the process test failed with exits 0 and 0. The weekly replay produced 57.14 percent and three admitted lanes using the supplied readings and illustrative observation times."
@@ -20,6 +20,11 @@ comments[10]{created_at,author,text}:
   "2026-11-25T10:08:46.571Z",codex-agent,"Exact-head CI for 2b0150c passed Node 22 and CodeQL. Node 26 passed 1281 tests and failed the unchanged coverage thresholds at 99.59 percent statements and lines, 98.67 percent branches, and 99.76 percent functions. Run: https://github.com/unbraind/pm-swarm/actions/runs/45587781231. Added ten real-tracker tests for malformed records, late resets, native fences, receiver slot reuse, absent Git provenance and Git ref movement. The new linked test passed 10 of 10. Reverting the README alone failed its runnable example assertion."
   "2026-11-25T10:24:08.556Z",codex-agent,"Follow-up verification: scoped branch diagnostics reached every branch in capacity, interruption and continuation after exercising quoted fallback arguments, invalid native generations, empty activity and incompatible command boundaries. The action selector now validates its own keys before an exhaustive dispatch. The 281-test command and lease selection passed, the updated linked boundary suite passed 12 of 12, and both packed npm and Bun cases passed again. Project coverage thresholds remain unchanged for CI certification."
   "2026-11-25T10:26:37.753Z",codex-agent,"CI at b04441b reported 100 percent statements, functions and lines and 99.77 percent branches. The Node 26 suite also caught the missing subprocess deadline in the Git interleaving fixture. Run: https://github.com/unbraind/pm-swarm/actions/runs/45592190671. Added the deadline and reran the inventory with the boundary suite. Remaining branch locations from that report are exercised by the command boundary tests and the exhaustive action dispatch."
+  "2026-11-25T11:01:38.436Z",codex-agent,"Resumed draft PR #102 at bb87576 and reviewed the packed-build replay. Plan: distinguish full lane pools, add conservative dual forecasts, and allow the current holder to reread the stored continuation. Preserve reporter inputs, SDK fencing, and the documented ordered fallback command."
+  "2026-11-25T11:08:43.698Z",codex-agent,"Packed-build finding 1: full pools now return capacity_lanes_occupied with active/admitted counts, reset and one runnable retry. Reported and measured exhaustion and over-limit forecasts retain distinct codes. Real processes execute the Ollama fallback for each refusal. Revert proof: restoring capacity_exhausted for the occupied branch made the final-slot race fail on the code assertion."
+  "2026-11-25T11:08:46.534Z",codex-agent,"Packed-build finding 2: status exposes recent and whole-window forecasts, and policy selects recent, window or max (the default, including legacy policies). The supplied timestamps give 64.325% elapsed, 76.010% recent and 90.167% whole-window, admitting two lanes. Revert proof: selecting recent in the max branch made the fixed-clock test fail with 76.010 instead of the expected 90.167."
+  "2026-11-25T11:08:48.947Z",codex-agent,"Packed-build finding 3: the current token holder rereads the saved transfer receipt without a writer lease or history append. Live reads before transfer include the current claim history. Both packet forms include linked files. Revert proof: restoring the missing-to refusal made the receiver read fail with exit 2 instead of returning the transferred packet."
+  "2026-11-25T11:29:31.495Z",codex-agent,"Follow-up gates passed: 454 dependent and privacy tests across 41 files, five ordinary assignment brief tests, the 30-case linked capacity and continuation suite, and both packed consumers. Privacy checks rejected 27,130 unsafe invocations with zero tracker changes or partial receipts. Build, typecheck, lint, duplication (zero clones) and docstrings (266 declarations) passed. Scoped diagnostics exercised all new executable branches. The PR remains draft for exact-head CI."
 files[21]{path,scope}:
   index.ts,project
   src/admission.ts,project
@@ -42,7 +47,7 @@ files[21]{path,scope}:
   test/privacy-punctuation.test.ts,project
   test/privacy-refusals.test.ts,project
   test/privacy-sinks.test.ts,project
-tests[4]:
+tests[5]:
   - command: node --test --test-concurrency=2 test/capacity.test.ts
     scope: project
     provenance:
@@ -70,6 +75,14 @@ tests[4]:
     provenance:
       author: codex-agent
       created_at: "2026-11-25T10:08:29.155Z"
+      source_kind: local_mutation
+      source_ref: feat/capacity-aware-lane-admission
+  - command: node --test --test-concurrency=2 test/capacity.test.ts test/capacity-edges.test.ts test/continuation.test.ts
+    scope: project
+    timeout_seconds: 480
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-25T11:08:58.288Z"
       source_kind: local_mutation
       source_ref: feat/capacity-aware-lane-admission
 docs[4]{path,scope}:

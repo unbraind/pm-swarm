@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { estimatePmOutputTokens, getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
-import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
-import { Capacities, SharedTracker } from '../index.ts';
+import { decodeToon, encodeToon } from '@unbrained/pm-cli/sdk/testing';
+import { Capacities, SharedTracker, Swarm } from '../index.ts';
 import type { ContinuationPacket } from '../index.ts';
 import { sharedFixture } from './shared-helpers.ts';
 import { fixture } from './helpers.ts';
 import { join } from 'node:path';
+import { declareService } from './privacy-mutations.ts';
 
 /** Declare and admit a capacity through the native SDK for fixture use. */
 async function enableCapacity(capacity: Capacities, name: string) {
@@ -35,16 +36,17 @@ test('non-Git continuation transfers the fence and ordered post-claim work withi
   assert.equal(tooSmall.status, 2);
   assert.match(tooSmall.stdout + tooSmall.stderr, /Increase --token-budget/);
   assert.equal((await getHistory()).length, count);
-  const packet = f.run(...options, '--token-budget', '800') as unknown as ContinuationPacket;
+  const packet = f.run(...options, '--token-budget', '1000') as unknown as ContinuationPacket;
   assert.equal(packet.token, '2');
   assert.equal(packet.capacity, 'second');
   assert.equal(packet.interruption?.capacity, 'first');
   assert.equal(packet.context.acceptance_criteria, 'Parser handles empty inputs');
   assert.equal(packet.acceptance_state, 'unverified');
   assert.deepEqual(packet.context.activity?.map(row => row.kind), ['linked_file', 'comment', 'synced_path', 'test']);
-  assert.doesNotMatch(JSON.stringify(packet), /initial.ts|Existing context/);
+  assert.deepEqual(packet.context.files, ['src/initial.ts', 'src/linked.ts', 'src/synced.ts']);
+  assert.doesNotMatch(JSON.stringify(packet.context.activity), /initial.ts|Existing context/);
   const bytes = Math.max(Buffer.byteLength(JSON.stringify(packet)), Buffer.byteLength(encodeToon(packet)));
-  assert.ok(estimatePmOutputTokens(bytes + 1) <= 800);
+  assert.ok(estimatePmOutputTokens(bytes + 1) <= 1000);
   assert.equal((await getHistory()).length, count + 1);
   assert.equal((await f.client.get(id)).item.assignee, 'receiver');
   assert.equal((await capacity.run('first')).reported_exhausted, true);
@@ -52,6 +54,38 @@ test('non-Git continuation transfers the fence and ordered post-claim work withi
   await assert.rejects(f.shared.heartbeat(id, token), /swarm_stale_fence/);
   const incoming = f.run('swarm', 'next', '--agent', 'receiver');
   assert.deepEqual(incoming.context, packet);
+
+  const read = ['swarm', 'brief', id, '--continuation'];
+  const committedHistory = await getHistory();
+  assert.deepEqual(f.run(...read, '--agent', 'receiver', '--token', packet.token), packet);
+  const toon = f.cli(...read, '--agent', 'receiver', '--token', packet.token, '--output-format', 'toon');
+  assert.equal(toon.status, 0, toon.stderr);
+  assert.deepEqual(decodeToon(toon.stdout), packet);
+  for (const [agent, fence] of [['shared-test', packet.token], ['receiver', token]]) {
+    const refused = f.cli(...read, '--agent', agent, '--token', fence, '--json');
+    assert.equal(refused.status, 2);
+    assert.match(refused.stdout + refused.stderr, /swarm_stale_fence/);
+  }
+  const smallReplay = f.cli(...read, '--agent', 'receiver', '--token', packet.token, '--token-budget', '1', '--json');
+  assert.equal(smallReplay.status, 2);
+  assert.match(smallReplay.stdout + smallReplay.stderr, /Increase --token-budget/);
+  assert.deepEqual(await getHistory(), committedHistory);
+});
+
+test('the stopped owner can read the live continuation without transferring the claim', async t => {
+  const f = await sharedFixture(t);
+  await enableCapacity(new Capacities(f.shared.engine), 'first');
+  const id = await f.item(['src/initial.ts']);
+  const { token } = await f.shared.start(id, {}, true, 'first');
+  f.run('swarm', 'interrupt', id, '--token', token, '--capacity', 'first', '--reason', 'capacity_exhausted');
+  const getHistory = () => readHistoryEntries(getHistoryPath(f.pmRoot, id), id);
+  const history = await getHistory();
+  const packet = f.run('swarm', 'brief', id, '--agent', 'shared-test', '--token', token, '--continuation') as unknown as ContinuationPacket;
+  assert.equal(packet.from, 'shared-test');
+  assert.equal(packet.to, 'shared-test');
+  assert.equal(packet.token, token);
+  assert.equal(packet.interruption?.reason, 'capacity_exhausted');
+  assert.deepEqual(await getHistory(), history);
 });
 
 test('Git continuation includes the lane commits and both tracked and untracked edits', async t => {
@@ -71,4 +105,24 @@ test('Git continuation includes the lane commits and both tracked and untracked 
   assert.deepEqual(packet.context.uncommitted_paths, ['tracked.ts', join('new dir', 'untracked.ts')]);
   assert.equal((await f.client.get(id)).item.swarm_branch, lane.branch);
   assert.equal((await f.client.get(id)).item.assignee, 'receiver');
+  const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+  assert.deepEqual(await receiver.readContinuation(id, packet.token), packet);
+});
+
+test('continuation read uses current evidence after an ordinary handoff and requires a native fence', async t => {
+  const f = await sharedFixture(t);
+  const id = await f.item(['src/initial.ts']);
+  const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+  await assert.rejects(receiver.readContinuation(id, 'invalid'), /Supply the decimal --token/);
+  await f.client.claim(id, { author: 'receiver' });
+  await assert.rejects(receiver.readContinuation(id, '1'), /swarm_stale_fence/);
+  await f.client.release(id, { author: 'receiver' });
+  const claim = await f.shared.start(id);
+  const handoff = await f.shared.handoff(id, 'receiver', 'Ordinary handoff', claim.token);
+  const packet = await receiver.readContinuation(id, handoff.token, 600);
+  assert.equal(packet.from, 'receiver');
+  assert.equal(packet.token_budget, 600);
+  assert.deepEqual(packet.context.files, ['src/initial.ts']);
+  declareService(f);
+  await assert.rejects(receiver.readContinuation(id, handoff.token), /local tracker with native history/);
 });

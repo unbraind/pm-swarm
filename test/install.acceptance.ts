@@ -269,19 +269,24 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} admits an
   const { bun, repo, pmRoot, host, env, invoke } = await packedNonGitConsumer(t, manager);
   const runtime = manager === 'npm' ? process.execPath : bun;
   const now = Date.now();
-  const reset = new Date(now + 4 * 3_600_000).toISOString();
-  const ms = 3_600_000;
+  const minute = 60_000;
+  const reset = new Date(now + 3596 * minute).toISOString();
   invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'declare', '--window', '7d', '--resets-at', reset, '--unit', 'percent', '--limit', '100']);
-  invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'policy', '--band', 'forecast<88=3', '--band', 'forecast<95=2', '--else', '0']);
-  for (const [hoursAgo, used] of [[23, 44], [16, 49], [7, 54], [0, 56]]) {
-    invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'observe', '--used', String(used), '--at', new Date(now - hoursAgo * ms).toISOString(), '--source', 'codexbar']);
+  invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'policy', '--band', 'forecast<88=3', '--band', 'forecast<95=2', '--band', 'forecast<98=1', '--else', '0', '--forecast', 'max']);
+  for (const [minutesAgo, used] of [[1449, 44], [930, 49], [599, 55], [0, 58]]) {
+    invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'observe', '--used', String(used), '--at', new Date(now - minutesAgo * minute).toISOString(), '--source', 'codexbar']);
   }
   const status = invoke(runtime, ['swarm', 'capacity', 'codex']);
-  assert.equal(status.admitted_lane_count, 3);
-  assert.ok(Math.abs(Number(status.forecast) - (56 + 8 / 7)) < 1e-12);
+  assert.equal(status.admitted_lane_count, 2);
+  assert.equal(Number(status.forecast_recent).toFixed(2), '76.01');
+  assert.ok(Math.abs(Number(status.forecast_window) - 90.17) < 0.25);
+  assert.equal(status.forecast, status.forecast_window);
   const toon = spawnSync(runtime, [host, '--path', pmRoot, 'swarm', 'capacity', 'codex', '--output-format', 'toon'], { cwd: repo, env, encoding: 'utf8', timeout: testTime(300000) });
   assert.equal(toon.status, 0, toon.stderr);
-  assert.equal((decodeToon(toon.stdout) as Record<string, unknown>).admitted_lane_count, 3);
+  const portable = decodeToon(toon.stdout) as Record<string, unknown>;
+  assert.equal(portable.admitted_lane_count, 2);
+  assert.equal(portable.forecast_recent, status.forecast_recent);
+  assert.equal(portable.forecast, portable.forecast_window);
 
   const id = String(invoke(runtime, ['create', 'Task', 'Packed capacity lane', '--ac', 'Check packet']).id);
   invoke(runtime, ['files', id, '--add', 'src/capacity.ts']);
@@ -293,6 +298,8 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} admits an
   assert.equal(packet.to, 'receiver');
   assert.equal(packet.token, '2');
   assert.equal((packet.context as Record<string, unknown>).acceptance_criteria, 'Check packet');
+  assert.deepEqual((packet.context as Record<string, unknown>).files, ['src/capacity.ts']);
+  assert.deepEqual(invoke(runtime, ['swarm', 'brief', id, '--continuation', '--agent', 'receiver', '--token', '2']), packet);
   assert.equal(invoke(runtime, ['swarm', 'capacity', 'codex']).reported_exhausted, true);
   assert.equal(existsSync(join(repo, '.git')), false);
 });

@@ -124,10 +124,14 @@ durability of directory entries is not claimed. See the documented
 
 Capacity configuration and observations live on native `swarm-capacity` items.
 The SDK appends each observation to the item's history. The current projection
-retains the two most recent measurements in the window. Admission counts
-nonterminal assigned lanes from the same local tracker while holding the
-operation lease. Git and shared starts publish their capacity with lane
-metadata and fencing information. Preview evaluates the same policy.
+retains the two most recent measurements in the window. Two fresh points
+yield both a recent-rate projection and a whole-window pace projection.
+The policy defaults to the larger projection and can select either one
+explicitly. Admission counts nonterminal assigned lanes from the same local
+tracker while holding the operation lease. It reports occupied lane pools,
+recorded or measured exhaustion, and forecasts at or above the limit
+separately. Git and shared starts publish their capacity with lane metadata
+and fencing information. Preview evaluates the same policy.
 
 A stopped lane records its claim generation and the exhausted reset time in one
 revision-guarded work-item update. That record also drives the capacity's
@@ -136,3 +140,7 @@ before transferring ownership. Continuation advances the fence and persists
 the bounded receiver packet in the native handoff field. The old interruption
 continues to apply to its window. The packet uses the native claim revision as
 its history baseline and resolves Git paths only for a registered worktree lane.
+A continuation read checks the current owner and token against a stable native
+history head. It returns the saved transfer packet for that generation or
+builds context from the current claim. The read appends no history and takes
+no writer lease.

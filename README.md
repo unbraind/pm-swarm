@@ -284,57 +284,64 @@ revision. These commands work in Git worktrees and plain trackers.
 
 ### Worked example
 
-Replay the observed Codex readings of 44%, 49%, 54% and 56% from November
-24–25, 2026. The example uses illustrative UTC measurement times and a weekly
-window ending at noon on November 25. For a live run, supply the actual reset
-and measurement times. The commands below shift the example times to the
-current clock so the replay can run in a scratch tracker. Omit `--at` to
-record the time of observation.
+Replay the Codex readings of 44%, 49%, 55% and 58% at 10:15 and 18:54 UTC
+on November 24, 2026, and at 00:25 and 10:24 UTC on November 25. The
+seven-day window resets on November 27 at 22:20 UTC. The commands shift those
+timestamps together so the replay can run in a scratch tracker. For live
+observations, supply the actual reset and observation times or omit `--at`
+to record the current time.
 
 ```sh
 example_time=$(node -p 'Date.now()')
 stamp() {
-  node -p 'new Date(Number(process.argv[1]) + Number(process.argv[2]) * 3600000).toISOString()' -- "$example_time" "$1"
+  node -p 'new Date(Number(process.argv[1]) + Number(process.argv[2]) * 60000).toISOString()' -- "$example_time" "$1"
 }
 pm swarm capacity codex --action declare --limit 100 --unit percent \
-  --window 7d --resets-at "$(stamp 4)"
+  --window 7d --resets-at "$(stamp 3596)"
 pm swarm capacity codex --action policy \
   --band 'forecast<88=3' --band 'forecast<95=2' --band 'forecast<98=1' --else 0
-pm swarm capacity codex --action observe --used 44 --source codexbar --at "$(stamp -23)"
-pm swarm capacity codex --action observe --used 49 --source codexbar --at "$(stamp -16)"
-pm swarm capacity codex --action observe --used 54 --source codexbar --at "$(stamp -7)"
-pm swarm capacity codex --action observe --used 56 --source codexbar --at "$(stamp 0)"
+pm swarm capacity codex --action observe --used 44 --source codexbar --at "$(stamp -1449)"
+pm swarm capacity codex --action observe --used 49 --source codexbar --at "$(stamp -930)"
+pm swarm capacity codex --action observe --used 55 --source codexbar --at "$(stamp -599)"
+pm swarm capacity codex --action observe --used 58 --source codexbar --at "$(stamp 0)"
 pm swarm capacity codex --json
 ```
 
-At 08:00 UTC, 164 of 168 hours have elapsed and four hours remain. The last
-two observations increased by two percentage points in seven hours, so the
-burn rate is about 0.286 percentage points per hour and the forecast is
-**57.14% at reset**. The first policy band admits **three simultaneous lanes**.
-With no current claims all three slots are available.
+At 10:24 UTC, 64.33% of the weekly window has elapsed. The last two readings
+rose by three percentage points in 9h 59m. Extending that rate to reset gives
+`forecast_recent` of **76.01%**. Dividing 58% used by the elapsed share gives
+`forecast_window` of **90.17%**. The default `--forecast max` selects 90.17%
+and admits **two simultaneous lanes** in the `forecast<95=2` band. Use
+`--forecast recent` or `--forecast window` on the policy to select one
+projection explicitly. Status shows both projections and the selected
+`forecast`.
 
-The projection uses the newest two observations in the current window and
-reports `forecast: null` if either is missing or older than 24 hours. A
-decrease between measurements yields a zero burn rate. Status labels stale measurements and reports the elapsed share, burn rate per hour,
-forecast, lane count, current occupancy and seconds to reset. Band thresholds
-are exclusive and strictly increasing, in the declared unit. The first match
-wins. `--else` applies with no match or an unknown forecast and defaults to zero.
-A fresh measurement or forecast at or above the limit blocks admission. After
-the reset, declare the next window with its new reset time.
+Both projections are unknown if either of the two latest observations is
+missing or older than 24 hours. A decrease between observations yields a zero
+recent burn rate. Band thresholds are exclusive and strictly increasing, in
+the declared unit. The first match wins. `--else` applies with no match or an
+unknown forecast and defaults to zero. A fresh measurement or selected
+forecast at or above the limit blocks admission. After the reset, declare the
+next window with its new reset time.
 
 ```sh
 pm swarm capacity ollama --action declare --limit 100 --unit percent \
-  --window 7d --resets-at "$(stamp 4)"
+  --window 7d --resets-at "$(stamp 3596)"
 pm swarm capacity ollama --action policy --else 1
 pm swarm next --agent worker --capacity codex,ollama --json
 pm swarm start task-id --agent worker --capacity codex --strict --json
 ```
 
-The first capacity in the list is evaluated for admission under the same
-tracker lease that grants the claim. A refusal gives the observed usage,
-forecast, reset time and a runnable retry command for the next capacity.
-Use `next --dry-run` to check the same policy without taking a slot.
-`schedule --capacity` uses the same admission check with its skill and
+Admission evaluates the first capacity under the same tracker lease that
+grants the claim. Once both Codex lanes are active, another worker using
+`--capacity codex,ollama` gets `capacity_lanes_occupied` with
+“2 of 2 admitted lanes active,” the reset time and a retry such as
+`pm swarm next --agent worker --capacity ollama`. Provider exhaustion returns
+`capacity_exhausted`, a selected forecast at or above the limit returns
+`capacity_forecast_exceeded`, and a policy admitting zero lanes returns
+`capacity_policy_denied`. They also provide a runnable retry for the next
+capacity in the list. Use `next --dry-run` to check admission without taking
+a slot. `schedule --capacity` applies the same check with its skill and
 priority rules.
 
 When a provider stops a worker, keep the item's claim and mark that window
@@ -347,16 +354,21 @@ pm swarm interrupt task-id --agent worker --token 1 \
   --reason capacity_exhausted --capacity codex
 pm swarm brief task-id --agent worker --token 1 --continuation \
   --to worker-2 --capacity ollama --token-budget 800 --json
+pm swarm brief task-id --agent worker-2 --token 2 --continuation --json
 ```
 
-The continuation records the interruption, the current acceptance criteria
-with an unverified status, and changes to linked files, synced paths, comments
+The continuation records the interruption, acceptance criteria with an
+unverified status, linked files, and changes to files, synced paths, comments
 and tests in native revision order after the claim. A Git lane also includes
 commit IDs and uncommitted paths from its worktree. The recipient gets a new
 token. The previous window stays exhausted until its reset. A continuation
 from an interrupted lane drops the old capacity binding when no replacement
-capacity is supplied. The packet budget covers both JSON and TOON, with the
-same privacy checks and omission receipts as assignment briefs.
+capacity is supplied. With no `--to`, the current token holder can read the
+saved transfer packet again without appending history or renewing liveness.
+Before any transfer, this form reads the current claim's continuation. The
+packet budget covers both JSON and TOON, with the same privacy checks and
+omission receipts as assignment briefs. A saved packet keeps its original
+budget by default.
 
 ## Budgeted assignment briefs
 

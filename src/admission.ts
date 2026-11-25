@@ -31,7 +31,7 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   if (['start', 'sync', 'handoff', 'close', 'resource', 'progress', 'brief', 'capacity', 'interrupt'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
   if (options.token !== undefined && !/^\d+$/.test(String(options.token))) invalid('Use the decimal --token returned by the last successful claim.');
   if (command === 'brief') {
-    if (options.continuation === true && options.to === undefined) invalid('Supply --to to transfer the continuation.');
+    if (options.capacity !== undefined && options.to === undefined) invalid('Supply --to to select a capacity for continuation transfer.');
     if (options.continuation !== true && (options.to !== undefined || options.capacity !== undefined)) invalid('Use --continuation with --to or --capacity.');
   }
   if (command === 'interrupt' && (options.reason !== 'capacity_exhausted' || options.capacity === undefined || options.token === undefined)) invalid('interrupt requires --capacity, --reason capacity_exhausted and the current --token.');

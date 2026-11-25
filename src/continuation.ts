@@ -1,6 +1,6 @@
 import { getItemAt, getHistoryPath, readHistoryEntries, hashHistoryStream } from '@unbrained/pm-cli/sdk';
 import type { ItemDocument } from '@unbrained/pm-cli/sdk';
-import { assertBriefIdentitySafe, packBrief } from './assignment-brief.ts';
+import { assertBriefBudget, assertBriefIdentitySafe, packBrief } from './assignment-brief.ts';
 import { currentInterruption } from './interruption.ts';
 import type { CapacityInterruption } from './interruption.ts';
 import { git, commit, branchExists } from './git.ts';
@@ -27,11 +27,12 @@ interface ContinuationWork {
   acceptance_criteria?: string;
   title?: string;
   activity?: Activity[];
+  files?: string[];
   commits?: string[];
   uncommitted_paths?: string[];
 }
 
-/** Portable receiver context with a new ownership fence and chronological evidence. */
+/** Portable receiver context with the ownership fence and chronological evidence. */
 export interface ContinuationPacket {
   id: string;
   from: string;
@@ -144,5 +145,15 @@ export async function buildContinuation(engine: Swarm, item: Record<string, unkn
     id, from, to, token, token_budget, claim_started_at, interruption, capacity, acceptance_state: 'unverified',
     ...(git_worktree_available === undefined ? {} : { git_worktree_available }), context: {}, omission_receipt: {},
   };
-  return packBrief(packet, { acceptance_criteria: item.acceptance_criteria as string | undefined, title: item.title as string | undefined, activity, commits, uncommitted_paths });
+  const files = evidence(item as ItemDocument['metadata'], 'files').map(({ path }) => path!);
+  return packBrief(packet, { acceptance_criteria: item.acceptance_criteria as string | undefined, title: item.title as string | undefined, activity, files, commits, uncommitted_paths });
+}
+
+/** Return the exact saved transfer receipt, checking privacy and any newly requested budget. */
+export function replayContinuation(snapshot: Record<string, unknown>, tokenBudget?: number): ContinuationPacket {
+  assertBriefIdentitySafe(snapshot);
+  const packet = snapshot as unknown as ContinuationPacket;
+  const token_budget = tokenBudget ?? packet.token_budget;
+  assertBriefBudget(token_budget);
+  return packBrief({ ...packet, token_budget }, {});
 }

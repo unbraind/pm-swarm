@@ -69,11 +69,11 @@ test('capacity options distinguish missing values and enforce explicit command c
     { action: 'observe', used: 1, source: 'manual', at: false },
     { action: 'observe', used: 1, source: 'manual', at: '2026-99-99T00:00:00Z' },
     { action: 'policy', band: Array(33).fill('forecast<10=1') }, { action: 'policy', band: [false] },
-    { action: 'status', used: 1 },
+    { action: 'status', used: 1 }, { action: 'policy', forecast: 'average' },
   ]) assert.throws(() => capacityAction(options, Date.now()), /capacity_invalid/);
   assert.throws(() => capacityOrder('same,SAME'), /distinct/);
   assert.throws(() => capacityOrder(Array.from({ length: 17 }, (_, index) => 'capacity-' + index).join(',')), /up to 16/);
-  assert.deepEqual(capacityAction({ action: 'policy', band: 'forecast<10=2', agent: 'worker', unused: undefined }, Date.now()), { action: 'policy', policy: { bands: ['forecast<10=2'], otherwise: 0 } });
+  assert.deepEqual(capacityAction({ action: 'policy', band: 'forecast<10=2', agent: 'worker', unused: undefined }, Date.now()), { action: 'policy', policy: { bands: ['forecast<10=2'], otherwise: 0, forecast: 'max' } });
 });
 
 test('handoff reception binds capacity once, with a write-free preview and a fenced stopped receipt', async t => {
@@ -110,7 +110,8 @@ test('interrupt validates portable records, writer fences and the command shape'
   for (const args of [
     ['interrupt', id, '--reason', 'capacity_exhausted', '--token', claim.token],
     ['interrupt', id, '--reason', 'capacity_exhausted', '--capacity', 'runner'],
-    ['brief', id, '--continuation', '--token', claim.token],
+    ['brief', id, '--continuation'],
+    ['brief', id, '--continuation', '--capacity', 'runner', '--token', claim.token],
     ['brief', id, '--to', 'receiver', '--token', claim.token],
     ['brief', id, '--capacity', 'runner', '--token', claim.token],
   ]) assert.equal(f.cli('swarm', ...args, '--json').status, 2);

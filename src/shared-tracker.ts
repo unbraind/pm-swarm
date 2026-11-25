@@ -1,4 +1,4 @@
-import { buildContinuation, SYNC_HISTORY_MESSAGE } from './continuation.ts';
+import { buildContinuation, replayContinuation, SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import { assertBriefBudget, assertBriefIdentitySafe } from './assignment-brief.ts';
 import { currentInterruption, interruptionRefusal } from './interruption.ts';
 import type { CapacityStatus } from './capacity.ts';
@@ -16,7 +16,7 @@ import type { Lease } from './lease.ts';
 import type { SwarmSettings } from './types.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import { recoveryItem } from './recovery.ts';
-import { clientMutationSnapshot, inspectItem, inspectItems, readItem } from './inspection.ts';
+import { clientMutationSnapshot, inspectItem, inspectItems, mutationSnapshot, readItem } from './inspection.ts';
 import { completeClaim, assertCloseIntentSettled, closeIntentSettled } from './close.ts';
 
 /** Explain the Git requirement consistently in CLI and embedded shared mode. */
@@ -335,6 +335,41 @@ export class SharedTracker {
     return this.owned(id, token, (item, lease, history) => transfer(item, lease, history), item => transfer(item));
   }
 
+  /** Require an active assignment with settled close state before reading or transferring its packet. */
+  private async assertContinuationActive(item: Record<string, unknown>) {
+    assertCloseIntentSettled(this.engine, item);
+    const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
+    if (statusIsTerminal(String(item.status), statuses)) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item for continuation.');
+  }
+
+  /** Read the current holder's continuation without renewing liveness or writing native history. */
+  async readContinuation(id: string, token: string | undefined, tokenBudget?: number) {
+    assertBriefIdentitySafe({ id, token, author: this.engine.author });
+    if (token === undefined || !/^\d+$/.test(token)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the decimal --token returned by the current swarm claim.');
+    const { pmRoot, repo } = this.engine;
+    /** Resolve the native item without writing usage or taking a writer lease. */
+    const readLocal = async () => {
+      const local = await inspectItem(pmRoot, repo, id);
+      if (local === null) throw new SettingsRefusal('swarm_input_invalid', 'Use a local tracker with native history for continuation.');
+      return local.item;
+    };
+    const current = await readLocal();
+    const { item, historyHead } = await mutationSnapshot(pmRoot, current.id, readLocal);
+    this.assertFence(item, token);
+    if (item.swarm_token !== token) throw new StaleFenceError(String(item.id));
+    await this.assertContinuationActive(item);
+    if (typeof item.swarm_handoff === 'string') {
+      const saved = parseHandoffContext(String(item.id), item.swarm_handoff, token);
+      if (saved.acceptance_state === 'unverified' && saved.id === item.id && saved.to === item.assignee) {
+        return replayContinuation(saved, tokenBudget);
+      }
+    }
+    const budget = tokenBudget ?? 800;
+    assertBriefBudget(budget);
+    const capacity = (item[LANE_CAPACITY_FIELD] as string | undefined) ?? null;
+    return buildContinuation(this.engine, item, this.engine.author, token, budget, capacity, historyHead);
+  }
+
   /** Transfer the current lane with a bounded continuation packet in the same fenced update. */
   async continuation(id: string, to: string, token?: string, tokenBudget = 800, capacity?: string) {
     to = to.trim();
@@ -344,9 +379,7 @@ export class SharedTracker {
     const order = capacityOrder(capacity);
     /** Prepare the exact packet in preflight and again from the live ownership revision. */
     const prepare = async (item: Record<string, unknown>, history?: ItemHistoryHead) => {
-      assertCloseIntentSettled(this.engine, item);
-      const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-      if (statusIsTerminal(String(item.status), statuses)) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item for continuation.');
+      await this.assertContinuationActive(item);
       const retry = ['--continuation', '--to', to, '--token-budget', String(tokenBudget), ...(token === undefined ? [] : ['--token', token])];
       const admission = await admitCapacity(this.engine, order, String(item.id), 'brief', retry);
       const existing = item[LANE_CAPACITY_FIELD];

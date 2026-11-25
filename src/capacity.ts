@@ -21,7 +21,7 @@ export const OBSERVATION_MAX_AGE_MS = 86_400_000;
 /** A caller-reported cumulative measurement. */
 export interface CapacityObservation { at: string; used: number; source: string }
 /** Ordered exclusive upper bounds in the declared unit. */
-interface CapacityPolicy { bands: string[]; otherwise: number }
+interface CapacityPolicy { bands: string[]; otherwise: number; forecast: 'recent' | 'window' | 'max' }
 
 /** One declared window, with the latest inputs retained in the native item projection. */
 interface CapacityWindow {
@@ -35,7 +35,7 @@ interface CapacityWindow {
 }
 
 /** Stable capacity refusal categories. */
-export type CapacityRefusalCode = 'capacity_invalid' | 'capacity_undeclared' | 'capacity_forecast_exceeded' | 'capacity_exhausted';
+export type CapacityRefusalCode = 'capacity_invalid' | 'capacity_undeclared' | 'capacity_forecast_exceeded' | 'capacity_exhausted' | 'capacity_lanes_occupied' | 'capacity_policy_denied';
 
 /** Measurement and recovery fields portable across the supported host range. */
 type CapacityRefusalDetails = Record<string, string | number | boolean | null>;
@@ -111,7 +111,8 @@ function policyBand(value: unknown): [number, number] {
 }
 
 /** Preserve the caller's band order after validating strictly increasing bounds. */
-function capacityPolicy(values: unknown, fallback: unknown): CapacityPolicy {
+function capacityPolicy(values: unknown, fallback: unknown, forecast: unknown = 'max'): CapacityPolicy {
+  if (forecast !== 'recent' && forecast !== 'window' && forecast !== 'max') throw new CapacityRefusal('capacity_invalid', 'Use --forecast recent, window or max.');
   const bands = Array.isArray(values) ? [...values] : values === undefined ? [] : [values];
   const otherwise = amount(fallback === undefined ? 0 : fallback, '--else');
   if (!Number.isSafeInteger(otherwise) || bands.length > 32) throw new CapacityRefusal('capacity_invalid', 'Use at most 32 bands and a nonnegative integer --else lane count.');
@@ -121,7 +122,7 @@ function capacityPolicy(values: unknown, fallback: unknown): CapacityPolicy {
     if (threshold <= previous) throw new CapacityRefusal('capacity_invalid', 'Order bands by strictly increasing forecast thresholds.');
     previous = threshold;
   }
-  return { bands: bands as string[], otherwise };
+  return { bands: bands as string[], otherwise, forecast };
 }
 
 /** Parse a requested primary capacity and optional ordered retry capacities. */
@@ -135,7 +136,7 @@ export function capacityOrder(value: string | undefined): string[] {
 /** Capacity operations accept only their own input fields and the operator identity. */
 const ACTION_FIELDS = {
   status: [], declare: ['limit', 'unit', 'window', 'resetsAt'],
-  observe: ['used', 'source', 'at'], policy: ['band', 'else'],
+  observe: ['used', 'source', 'at'], policy: ['band', 'else', 'forecast'],
 } as const;
 
 /** Use the same validated values for CLI and embedded callers. */
@@ -159,7 +160,7 @@ export function capacityAction(options: Record<string, unknown>, now: number) {
       return { action: 'declare', limit, unit: label(options.unit, '--unit'), window: windowLength(options.window), resets_at: instant(options.resetsAt, '--resets-at') } as const;
     }
     case 'observe': return { action: 'observe', observation: { used: amount(options.used, '--used'), source: label(options.source, '--source'), at: instant(options.at ?? new Date(now).toISOString(), '--at') } } as const;
-    case 'policy': return { action: 'policy', policy: capacityPolicy(options.band, options.else) } as const;
+    case 'policy': return { action: 'policy', policy: capacityPolicy(options.band, options.else, options.forecast) } as const;
   }
 }
 
@@ -180,7 +181,7 @@ function parseWindow(raw: unknown, name: string): CapacityWindow {
     }
     return { name: state.name, limit: state.limit, unit: state.unit, window: state.window, resets_at: state.resets_at,
       observations: state.observations.map(({ at, used, source }) => ({ at, used, source })),
-      policy: capacityPolicy(state.policy?.bands, state.policy?.otherwise ?? 0) };
+      policy: capacityPolicy(state.policy?.bands, state.policy?.otherwise ?? 0, state.policy?.forecast) };
   } catch {
     throw new CapacityRefusal('capacity_invalid', 'Inspect the native history of the capacity record before repairing its window.');
   }
@@ -195,17 +196,22 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number, 
   const [first, second] = observations.filter(entry => !entry.stale && Date.parse(entry.at) <= now && now < reset);
   const burn_rate_per_hour = first === undefined || second === undefined ? null :
     Math.min(Number.MAX_VALUE, Math.max(0, (second.used - first.used) / (Date.parse(second.at) - Date.parse(first.at))) * 3_600_000);
-  const forecast = burn_rate_per_hour === null ? null : Math.min(Number.MAX_VALUE, second!.used + burn_rate_per_hour * ((reset - Date.parse(second!.at)) / 3_600_000));
+  const elapsed_share = Math.max(0, Math.min(1, (now - start) / state.window));
+  const forecast_recent = burn_rate_per_hour === null ? null : Math.min(Number.MAX_VALUE, second!.used + burn_rate_per_hour * ((reset - Date.parse(second!.at)) / 3_600_000));
+  // A second distinct in-window observation means a positive elapsed share.
+  const forecast_window = second === undefined ? null : Math.min(Number.MAX_VALUE, second.used / elapsed_share);
+  const forecast = forecast_recent === null ? null : state.policy.forecast === 'recent' ? forecast_recent :
+    state.policy.forecast === 'window' ? forecast_window : Math.max(forecast_recent, forecast_window!);
   const band = forecast === null ? undefined : state.policy.bands.map(policyBand).find(([threshold]) => forecast < threshold);
   const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && Date.parse(latest.at) <= now && latest.used >= state.limit;
   const forecast_exceeded = forecast !== null && forecast >= state.limit;
   const admitted_lane_count = exhausted || forecast_exceeded ? 0 : band?.[1] ?? state.policy.otherwise;
   return {
     capacity: state.name, limit: state.limit, unit: state.unit, starts_at: new Date(start).toISOString(), resets_at: state.resets_at,
-    window_seconds: state.window / 1000, elapsed_share: Math.max(0, Math.min(1, (now - start) / state.window)),
+    window_seconds: state.window / 1000, elapsed_share,
     seconds_to_reset: Math.max(0, (reset - now) / 1000), used: latest?.used ?? null, observation_stale: latest?.stale ?? null,
     observation_max_age_seconds: OBSERVATION_MAX_AGE_MS / 1000, observations, burn_rate_per_hour,
-    forecast, reported_exhausted, policy: state.policy, exhausted, forecast_exceeded, admitted_lane_count, active_lanes,
+    forecast, forecast_recent, forecast_window, reported_exhausted, policy: state.policy, exhausted, forecast_exceeded, admitted_lane_count, active_lanes,
     available_lanes: Math.max(0, admitted_lane_count - active_lanes),
   };
 }
@@ -217,7 +223,7 @@ function changeWindow(name: string, previous: CapacityWindow | undefined, change
     if (reset <= now || reset - change.window > now) throw new CapacityRefusal('capacity_invalid', 'Declare a window that contains the current time.');
     if (previous !== undefined && now < Date.parse(previous.resets_at)) throw new CapacityRefusal('capacity_invalid', `The current window is active. Inspect it with pm swarm capacity ${name}.`);
     const { limit, unit, window, resets_at } = change;
-    return { name, limit, unit, window, resets_at, observations: [], policy: previous?.unit === unit ? previous.policy : { bands: [], otherwise: 0 } };
+    return { name, limit, unit, window, resets_at, observations: [], policy: previous?.unit === unit ? previous.policy : { bands: [], otherwise: 0, forecast: 'max' } };
   }
   if (previous === undefined) throw undeclared(name);
   if (change.action === 'policy') return { ...previous, policy: change.policy };
@@ -319,8 +325,12 @@ export async function admitCapacity(engine: Swarm, order: string[], itemId: stri
   }
   const view = registryView(parseWindow(record[CAPACITY_FIELD], name), Date.now(), items, statuses, itemId);
   if (view.available_lanes > 0) return view;
-  const code = view.exhausted || view.admitted_lane_count > 0 ? 'capacity_exhausted' : 'capacity_forecast_exceeded';
-  const message = `Capacity ${name} used ${view.used ?? 'unknown'}, forecast ${view.forecast ?? 'unknown'}, resets at ${view.resets_at}. Run ${nextCommand}.`;
+  const code = view.exhausted ? 'capacity_exhausted' : view.forecast_exceeded ? 'capacity_forecast_exceeded' :
+    view.admitted_lane_count > 0 ? 'capacity_lanes_occupied' : 'capacity_policy_denied';
+  const reason = code === 'capacity_lanes_occupied'
+    ? `${view.active_lanes} of ${view.admitted_lane_count} admitted lanes active`
+    : `used ${view.used ?? 'unknown'}, forecast ${view.forecast ?? 'unknown'}`;
+  const message = `Capacity ${name} ${reason}, resets at ${view.resets_at}. Run ${nextCommand}.`;
   throw new CapacityRefusal(code, message, { ...capacityDiagnosis(view), ...recovery });
 }
 
