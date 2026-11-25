@@ -300,7 +300,7 @@ stamp() {
 pm swarm capacity codex --action declare --limit 100 --unit percent \
   --window 7d --resets-at "$(stamp 3596)"
 pm swarm capacity codex --action policy \
-  --band 'forecast<88=3' --band 'forecast<95=2' --band 'forecast<98=1' --else 0
+  --band 'forecast<88=3' --band 'forecast<95=2' --band 'forecast<98=1' --else 0 --forecast max
 pm swarm capacity codex --action observe --used 44 --source codexbar --at "$(stamp -1449)"
 pm swarm capacity codex --action observe --used 49 --source codexbar --at "$(stamp -930)"
 pm swarm capacity codex --action observe --used 55 --source codexbar --at "$(stamp -599)"
@@ -355,6 +355,8 @@ assigned until the reset or a fenced continuation transfer. A lane whose
 holder and token survive the reset counts toward capacity in the new window.
 Attaching or resuming a Git lane rechecks its existing capacity when the lane
 keeps that binding. Pass the item ID and token from the claim response.
+Use a single bound capacity name with `interrupt --capacity`. Next, start,
+schedule, and continuation transfers accept retry lists.
 
 ```sh
 pm swarm interrupt task-id --agent worker --token 1 \
@@ -373,9 +375,11 @@ The packet still includes the branch commits. Large Git evidence is read
 as complete records, with the packet budget reporting omitted paths or
 commits. The recipient gets a new token. The previous window stays exhausted
 until its reset. A continuation from an interrupted lane drops the old capacity
-binding when no replacement capacity is supplied. With no `--to`, the current
-token holder can read the
-saved transfer packet again without appending history or renewing liveness.
+binding when no replacement capacity is supplied. A capacity record retired by
+a native edit no longer provides a live binding. A subsequent fenced heartbeat
+or admission clears the old binding. An explicit request still requires a
+declared capacity. With no `--to`, the current token holder can read the saved
+transfer packet again without appending history or renewing liveness.
 Before any transfer, this form reads the current claim's continuation. The
 packet budget covers both JSON and TOON, with the same privacy checks and
 omission receipts as assignment briefs. A saved packet keeps its original

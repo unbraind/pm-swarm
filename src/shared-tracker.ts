@@ -3,7 +3,7 @@ import { buildContinuation, replayContinuation, SYNC_HISTORY_MESSAGE } from './c
 import { assertBriefBudget, assertBriefIdentitySafe } from './assignment-brief.ts';
 import { advanceCapacity, laneCapacityState, interruptionRefusal } from './interruption.ts';
 import type { CapacityStatus } from './capacity.ts';
-import { assertNotCapacity, assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityOrderFor, CapacityRefusal, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { assertNotCapacity, assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityUnset, declaredLaneCapacity, CapacityRefusal, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
 import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
@@ -75,14 +75,13 @@ export class SharedTracker {
     const requested = capacityOrder(capacity);
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
       return this.claimLane(id, strict, lease, item =>
-        admitCapacity(this.engine, this.laneOrder(requested, item), String(item.id), 'start', strict ? ['--strict'] : []));
+        admitCapacity(this.engine, requested, String(item.id), 'start', strict ? ['--strict'] : [], this.retainedCapacity(item)));
     });
   }
 
   /** Keep owned claims and retained Git branches on their stored provider unless explicitly rebound. */
-  private laneOrder(requested: string[], item: Record<string, unknown>) {
-    const stored = item.assignee === this.engine.author || typeof item.swarm_branch === 'string' ? item[LANE_CAPACITY_FIELD] : undefined;
-    return capacityOrderFor(requested, stored);
+  private retainedCapacity(item: Record<string, unknown>) {
+    return item.assignee === this.engine.author || typeof item.swarm_branch === 'string' ? item[LANE_CAPACITY_FIELD] : undefined;
   }
 
   /** Validate terminal status, ownership and declared overlap before claiming. */
@@ -156,7 +155,7 @@ export class SharedTracker {
       if (incoming !== undefined) {
         const { receipt, binding } = incoming;
         /** Use the selected binding in preview and the checked native binding when resuming. */
-        const admit = (stored: unknown) => admitNextCapacity(this.engine, capacityOrderFor(order, stored), receipt.id, parent, dryRun, policy);
+        const admit = (stored: unknown) => admitNextCapacity(this.engine, order, receipt.id, parent, dryRun, policy, stored);
         const admission = lease === undefined
           ? await admit(binding) : await this.resumeIncoming(receipt.id, receipt.token, lease, admit);
         if (lease !== undefined) this.tokens.set(receipt.id, receipt.token);
@@ -167,7 +166,7 @@ export class SharedTracker {
       assertPrivatePathSafe({ warnings, skipped, reason });
       const selected = chosen?.item.id ?? null;
       /** Use the same provider decision for preview and the live item read under its claim lease. */
-      const admit = (item: Record<string, unknown>) => admitNextCapacity(this.engine, this.laneOrder(order, item), String(item.id), parent, dryRun, policy);
+      const admit = (item: Record<string, unknown>) => admitNextCapacity(this.engine, order, String(item.id), parent, dryRun, policy, this.retainedCapacity(item));
       const preview = selected !== null && dryRun ? await admit(corpus.items.find(item => item.id === selected)!) : undefined;
       const lane = selected !== null && lease !== undefined ? await this.claimLane(selected, !unknown, lease, admit, corpus) : undefined;
       return { mode: 'shared-tracker', ...(preview === undefined ? {} : { capacity: preview.capacity }), ...lane, selected, dry_run: dryRun, reason, warnings, skipped };
@@ -186,12 +185,17 @@ export class SharedTracker {
     const { item, historyHead } = await this.fence(id, token);
     const stopped = interruptionRefusal(item);
     if (stopped !== undefined) throw stopped;
-    const binding = item[LANE_CAPACITY_FIELD];
-    const admission = await admit(binding);
-    if (admission === undefined || binding === admission.capacity) return admission;
-    await lease.write(() => commitItemMutation({ id, item, options: { author: this.engine.author, field: capacityFields(admission.capacity) } },
-      admitted => this.engine.client.update(admitted.id, admitted.options), { history: historyHead, generation: { token } }));
+    const admission = await admit(item[LANE_CAPACITY_FIELD]);
+    await this.updateCapacity(item, historyHead, lease, admission?.capacity);
     return admission;
+  }
+
+  /** Update only a changed binding under the original ownership and native revision. */
+  private async updateCapacity(item: Record<string, unknown>, history: ItemHistoryHead, lease: Lease, binding: string | undefined) {
+    if (item[LANE_CAPACITY_FIELD] === binding) return;
+    const options = { author: this.engine.author, field: capacityFields(binding), unset: capacityUnset(item, binding) };
+    await lease.write(() => commitItemMutation({ id: String(item.id), item, options },
+      admitted => this.engine.client.update(admitted.id, admitted.options), { history, generation: { token: item.swarm_token } }));
   }
 
   /** Admit the complete prospective receiver receipt before caching a token or announcing liveness. */
@@ -308,7 +312,9 @@ export class SharedTracker {
     assertPrivatePathSafe({ id, token, author: this.engine.author });
     if (id === undefined) return { agent: this.engine.author, heartbeat: touchHeartbeat(this.engine.pmRoot, this.engine.author) };
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
-      await this.fence(id, token);
+      const { item, historyHead } = await this.fence(id, token);
+      const binding = await declaredLaneCapacity(this.engine, item[LANE_CAPACITY_FIELD]);
+      await this.updateCapacity(item, historyHead, lease, binding);
       lease.assert();
       return { agent: this.engine.author, heartbeat: touchHeartbeat(this.engine.pmRoot, this.engine.author) };
     });
@@ -371,7 +377,7 @@ export class SharedTracker {
     }
     const budget = tokenBudget ?? 800;
     assertBriefBudget(budget);
-    const capacity = (item[LANE_CAPACITY_FIELD] as string | undefined) ?? null;
+    const capacity = await declaredLaneCapacity(this.engine, item[LANE_CAPACITY_FIELD]) ?? null;
     return buildContinuation(this.engine, item, this.engine.author, token, budget, capacity, historyHead);
   }
 
@@ -387,9 +393,8 @@ export class SharedTracker {
       await this.assertContinuationActive(item);
       const retry = ['--continuation', '--to', to, '--token-budget', String(tokenBudget), ...(token === undefined ? [] : ['--token', token])];
       const { capacity: existing } = laneCapacityState(item, Date.now());
-      const requested = capacityOrderFor(order, existing);
-      const admission = await admitCapacity(this.engine, requested, String(item.id), 'brief', retry);
-      return buildContinuation(this.engine, item, to, this.nextToken(item), tokenBudget, admission?.capacity ?? existing ?? null, history);
+      const admission = await admitCapacity(this.engine, order, String(item.id), 'brief', retry, existing);
+      return buildContinuation(this.engine, item, to, this.nextToken(item), tokenBudget, admission?.capacity ?? null, history);
     };
     return this.owned(id, token, async (item, lease, history) => {
       const packet = await prepare(item, history);
@@ -408,8 +413,8 @@ export class SharedTracker {
   private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease, history?: ItemHistoryHead, command: 'handoff' | 'reclaim' = 'handoff') {
     assertCloseIntentSettled(this.engine, item);
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
-    const order = capacityOrderFor([], to === undefined ? undefined : item[LANE_CAPACITY_FIELD]);
-    const binding = (await admitCapacity(this.engine, order, id, command, []))?.capacity;
+    const retained = to === undefined ? undefined : item[LANE_CAPACITY_FIELD];
+    const binding = (await admitCapacity(this.engine, [], id, command, [], retained))?.capacity;
     let files: string[];
     try { files = itemFootprint(item); }
     catch { throw new SettingsRefusal('swarm_input_invalid', 'Repair foreign footprint declarations before transferring this item.'); }

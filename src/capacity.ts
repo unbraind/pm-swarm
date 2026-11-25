@@ -140,11 +140,6 @@ export function capacityOrder(value: string | undefined): string[] {
   return names;
 }
 
-/** Inherit the one stored provider when the caller supplies no explicit capacity order. */
-export function capacityOrderFor(requested: string[], binding: unknown): string[] {
-  return requested.length === 0 && typeof binding === 'string' ? [capacityName(binding)] : requested;
-}
-
 /** Capacity operations accept only their own input fields and the operator identity. */
 const ACTION_FIELDS = {
   status: [], declare: ['limit', 'unit', 'window', 'resetsAt'],
@@ -301,7 +296,7 @@ export function capacityFields(binding: unknown): string[] {
 
 /** Clear a prior assignment's binding when a fresh lane has no capacity. */
 export function capacityUnset(item: Record<string, unknown>, binding: unknown, unset: string[] = []): string[] {
-  return binding === undefined && item[LANE_CAPACITY_FIELD] !== undefined ? [...unset, LANE_CAPACITY_FIELD] : unset;
+  return typeof binding !== 'string' && item[LANE_CAPACITY_FIELD] !== undefined ? [...unset, LANE_CAPACITY_FIELD] : unset;
 }
 
 /** Match shared lane generations while supporting freshly fenced Git lanes. */
@@ -322,9 +317,18 @@ export function capacityDiagnosis(view: CapacityStatus) {
   };
 }
 
-/** Evaluate the primary capacity under the caller's operation lease for writes. */
-export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief' | 'handoff' | 'reclaim', retryFlags: string[]): Promise<CapacityStatus | undefined> {
-  const [name, ...fallback] = order;
+/** Project an inherited binding only while its native capacity record is still declared. */
+export async function declaredLaneCapacity(engine: Swarm, binding: unknown): Promise<string | undefined> {
+  if (typeof binding !== 'string') return undefined;
+  const name = capacityName(binding);
+  const { items, statuses, prefix } = await registry(engine);
+  return recordFor(items, statuses, name, prefix) === undefined ? undefined : name;
+}
+
+/** Evaluate the explicit or inherited capacity under the caller's operation lease for writes. */
+export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief' | 'handoff' | 'reclaim', retryFlags: string[], binding?: unknown): Promise<CapacityStatus | undefined> {
+  const [requested, ...fallback] = order;
+  const name = requested ?? (typeof binding === 'string' ? capacityName(binding) : undefined);
   if (name === undefined) return undefined;
   const { items, statuses, prefix } = await registry(engine);
   const record = recordFor(items, statuses, name, prefix);
@@ -334,6 +338,7 @@ export async function admitCapacity(engine: Swarm, order: string[], itemId: stri
     capacityCommand(command, ...args, '--agent', engine.author, '--capacity', fallback.join(','));
   const recovery = { next_capacity: next ?? null, next_command: nextCommand };
   if (record === undefined) {
+    if (requested === undefined) return undefined;
     const missing = undeclared(name);
     if (next === undefined) throw missing;
     throw new CapacityRefusal(missing.code, `Declare ${name} or try ${nextCommand}.`, { ...missing.details, ...recovery });
@@ -351,13 +356,13 @@ export async function admitCapacity(engine: Swarm, order: string[], itemId: stri
 }
 
 /** Preserve fair ranking flags when capacity admission offers a fallback retry. */
-export function admitNextCapacity(engine: Swarm, order: string[], id: string, parent: string | undefined, dryRun: boolean, policy?: FairPolicy) {
+export function admitNextCapacity(engine: Swarm, order: string[], id: string, parent: string | undefined, dryRun: boolean, policy?: FairPolicy, binding?: unknown) {
   const retry = [...(parent === undefined ? [] : ['--parent', parent]), ...(dryRun ? ['--dry-run'] : [])];
   if (policy !== undefined) {
     if (policy.skills.size > 0) retry.push('--skills', [...policy.skills].join(','));
     retry.push('--max-wait', String(policy.maxWait), '--limit', String(policy.limit));
   }
-  return admitCapacity(engine, order, id, policy === undefined ? 'next' : 'schedule', retry);
+  return admitCapacity(engine, order, id, policy === undefined ? 'next' : 'schedule', retry, binding);
 }
 
 /** Coordinate one native item per logical capacity with the same shared operation lease as claims. */
@@ -389,6 +394,7 @@ export class Capacities {
         return registryView(parseWindow(record[CAPACITY_FIELD], name), now, items, statuses);
       }
       const snapshot = record === undefined ? undefined : await clientMutationSnapshot(pmRoot, client, String(record.id));
+      if (snapshot !== undefined && recordFor([snapshot.item], statuses, name, prefix) === undefined) throw undeclared(name);
       const state = changeWindow(name, snapshot === undefined ? undefined : parseWindow(snapshot.item[CAPACITY_FIELD], name), change, now);
       const field = [`${CAPACITY_FIELD}=${JSON.stringify(state)}`];
       const result = registryView(state, now, items, statuses);

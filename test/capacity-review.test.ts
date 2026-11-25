@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { runWithAgentSessionContext } from '@unbrained/pm-cli/sdk';
 import { Capacities, SharedTracker, Swarm, interruptLane, withStartTransitionObserver } from '../index.ts';
+import { captureCloseMember, closeEpisode, CLOSE_INTENT, inspectCloseMember } from '../src/close-journal.ts';
+import { prepareClose } from '../src/close-recovery.ts';
 import { reissueHandoff } from '../src/handoff-context.ts';
 import { gitRecords } from '../src/git.ts';
 import { interruptions } from '../src/interruption.ts';
@@ -197,4 +200,55 @@ test('review streamed Git evidence distinguishes incomplete records, spawn error
   await assert.rejects(gitRecords(f.repo, ['rev-parse', 'HEAD'], '\0'), /incomplete evidence record/);
   await assert.rejects(gitRecords(join(f.root, 'missing'), ['status', '--porcelain', '-z'], '\0'), /probe unavailable/);
   await assert.rejects(gitRecords(f.repo, ['rev-parse', '--verify', 'refs/heads/missing'], '\n'), /git rev-parse failed/);
+});
+
+test('review observes only the still-active native capacity selected by the registry', async t => {
+  const f = await sharedFixture(t);
+  const capacity = new Capacities(f.shared.engine);
+  const now = Date.now();
+  for (const [name, edit] of [
+    ['retired', { status: 'canceled' }],
+    ['untagged', { removeTags: ['swarm-capacity'] as string[] }],
+    ['renamed', { field: ['swarm_capacity_window=' + JSON.stringify({ name: 'new-name' })] as string[] }],
+  ] as const) {
+    await window(capacity, name, now);
+    const record = (await f.shared.engine.corpus()).items.find(item => item.id.endsWith('swarm-capacity-' + name))!;
+    const before = await readItemHistoryHead(f.pmRoot, record.id);
+    const get = f.client.get.bind(f.client);
+    const race = t.mock.method(f.client, 'get', async (...args: Parameters<typeof get>) => {
+      if (args[0] === record.id && args[1]?.at === '1') await f.client.update(record.id, { ...edit });
+      return get(...args);
+    });
+    try {
+      await assert.rejects(capacity.run(name, { action: 'observe', used: 42, source: 'manual' }), /capacity_(undeclared|invalid)/);
+    } finally { race.mock.restore(); }
+    assert.equal((await readItemHistoryHead(f.pmRoot, record.id)).length, before.length + 1);
+  }
+});
+
+test('review a continuation with no replacement drops a stopped capacity before receiver next', async t => {
+  const f = await sharedFixture(t);
+  const capacity = new Capacities(f.shared.engine);
+  await window(capacity, 'runner', Date.now());
+  const id = await f.item(['src/stop.ts']);
+  const { token } = await f.shared.start(id, {}, true, 'runner');
+  await interruptLane(f.shared.engine, id, token, 'runner', 'capacity_exhausted');
+  const packet = await f.shared.continuation(id, 'receiver', token);
+  const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+  assert.equal(packet.capacity, null);
+  assert.equal((await f.client.get(id, { depth: 'full' })).item.swarm_capacity, undefined);
+  assert.equal((await receiver.next()).token, packet.token);
+  assert.equal((await capacity.run('runner')).reported_exhausted, true);
+});
+
+test('review an applying close journal may only unset a legacy null binding', async t => {
+  const f = await sharedFixture(t);
+  await window(new Capacities(f.shared.engine), 'runner', Date.now());
+  const id = await f.item(['src/close.ts']);
+  const { token } = await f.shared.start(id, {}, true, 'runner');
+  const snapshot = await captureCloseMember(f.shared.engine, id);
+  const { journal } = await prepareClose(f.shared.engine, id, 'Fixture complete', token, snapshot);
+  await runWithAgentSessionContext({ episode: { id: closeEpisode(journal, 'journal', journal) } }, () =>
+    f.client.update(id, { field: [CLOSE_INTENT + '=' + JSON.stringify(journal)], unset: ['swarm_capacity'] }));
+  await assert.rejects(inspectCloseMember(f.shared.engine, journal, journal.members[0]), /swarm_compensation_partial/);
 });

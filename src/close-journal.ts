@@ -128,13 +128,16 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
     if (member.id === journal.id && entry.op === 'update' && typeof view.document.metadata[CLOSE_INTENT] === 'string') {
       const recorded = parseCloseJournal(engine, view.document.metadata[CLOSE_INTENT]);
       const allowedFields = new Set([`/metadata/${CLOSE_INTENT}`, '/metadata/updated_at']);
+      const capacityPath = `/metadata/${LANE_CAPACITY_FIELD}`;
+      if (entry.patch.some(patch => patch.path === capacityPath && patch.op === 'remove')) {
+        const before = replayToCanonicalItemDocument(replayHistoryToTarget(entries, member.head.length + offset - 1), { schema });
+        if (recorded.phase === 'committed' || offset === 0 && before.metadata[LANE_CAPACITY_FIELD] === null) allowedFields.add(capacityPath);
+      }
       if (recorded.phase === 'committed') {
         if (!forwarded || !validCloseResult(recorded)) throw foreign();
         if (recorded.token !== null) allowedFields.add('/metadata/swarm_token');
         for (const field of ['swarm_handoff', 'swarm_claimed_at']) allowedFields.add(`/metadata/${field}`);
-        const capacityPath = `/metadata/${LANE_CAPACITY_FIELD}`;
         const stopPath = `/metadata/${INTERRUPTION_FIELD}`;
-        if (entry.patch.some(patch => patch.path === capacityPath) && view.document.metadata[LANE_CAPACITY_FIELD] === undefined) allowedFields.add(capacityPath);
         if (entry.patch.some(patch => patch.path === stopPath)) {
           const before = replayToCanonicalItemDocument(replayHistoryToTarget(entries, member.head.length + offset - 1), { schema });
           const retired = advanceCapacity(before.metadata, undefined).field;

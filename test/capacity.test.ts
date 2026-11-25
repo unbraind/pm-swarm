@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
 import { Capacities, OBSERVATION_MAX_AGE_MS, withStartTransitionObserver, withItemMutationObserver, Swarm, SharedTracker, interruptLane } from '../index.ts';
@@ -7,6 +8,7 @@ import { CAPACITY_FIELD } from '../src/capacity.ts';
 import { fixture } from './helpers.ts';
 import { runProcess } from './process-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
+import { waitForCapacityRace } from './support/capacity-race-extension.ts';
 
 test('native capacity history retains observations and status forecasts with two fresh points', async t => {
   const f = await sharedFixture(t);
@@ -145,15 +147,40 @@ test('one last capacity slot admits exactly one of two independent next processe
   for (const [ago, used] of [[3600_000, 10], [1000, 11]]) {
     f.run('swarm', 'capacity', 'codex', '--action', 'observe', '--used', String(used), '--source', 'manual', '--at', new Date(now - ago).toISOString());
   }
-  const ids = await Promise.all([f.item(['src/a.ts']), f.item(['src/b.ts'])]);
-  const workers = await Promise.all(['worker-a', 'worker-b'].map(agent => runProcess(process.execPath,
-    [f.host, 'swarm', 'next', '--agent', agent, '--capacity', 'codex,ollama', '--json'], f.repo, f.env)));
+  // Give each worker a distinct eligible item so an item revision guard cannot hide over-admission.
+  const parents = [await f.item(), await f.item()];
+  const ids: string[] = [];
+  for (const [i, parent] of parents.entries()) {
+    ids.push((await f.client.create({ type: 'Task', title: 'Race lane', parent, file: [`path=src/lane-${i}.ts`] })).item.id);
+  }
+  const observer = new URL('./support/capacity-race-extension.ts', import.meta.url).href;
+  writeFileSync(join(f.pmRoot, 'extensions/pm-swarm/entry.js'), `export { default } from '${observer}';\n`);
+  const runtime = join(f.pmRoot, 'runtime/swarm');
+  const paused = join(f.pmRoot, 'admission-paused');
+  const release = join(f.pmRoot, 'admission-release');
+  const launch = (agent: string, parent: string) => runProcess(process.execPath,
+    [f.host, 'swarm', 'next', '--agent', agent, '--parent', parent, '--capacity', 'codex,ollama', '--json'], f.repo, f.env);
+  const first = launch('worker-a', parents[0]);
+  let second: ReturnType<typeof launch> | undefined;
+  try {
+    await waitForCapacityRace(() => existsSync(paused), 'First claim never paused after admission');
+    assert.ok(existsSync(join(runtime, 'operation-pin.json')));
+    assert.ok(!readdirSync(runtime).some(name => name.startsWith('request-')));
+    second = launch('worker-b', parents[1]);
+    await waitForCapacityRace(() => readdirSync(runtime).some(name => name.startsWith('request-')), 'Second claim never queued while first held admission');
+    for (const id of ids) assert.equal((await f.client.get(id)).item.assignee, undefined);
+  } finally {
+    writeFileSync(release, '');
+    await Promise.allSettled([first, second]);
+  }
+  const workers = await Promise.all([first, second!]);
   assert.deepEqual(workers.map(result => result.code).sort(), [0, 2], JSON.stringify(workers));
   const won = JSON.parse(workers.find(result => result.code === 0)!.stdout) as Record<string, unknown>;
   const losing = workers.find(result => result.code === 2)!;
   const refusal = JSON.parse(losing.stderr || losing.stdout) as { code: string; details: { next_command: string; forecast: number } };
   assert.equal(refusal.code, 'capacity_lanes_occupied');
   assert.match(JSON.stringify(refusal), /1 of 1 admitted lanes active/);
+  assert.ok(Number.isFinite(refusal.details.forecast), 'a full lane pool with two fresh observations has a numeric forecast');
   assert.ok(refusal.details.forecast < 100);
   assert.match(JSON.stringify(refusal), /--capacity ollama/);
   assert.match(JSON.stringify(refusal), new RegExp(reset));
@@ -305,24 +332,46 @@ test('fair scheduling applies capacity admission and preserves policy flags in r
 
 test('host help and the README replay agree with the real non-Git CLI', async t => {
   const f = await sharedFixture(t);
-  for (const [verb, expected] of [
-    ['capacity', /Repeatable strict threshold/], ['capacity', /recent, window or max/], ['next', /comma-separated retry order/], ['next', /capacity_lanes_occupied/],
-    ['start', /comma-separated retry order/], ['schedule', /comma-separated retry order/],
-    ['interrupt', /Stop reason: capacity_exhausted/], ['brief', /Read the current fenced continuation packet/],
-  ] as const) {
+  const help = {
+    capacity: [/declare, observe, policy or status/, /Positive capacity limit/, /Public unit label/, /s, m, h, d or w suffix/,
+      /ISO reset timestamp/, /Caller-measured cumulative usage/, /Public source label/, /ISO observation time/,
+      /Repeatable strict threshold/, /Allowed lanes when no band matches/, /recent, window or max/],
+    next: [/comma-separated retry order/, /capacity_lanes_occupied/],
+    start: [/comma-separated retry order/],
+    schedule: [/comma-separated retry order/],
+    interrupt: [/Single capacity name/, /Stop reason: capacity_exhausted/],
+    brief: [/comma-separated retry order/, /with --continuation --to/, /Read the current fenced continuation packet/,
+      /Receiver of the continuation fence/, /Maximum estimated tokens in JSON and TOON/],
+  };
+  for (const [verb, descriptions] of Object.entries(help)) {
     const result = f.cli('swarm', verb, '--help');
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout.replace(/\s+/g, ' '), expected);
+    for (const description of descriptions) assert.match(result.stdout.replace(/\s+/g, ' '), description);
   }
+  const queued = await f.item(['src/queued.ts'], 1, 'queued');
+  const task = await f.item(['src/task.ts'], 3, 'task-id');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
-  const replay = /## Windowed capacity[\s\S]+?```sh\n([\s\S]+?)\n```/.exec(readme);
-  assert.ok(replay, 'README must include a runnable capacity replay');
-  const script = 'pm() { "$SWARM_TEST_NODE" "$SWARM_TEST_HOST" "$@"; }\n' + replay[1];
+  const section = readme.split('## Windowed capacity')[1].split('## Budgeted assignment briefs')[0];
+  const blocks = Array.from(section.matchAll(/```sh\n([\s\S]+?)\n```/g), match => match[1]);
+  assert.equal(blocks.length, 3, 'README must include the replay, claim, and transfer scripts');
+  const script = 'pm() { "$SWARM_TEST_NODE" "$SWARM_TEST_HOST" "$@"; }\n' + blocks.join('\n');
   const result = await runProcess('/bin/sh', ['-ec', script], f.repo, { ...f.env, SWARM_TEST_NODE: process.execPath, SWARM_TEST_HOST: f.host });
-  assert.equal(result.code, 0, result.stderr);
+  assert.equal(result.code, 0, result.stderr + result.stdout);
   assert.match(result.stdout, /"admitted_lane_count":2/);
   assert.match(result.stdout, /"forecast_recent":76\.01/);
   assert.match(result.stdout, /"forecast_window":90\.1/);
+  assert.equal((await f.client.get(queued)).item.assignee, 'worker');
+  const transferred = (await f.client.get(task, { depth: 'full' })).item;
+  assert.equal(transferred.assignee, 'worker-2');
+  assert.equal(transferred.swarm_capacity, 'ollama');
+  assert.equal(transferred.swarm_token, '2');
+  const interrupt = f.cli('swarm', 'interrupt', task, '--agent', 'worker-2', '--token', '2',
+    '--reason', 'capacity_exhausted', '--capacity', 'ollama,codex', '--json');
+  assert.equal(interrupt.status, 2);
+  assert.match(interrupt.stderr || interrupt.stdout, /capacity_invalid/);
+  const read = f.cli('swarm', 'brief', task, '--agent', 'worker-2', '--token', '2', '--continuation', '--capacity', 'ollama', '--json');
+  assert.equal(read.status, 2);
+  assert.match(read.stderr || read.stdout, /Supply --to/);
 });
 
 test('invalid capacity input is side-effect free and a native peer edit wins a revision race', async t => {

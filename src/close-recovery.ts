@@ -1,3 +1,4 @@
+import { LANE_CAPACITY_FIELD } from './capacity.ts';
 import { advanceCapacity } from './interruption.ts';
 import { retainFailureCause } from './failure-cause.ts';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
@@ -27,7 +28,8 @@ export class CloseCompensation extends SettingsRefusal {
 /** Persist progress through the bound SDK, guarded by the exact checked native revision. */
 async function saveJournal(engine: Swarm, lease: Lease, journal: CloseJournal, primary: CloseInspection): Promise<void> {
   const completed = journal.phase === 'committed';
-  const capacity = completed ? advanceCapacity(primary.item, undefined, ['swarm_handoff', 'swarm_claimed_at']) : { field: [], unset: [] };
+  const unset = primary.item[LANE_CAPACITY_FIELD] === null ? [LANE_CAPACITY_FIELD] : [];
+  const capacity = completed ? advanceCapacity(primary.item, undefined, ['swarm_handoff', 'swarm_claimed_at']) : { field: [], unset };
   const options = { author: engine.author, force: true, field: [`${CLOSE_INTENT}=${JSON.stringify(journal)}`, ...capacity.field, ...(completed && journal.token !== null ? [`swarm_token=${BigInt(journal.token) + 1n}`] : [])], unset: capacity.unset, message: 'Swarm close recovery progress' };
   const boundary = journal.phase === 'applying' ? 'intent_native' : journal.phase === 'committed' ? 'commit_native' : journal.restored.length > 0 ? 'progress_native' : 'compensation_native';
   await lease.write(() => runWithAgentSessionContext({ episode: { id: closeEpisode(journal, 'journal', journal) } }, () => commitItemMutation({ id: journal.id, item: primary.item, options }, admitted => engine.client.update(admitted.id, admitted.options), { history: primary.history, onCommitted: () => closeBoundary(boundary, journal.id) })), { announce: false });

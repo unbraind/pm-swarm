@@ -136,7 +136,14 @@ holding the operation lease. A retained claim counts again once its
 interruption expires. Admission reports occupied lane pools, recorded or
 measured exhaustion, and forecasts at or above the limit separately. Git and shared starts publish their capacity with lane metadata
 and fencing information. Attaching or resuming Git work checks any retained
-provider against the same capacity registry. Preview evaluates the same policy.
+provider against the same capacity registry. Capacity mutations recheck the
+selected record's role in the authoritative document before evaluating the
+change, then guard the write with its history revision. Preview evaluates the
+same policy. A missing or terminal record makes an inherited binding absent
+for decisions. A successful fenced heartbeat, admission, or ownership change
+removes that legacy field.
+Native registry edits and read-only projections leave unrelated items and
+saved historical packets intact.
 
 A stopped lane records its claim generation and the exhausted reset time in one
 revision-guarded work-item update. That record also drives the capacity's

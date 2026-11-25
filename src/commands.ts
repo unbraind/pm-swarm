@@ -240,6 +240,13 @@ const capacityExamples: Readonly<Record<string, string[]>> = {
   brief: ['pm swarm brief task-id --agent worker --token 1 --continuation --to worker-2 --token-budget 800', 'pm swarm brief task-id --agent worker-2 --token 2 --continuation'],
 };
 
+/** Describe the accepted capacity value and any flags that enable it. */
+function flagDescription(command: string, flag: string): string {
+  if (flag === 'capacity' && command === 'interrupt') return 'Single capacity name bound to the lane';
+  if (flag === 'capacity' && command === 'brief') return capacityHelp.capacity + ' with --continuation --to';
+  return Object.hasOwn(capacityExamples, command) && (flag !== 'limit' || command === 'capacity') && Object.hasOwn(capacityHelp, flag) ? capacityHelp[flag] : flag;
+}
+
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
   api.hooks.beforeMutation(guardItemDocument);
@@ -259,7 +266,7 @@ export function register(api: ExtensionApi): void {
   api.registerItemFields([CAPACITY_FIELD, LANE_CAPACITY_FIELD, INTERRUPTION_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
-    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: Object.hasOwn(capacityExamples, name) && (flag !== 'limit' || name === 'capacity') && Object.hasOwn(capacityHelp, flag) ? capacityHelp[flag] : flag, ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
+    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flagDescription(name, flag), ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
     api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' || name === 'deadlocks' ? [{ name: name === 'capacity' ? 'name' : 'id', required: definition.id }] : [], flags, examples: capacityExamples[name] ?? [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }

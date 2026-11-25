@@ -2,7 +2,7 @@ import { reissueHandoff } from './handoff-context.ts';
 import { advanceCapacity, interruptionRefusal } from './interruption.ts';
 import { SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import type { CapacityStatus } from './capacity.ts';
-import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityOrderFor, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { retainFailureCause } from './failure-cause.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
@@ -92,8 +92,8 @@ export class Swarm {
     const retryFlags = [...(strict ? ['--strict'] : []), ...[
       ['--base', overrides.base], ['--root', overrides.root], ['--branch-prefix', overrides.branch_prefix],
     ].flatMap(([flag, value]) => value === undefined ? [] : [flag!, value])];
-    return this.exclusive(lease => this.startLane(id, overrides, strict, lease, order,
-      (effective, canonicalId) => admitCapacity(this, effective, canonicalId, 'start', retryFlags)));
+    return this.exclusive(lease => this.startLane(id, overrides, strict, lease,
+      (canonicalId, binding) => admitCapacity(this, order, canonicalId, 'start', retryFlags, binding)));
   }
 
   /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
@@ -117,8 +117,8 @@ export class Swarm {
     assertPrivatePathSafe({ reason, warnings, skipped });
     const selected = chosen?.item.id ?? null;
     const preview = selected !== null && dryRun ? await admitNextCapacity(this, order, selected, parent, true, policy) : undefined;
-    const lane = selected !== null && !dryRun ? await this.startLane(selected, {}, !unknown, lease!, order,
-      (effective, canonicalId) => admitNextCapacity(this, effective, canonicalId, parent, false, policy)) : undefined;
+    const lane = selected !== null && !dryRun ? await this.startLane(selected, {}, !unknown, lease!,
+      (canonicalId, binding) => admitNextCapacity(this, order, canonicalId, parent, false, policy, binding)) : undefined;
     return { ...(preview === undefined ? {} : { capacity: preview.capacity }), ...lane, selected, dry_run: dryRun, reason, warnings, skipped };
   }
 
@@ -146,8 +146,8 @@ export class Swarm {
 
   /** Publish a lane under the repository operation lease. */
   private async startLane(
-    id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease, order: string[],
-    admit: (order: string[], id: string) => Promise<CapacityStatus | undefined>,
+    id: string, overrides: Partial<SwarmSettings>, strict: boolean, lease: Lease,
+    admit: (id: string, binding: unknown) => Promise<CapacityStatus | undefined>,
   ) {
     const config = await settings(this.pmRoot, overrides);
     const local = await inspectItem(this.pmRoot, this.repo, id);
@@ -168,7 +168,7 @@ export class Swarm {
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     admitReceipt({ id: item.id, branch, base, worktree: path, overlap_warnings }, this.repo);
     const stored = item.assignee === this.author ? item[LANE_CAPACITY_FIELD] : undefined;
-    const admission = await admit(capacityOrderFor(order, stored), String(item.id));
+    const admission = await admit(String(item.id), stored);
     const binding = admission?.capacity;
     const token = admission === undefined ? undefined : incrementFence(item.swarm_token);
     const claimedAt = nowIso();
