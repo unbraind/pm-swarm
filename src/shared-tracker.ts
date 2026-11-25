@@ -1,4 +1,6 @@
-import { interruptionRefusal } from './interruption.ts';
+import { buildContinuation, SYNC_HISTORY_MESSAGE } from './continuation.ts';
+import { assertBriefBudget, assertBriefIdentitySafe } from './assignment-brief.ts';
+import { currentInterruption, interruptionRefusal } from './interruption.ts';
 import type { CapacityStatus } from './capacity.ts';
 import { assertStartWorkItem, admitCapacity, capacityFields, capacityOrder, capacityUnset, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import type { ItemHistoryHead } from './settings.ts';
@@ -230,7 +232,7 @@ export class SharedTracker {
       const item = snapshot?.item ?? (await readItem(this.engine.client, id)).item;
       const add = await this.syncDecision(item, apply, files, token);
       if (apply && add.length > 0) {
-        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author }, item }, admitted => this.engine.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
+        await lease!.write(() => commitItemMutation({ id, options: { add, author: this.engine.author, message: SYNC_HISTORY_MESSAGE }, item }, admitted => this.engine.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
       }
       return { mode: 'shared-tracker', id, dry_run: !apply, add };
     };
@@ -332,6 +334,37 @@ export class SharedTracker {
       return this.transfer(item, to, note, lease, history);
     };
     return this.owned(id, token, (item, lease, history) => transfer(item, lease, history), item => transfer(item));
+  }
+
+  /** Transfer the current lane with a bounded continuation packet in the same fenced update. */
+  async continuation(id: string, to: string, token?: string, tokenBudget = 800, capacity?: string) {
+    to = to.trim();
+    assertBriefIdentitySafe({ id, to, token, capacity, author: this.engine.author });
+    assertBriefBudget(tokenBudget);
+    if (!to || to === this.engine.author) throw new SettingsRefusal('swarm_input_invalid', 'Supply a different nonempty --to agent.');
+    const order = capacityOrder(capacity);
+    /** Prepare the exact packet in preflight and again from the live ownership revision. */
+    const prepare = async (item: Record<string, unknown>, history?: ItemHistoryHead) => {
+      assertCloseIntentSettled(this.engine, item);
+      const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
+      if (statusIsTerminal(String(item.status), statuses)) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item for continuation.');
+      const retry = ['--continuation', '--to', to, '--token-budget', String(tokenBudget), ...(token === undefined ? [] : ['--token', token])];
+      const admission = await admitCapacity(this.engine, order, String(item.id), 'brief', retry);
+      const existing = item[LANE_CAPACITY_FIELD];
+      const binding = admission?.capacity ?? (currentInterruption(item) === undefined && typeof existing === 'string' ? existing : undefined);
+      return buildContinuation(this.engine, item, to, this.nextToken(item), tokenBudget, binding ?? null, history);
+    };
+    return this.owned(id, token, async (item, lease, history) => {
+      const packet = await prepare(item, history);
+      const fields = ['swarm_token=' + packet.token, 'swarm_claimed_at=' + new Date().toISOString(), 'swarm_handoff=' + JSON.stringify(packet),
+        ...capacityFields(packet.capacity)];
+      await lease.write(() => commitItemMutation({ id: packet.id, item, options: {
+        author: this.engine.author, force: true, assignee: packet.to, field: fields, unset: capacityUnset(item, packet.capacity ?? undefined),
+        comment: ['Swarm continuation transferred to ' + packet.to],
+      } }, admitted => this.engine.client.update(admitted.id, admitted.options), { history, generation: { token: item.swarm_token } }));
+      this.tokens.delete(packet.id);
+      return packet;
+    }, item => prepare(item));
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */

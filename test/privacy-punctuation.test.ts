@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 test('whole punctuation runs normalize before privacy decisions across random homes and every mutating variant', () => {
-  const seed = 0xc0ffee71; const homes = 20; const variants = 24; let privateCases = 0; let allowedCases = 0; let renderers = 0;
+  const seed = 0xc0ffee71; const homes = 20; const variants = 25; let privateCases = 0; let allowedCases = 0; let renderers = 0;
   for (let index = 0; index < homes; index++) {
     const suffix = `demo-${((seed ^ (index * 2654435761)) >>> 0).toString(36)}${['', ';root', ',root', '=root', '#root', ']root', "'root", '"root'][index % 8]}`;
     const home = ['', 'srv', 'profiles', suffix].join('/');

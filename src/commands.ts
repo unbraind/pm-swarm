@@ -104,7 +104,13 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       return compact;
     }
     case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true }) };
-    case 'brief': return { ...await readAssignmentBrief((swarm as SharedTracker).engine, id, textOption(ctx.options.token), ctx.options.tokenBudget === undefined ? undefined : Number(ctx.options.tokenBudget)) };
+    case 'brief': {
+      const shared = swarm as SharedTracker;
+      const token = textOption(ctx.options.token);
+      const budget = ctx.options.tokenBudget === undefined ? undefined : Number(textOption(ctx.options.tokenBudget));
+      if (ctx.options.continuation === true) return { ...await shared.continuation(id, textOption(ctx.options.to)!, token, budget, textOption(ctx.options.capacity)) };
+      return { ...await readAssignmentBrief(shared.engine, id, token, budget) };
+    }
     case 'next': {
       const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true, undefined, textOption(ctx.options.capacity));
       return laneOperation(operation, repo);
@@ -171,7 +177,7 @@ export const swarmCommandDefinitions = {
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
   schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
-  brief: { mutations: [], description: 'Read one fenced assignment with a bounded work context', flags: ['agent', 'token', 'token-budget'], id: true },
+  brief: { mutations: [{ continuation: true }], description: 'Read a fenced assignment or transfer it with a bounded continuation', flags: ['agent', 'token', 'token-budget', 'continuation', 'to', 'capacity'], id: true },
   next: { mutations: [{}], description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run', 'capacity'], id: false },
   start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict', 'capacity'], id: true },
   status: { mutations: [], description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
@@ -210,7 +216,7 @@ export function register(api: ExtensionApi): void {
   api.registerItemFields([CAPACITY_FIELD, LANE_CAPACITY_FIELD, INTERRUPTION_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
-    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
+    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
     api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' || name === 'deadlocks' ? [{ name: 'id', required: definition.id }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }

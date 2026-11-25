@@ -1,3 +1,4 @@
+import { SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import type { CapacityStatus } from './capacity.ts';
 import { assertStartWorkItem, admitCapacity, capacityFields, capacityOrder, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { retainFailureCause } from './failure-cause.ts';
@@ -340,7 +341,7 @@ export class Swarm {
         if (item!.swarm_token !== undefined && token !== item!.swarm_token) throw new StaleFenceError(canonicalId);
         const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
         if (statusIsTerminal(String(item!.status), statuses)) throw new Error('No active lane for item');
-        if (add.length > 0) await lease!.write(() => commitItemMutation({ id: canonicalId, options: { add, author: this.author }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
+        if (add.length > 0) await lease!.write(() => commitItemMutation({ id: canonicalId, options: { add, author: this.author, message: SYNC_HISTORY_MESSAGE }, item: item! }, admitted => this.client.files(admitted.id, admitted.options), { history: snapshot!.historyHead }));
       }
       return { id: canonicalId, dry_run: !apply, add };
     };

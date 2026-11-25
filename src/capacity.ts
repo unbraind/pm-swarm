@@ -288,13 +288,13 @@ export function capacityDiagnosis(view: CapacityStatus) {
 }
 
 /** Evaluate the primary capacity under the caller's operation lease for writes. */
-export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'start', retryFlags: string[]): Promise<CapacityStatus | undefined> {
+export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'start' | 'brief', retryFlags: string[]): Promise<CapacityStatus | undefined> {
   const [name, ...fallback] = order;
   if (name === undefined) return undefined;
   const { items, statuses } = await registry(engine);
   const record = recordFor(items, statuses, name);
   const next = fallback[0];
-  const args = [...(command === 'start' ? [itemId] : []), ...retryFlags].map(shellArg);
+  const args = [...(command === 'next' ? [] : [itemId]), ...retryFlags].map(shellArg);
   const nextCommand = next === undefined ? 'pm swarm capacity ' + name :
     ['pm swarm', command, ...args, '--agent', shellArg(engine.author), '--capacity', fallback.join(',')].join(' ');
   const recovery = { next_capacity: next ?? null, next_command: nextCommand };

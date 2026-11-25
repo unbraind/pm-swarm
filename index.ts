@@ -68,3 +68,6 @@ export { Capacities, CapacityRefusal, CAPACITY_TAG, OBSERVATION_MAX_AGE_MS } fro
 export { interruptLane } from './src/interruption.ts';
 /** Portable capacity stop receipt for dispatchers. */
 export type { CapacityInterruption } from './src/interruption.ts';
+
+/** Portable budgeted packet emitted by SharedTracker.continuation. */
+export type { ContinuationPacket } from './src/continuation.ts';

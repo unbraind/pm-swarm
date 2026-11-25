@@ -18,7 +18,7 @@ test('registered mutators refuse every input admission class without tracker cha
   const registered = host.activation.registrations.commands.map(definition => definition.command.replace(/^swarm /, ''));
   assert.deepEqual([...registered].sort(), Object.keys(swarmCommandDefinitions).sort());
   const variants = registered.flatMap(command => mutationVariants().filter(variant => variant.command === command));
-  assert.equal(variants.length, 24); assert.ok(variants.some(variant => variant.command === 'start'));
+  assert.equal(variants.length, 25); assert.ok(variants.some(variant => variant.command === 'start'));
   const codes = new Set<string>(); const counts: Record<string, number> = {};
   const privateValue = encodeURIComponent(['', 'home', 'private', 'project'].join('/'));
   for (const variant of variants) {
@@ -36,7 +36,7 @@ test('registered mutators refuse every input admission class without tracker cha
     if (variant.id) await refuse('missing-id', { ...base, args: [] }, 'swarm_input_invalid');
     for (const flag of variant.flags) {
       const key = flag.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
-      const boolean = ['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(key);
+      const boolean = ['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(key);
       for (const value of boolean ? ['yes', null, 1] : key === 'band' ? ['', [null], null, 1] : ['', ['repeated'], null, 1]) {
         await refuse(`shape/${key}`, { ...base, options: { ...base.options, [key]: value } }, 'swarm_input_invalid');
       }
