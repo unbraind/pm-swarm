@@ -6,10 +6,10 @@ status: in_progress
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#99"
 created_at: "2026-11-25T08:30:21.206Z"
-updated_at: "2026-11-25T09:40:45.596Z"
+updated_at: "2026-11-25T10:08:47.600Z"
 author: codex-agent
 acceptance_criteria: "Declare and observe windowed capacities, enforce counted admission for next and start, fence interruptions across reclaim, and transfer a bounded continuation packet in Git and shared tracker modes."
-comments[7]{created_at,author,text}:
+comments[8]{created_at,author,text}:
   "2026-11-25T08:30:46.293Z",codex-agent,"Baseline reproduced in a real non-Git tracker: capacity and interrupt were missing, capacity flags on next/start and continuation on brief were rejected, and plain next admitted two workers without a quota bound. Implementing five pushed slices with native revision checks and a real process race."
   "2026-11-25T08:33:41.905Z",codex-agent,"Slice 1: capacities are native tagged items and each observation is revision-checked and appended to the item history. The read model uses the last two in-window points when both are at most 24 hours old. Revert proof: replacing the forecast with null failed the historical 56 + 8/7 forecast assertion; restored the implementation."
   "2026-11-25T09:00:52.798Z",codex-agent,"Slice 2: next and start share primary capacity admission with dry-run and report measured refusal context and the next fallback command. Two independent next processes on disjoint work produced one admitted lane and one capacity_exhausted refusal. Revert proof: ignoring occupied slots admitted both workers; the process test failed with exits 0 and 0. The weekly replay produced 57.14 percent and three admitted lanes using the supplied readings and illustrative observation times."
@@ -17,7 +17,8 @@ comments[7]{created_at,author,text}:
   "2026-11-25T09:15:16.699Z",codex-agent,"Slice 4: continuation commits the receiver, new token, capacity binding and packet under one native history guard. The packet replays linked files, sync paths, comments and tests in native order and reports the worktree commit IDs and dirty paths. Revert proof: dropping Git evidence failed the Git packet assertions, and skipping the native transfer failed the history and owner assertions. Independent forecast reverts also proved that disabling staleness or source-label screening fails the capacity test."
   "2026-11-25T09:22:10.767Z",codex-agent,"Slice 5: the README replay and descriptive help cover capacity admission and transfer. Fair schedule uses the same admission path and retains its flags in fallback commands. Git start also preserves a shared-mode interruption. Revert proof: reverting band help failed the help assertion, and removing the Git start guard caused the interrupted lane restart test to fail."
   "2026-11-25T09:40:44.286Z",codex-agent,"Final local verification: 741 selected tests across 59 files passed after rerunning the complete corrected privacy-sink suite and its documentation checks. The inventory covers 31 native and backend writers, including 22 history-guarded sites, with 155 privacy refusal cases and zero durable changes. All 3 linked commands passed (12 capacity, 2 continuation, 2 packed npm and Bun cases). The 2 public-corpus test cases and deadlock observation passed. Typecheck, lint, build, docstrings, duplication, identity and changelog checks passed. Repository coverage and full release execution remain with CI."
-files[20]{path,scope}:
+  "2026-11-25T10:08:46.571Z",codex-agent,"Exact-head CI for 2b0150c passed Node 22 and CodeQL. Node 26 passed 1281 tests and failed the unchanged coverage thresholds at 99.59 percent statements and lines, 98.67 percent branches, and 99.76 percent functions. Run: https://github.com/unbraind/pm-swarm/actions/runs/45587781231. Added ten real-tracker tests for malformed records, late resets, native fences, receiver slot reuse, absent Git provenance and Git ref movement. The new linked test passed 10 of 10. Reverting the README alone failed its runnable example assertion."
+files[21]{path,scope}:
   index.ts,project
   src/admission.ts,project
   src/assignment-brief.ts,project
@@ -29,6 +30,7 @@ files[20]{path,scope}:
   src/interruption.ts,project
   src/shared-tracker.ts,project
   src/swarm.ts,project
+  test/capacity-edges.test.ts,project
   test/capacity.test.ts,project
   test/continuation.test.ts,project
   test/install.acceptance.ts,project
@@ -38,7 +40,7 @@ files[20]{path,scope}:
   test/privacy-punctuation.test.ts,project
   test/privacy-refusals.test.ts,project
   test/privacy-sinks.test.ts,project
-tests[3]:
+tests[4]:
   - command: node --test --test-concurrency=2 test/capacity.test.ts
     scope: project
     provenance:
@@ -59,6 +61,13 @@ tests[3]:
     provenance:
       author: codex-agent
       created_at: "2026-11-25T09:22:09.012Z"
+      source_kind: local_mutation
+      source_ref: feat/capacity-aware-lane-admission
+  - command: node --test --test-concurrency=2 test/capacity-edges.test.ts
+    scope: project
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-25T10:08:29.155Z"
       source_kind: local_mutation
       source_ref: feat/capacity-aware-lane-admission
 docs[4]{path,scope}:
