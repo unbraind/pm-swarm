@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mutateItem, readSettings } from '@unbrained/pm-cli/sdk';
-import { Capacities, interruptLane, SharedTracker, Swarm } from '../index.ts';
+import { Capacities, CapacityRefusal, interruptLane, SharedTracker, Swarm } from '../index.ts';
 import { CAPACITY_TAG, LANE_CAPACITY_FIELD } from '../src/capacity.ts';
 import { interruptions } from '../src/interruption.ts';
+import { readItemHistoryHead } from '../src/settings.ts';
+import { runProcess } from './process-helpers.ts';
 import { fixture } from './helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
 
@@ -157,4 +159,79 @@ test('capacity transitions keep every field coherent', async t => {
       }
     });
   }
+
+  await t.test('next / native edit during unchanged-binding admission', async cell => {
+    const f = await sharedFixture(cell);
+    const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+    const capacity = new Capacities(f.shared.engine);
+    const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
+    for (const name of ['runner', 'spare']) {
+      await capacity.run(name, { action: 'declare', limit: 100, unit: 'percent', window: '7d', resetsAt });
+      await capacity.run(name, { action: 'policy', else: 1 });
+    }
+    const id = await f.item(['src/race.ts']);
+    const claim = await f.shared.start(id, {}, true, 'runner');
+    const handoff = await f.shared.handoff(id, 'receiver', 'Public checkpoint', claim.token);
+    const before = await readItemHistoryHead(f.pmRoot, id);
+    const engine = receiver.engine;
+    const author = Object.getOwnPropertyDescriptor(engine, 'author')!;
+    let intervened = false;
+    Object.defineProperty(engine, 'author', {
+      configurable: true,
+      get() {
+        // The fallback is formatted after the fence read, before admitting the captured binding.
+        if (!intervened && new Error().stack?.includes('at admitCapacity ')) {
+          intervened = true;
+          f.run('update', id, '--author', 'receiver', '--field', 'swarm_capacity=spare');
+        }
+        return author.value as string;
+      },
+    });
+    try {
+      await assert.rejects(receiver.next(undefined, false, undefined, 'runner,spare'), { code: 'swarm_superseded' });
+    } finally {
+      Object.defineProperty(engine, 'author', author);
+      assert.equal(intervened, true);
+    }
+    const edited = await readItemHistoryHead(f.pmRoot, id);
+    assert.equal(edited.length, before.length + 1);
+    const resumed = await receiver.next();
+    assert.equal(resumed.capacity, 'spare');
+    assert.equal(resumed.token, handoff.token);
+    assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), edited);
+  });
+
+  await t.test('continuation / retry without a caller-supplied token', async cell => {
+    const f = await sharedFixture(cell);
+    const capacity = new Capacities(f.shared.engine);
+    const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
+    for (const name of ['denied', 'spare']) {
+      await capacity.run(name, { action: 'declare', limit: 100, unit: 'percent', window: '7d', resetsAt });
+    }
+    await capacity.run('spare', { action: 'policy', else: 2 });
+    for (const legacy of [false, true]) {
+      const id = await f.item();
+      const claim = legacy ? await f.client.claim(id) : await f.shared.start(id);
+      const token = 'token' in claim ? claim.token : undefined;
+      const before = await readItemHistoryHead(f.pmRoot, id);
+      let retry = '';
+      await assert.rejects(f.shared.continuation(id, 'receiver', undefined, 800, 'denied,spare'), (error: CapacityRefusal) => {
+        assert.equal(error.code, 'capacity_policy_denied');
+        retry = String(error.details?.next_command);
+        return true;
+      });
+      assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), before);
+      const launcher = 'pm() { "$SWARM_TEST_NODE" "$SWARM_TEST_HOST" "$@"; }\n';
+      const replay = await runProcess('/bin/sh', ['-ec', launcher + retry + ' --json'], f.repo,
+        { ...f.env, SWARM_TEST_NODE: process.execPath, SWARM_TEST_HOST: f.host });
+      assert.equal(replay.code, 0, replay.stderr || replay.stdout);
+      const packet = JSON.parse(replay.stdout);
+      const { item } = await f.client.get(id, { depth: 'full' });
+      assert.equal(packet.capacity, 'spare');
+      assert.equal(item.assignee, 'receiver');
+      assert.equal(item.swarm_token, (BigInt(token ?? '0') + 1n).toString());
+      assert.equal(JSON.parse(String(item.swarm_handoff)).token, packet.token);
+      assert.equal(retry.includes('--token '), !legacy);
+    }
+  });
 });

@@ -6,10 +6,10 @@ status: in_progress
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#99"
 created_at: "2026-11-25T08:30:21.206Z"
-updated_at: "2026-11-25T17:22:58.921Z"
+updated_at: "2026-11-25T18:39:06.967Z"
 author: codex-agent
 acceptance_criteria: "Declare and observe windowed capacities, enforce counted admission for next and start, fence interruptions across reclaim, and transfer a bounded continuation packet in Git and shared tracker modes."
-comments[42]{created_at,author,text}:
+comments[48]{created_at,author,text}:
   "2026-11-25T08:30:46.293Z",codex-agent,"Baseline reproduced in a real non-Git tracker: capacity and interrupt were missing, capacity flags on next/start and continuation on brief were rejected, and plain next admitted two workers without a quota bound. Implementing five pushed slices with native revision checks and a real process race."
   "2026-11-25T08:33:41.905Z",codex-agent,"Slice 1: capacities are native tagged items and each observation is revision-checked and appended to the item history. The read model uses the last two in-window points when both are at most 24 hours old. Revert proof: replacing the forecast with null failed the historical 56 + 8/7 forecast assertion; restored the implementation."
   "2026-11-25T09:00:52.798Z",codex-agent,"Slice 2: next and start share primary capacity admission with dry-run and report measured refusal context and the next fallback command. Two independent next processes on disjoint work produced one admitted lane and one capacity_exhausted refusal. Revert proof: ignoring occupied slots admitted both workers; the process test failed with exits 0 and 0. The weekly replay produced 57.14 percent and three admitted lanes using the supplied readings and illustrative observation times."
@@ -52,6 +52,12 @@ comments[42]{created_at,author,text}:
   "2026-11-25T16:33:43.363Z",codex-agent,PRRT_kwDOVLY-P867_gyA. The occupied-pool regression requires a finite forecast before comparing its limit. Returning null in the refusal passed the previous coercive comparison and failed the new numeric assertion in the disposable copy.
   "2026-11-25T16:33:46.257Z",codex-agent,"Matrix baseline failed 19 of 75 cells. Orphaned: shared start, Git start, next, heartbeat, handoff, continuation without capacity, interrupt, reclaim to agent, window reset, redeclare, policy change and native terminal edit. Null: next, heartbeat, continuation without capacity and close. Exhausted: continuation without capacity and native terminal edit. Live: native terminal edit. Legacy metadata is projected as absent when the declaration is missing or terminal. Successful fenced lane writes clear it in native history. Observational transitions and refused operations preserve unrelated item histories."
   "2026-11-25T17:22:57.668Z",codex-agent,"Final matrix passed all 75 cells, including saved close receipts for legacy null input. The linked suite passed 100 checks and the dependent run passed 1,085 checks across 75 files, with zero skips. Both packed npm and Bun capacity cases passed. Build, typecheck, lint, duplication and docstrings passed. The privacy matrix refused 27,130 unsafe inputs with zero tracker changes and zero partial receipts."
+  "2026-11-25T18:02:47.092Z",codex-agent,"Started the final review at 4b0710b. Reproducing the unchanged-binding race and cached-token retry in the transition matrix, and testing the deadline matcher with both false-acceptance examples."
+  "2026-11-25T18:06:24.472Z",codex-agent,PRRT_kwDOVLY-P868CR2I. Recheck the captured native history before returning from unchanged-binding admission. The matrix writes a peer binding during quota lookup after the fenced item read. The original code failed the expected swarm_superseded assertion. The retry must use the peer binding and leave the edited history unchanged.
+  "2026-11-25T18:06:25.825Z",codex-agent,PRRT_kwDOVLY-P868CR2O. The continuation retry carries the effective fenced token. The matrix executes the emitted command in a new CLI process. The original command failed with swarm_stale_fence. The row also executes the tokenless legacy retry.
+  "2026-11-25T18:06:27.023Z",codex-agent,PRRT_kwDOVLY-P868CR2U. The deadline inventory finds the last option that can set or overwrite signal. The original matcher accepted a later spread over the signal and failed the rejection fixture. Tests also cover explicit and computed overrides.
+  "2026-11-25T18:06:28.298Z",codex-agent,PRRT_kwDOVLY-P868CR2X. Reused the inventory binding walk to conservatively refuse a native signal whenever globalThis has a local declaration. The original matcher accepted the shadowing parameter and failed the rejection fixture. The unshadowed streaming Git call remains covered.
+  "2026-11-25T18:39:05.889Z",codex-agent,"Final local gates passed. The linked run passed 91 checks including all 77 transition rows. The 65 dependent suites passed 818 checks with zero skips. Both packed capacity cases passed. Scoped diagnostics exercised every changed production branch. Build, typecheck, lint, duplication and docstrings passed. The privacy matrix refused 27,130 inputs with zero tracker changes and partial receipts."
 files[32]{path,scope}:
   index.ts,project
   scripts/identity-gate.ts,project
@@ -85,7 +91,7 @@ files[32]{path,scope}:
   test/privacy-sinks.test.ts,project
   test/review-close-contracts.test.ts,project
   test/support/capacity-race-extension.ts,project
-tests[9]:
+tests[10]:
   - command: node --test --test-concurrency=2 test/capacity.test.ts
     scope: project
     provenance:
@@ -152,6 +158,14 @@ tests[9]:
     provenance:
       author: codex-agent
       created_at: "2026-11-25T16:37:34.604Z"
+      source_kind: local_mutation
+      source_ref: feat/capacity-aware-lane-admission
+  - command: node --test --test-concurrency=2 test/capacity-transitions.test.ts test/review-close-contracts.test.ts
+    scope: project
+    timeout_seconds: 500
+    provenance:
+      author: codex-agent
+      created_at: "2026-11-25T18:06:31.926Z"
       source_kind: local_mutation
       source_ref: feat/capacity-aware-lane-admission
 docs[4]{path,scope}:

@@ -10,7 +10,7 @@ import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-schedu
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { footprintPath, itemFootprint, partition } from './planner.ts';
 import { footprintOverlaps, selectNext } from './selection.ts';
-import { commitItemMutation, assertPrivatePathSafe, settings, SettingsRefusal } from './settings.ts';
+import { assertItemHistoryHead, commitItemMutation, assertPrivatePathSafe, settings, SettingsRefusal } from './settings.ts';
 import { Swarm } from './swarm.ts';
 import { heartbeatPath, readRuntime, StaleFenceError, touchHeartbeat, withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
@@ -192,9 +192,10 @@ export class SharedTracker {
 
   /** Update only a changed binding under the original ownership and native revision. */
   private async updateCapacity(item: Record<string, unknown>, history: ItemHistoryHead, lease: Lease, binding: string | undefined) {
-    if (item[LANE_CAPACITY_FIELD] === binding) return;
+    const id = String(item.id);
+    if (item[LANE_CAPACITY_FIELD] === binding) return assertItemHistoryHead(this.engine.pmRoot, id, history);
     const options = { author: this.engine.author, field: capacityFields(binding), unset: capacityUnset(item, binding) };
-    await lease.write(() => commitItemMutation({ id: String(item.id), item, options },
+    await lease.write(() => commitItemMutation({ id, item, options },
       admitted => this.engine.client.update(admitted.id, admitted.options), { history, generation: { token: item.swarm_token } }));
   }
 
@@ -391,7 +392,8 @@ export class SharedTracker {
     /** Prepare the exact packet in preflight and again from the live ownership revision. */
     const prepare = async (item: Record<string, unknown>, history?: ItemHistoryHead) => {
       await this.assertContinuationActive(item);
-      const retry = ['--continuation', '--to', to, '--token-budget', String(tokenBudget), ...(token === undefined ? [] : ['--token', token])];
+      const effectiveToken = token ?? (typeof item.swarm_token === 'string' ? item.swarm_token : undefined);
+      const retry = ['--continuation', '--to', to, '--token-budget', String(tokenBudget), ...(effectiveToken === undefined ? [] : ['--token', effectiveToken])];
       const { capacity: existing } = laneCapacityState(item, Date.now());
       const admission = await admitCapacity(this.engine, order, String(item.id), 'brief', retry, existing);
       return buildContinuation(this.engine, item, to, this.nextToken(item), tokenBudget, admission?.capacity ?? null, history);
