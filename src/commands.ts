@@ -103,7 +103,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       const { complete_list: _complete, read_output: _read, ...compact } = result;
       return compact;
     }
-    case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true }) };
+    case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true, capacity: textOption(ctx.options.capacity) }) };
     case 'brief': {
       const shared = swarm as SharedTracker;
       const token = textOption(ctx.options.token);
@@ -159,7 +159,10 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     assertReceiptSafe(result);
     return result;
   } catch (error) {
-    try { assertPrivatePathSafe(String(error)); } catch (refusal) { error = refusal; }
+    try {
+      assertPrivatePathSafe(String(error));
+      if (error instanceof CapacityRefusal) assertReceiptSafe(error.details);
+    } catch (refusal) { error = refusal; }
     throw createPmCliExpectedError(String(error), { exitCode: error instanceof GitCommandFailure ? error.exitCode : 2, context: {
       ...(error instanceof SettingsRefusal || error instanceof CapacityRefusal || error instanceof DeadlockRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
       ...(error instanceof CapacityRefusal && error.details !== undefined ? { details: error.details } : {}),
@@ -176,7 +179,7 @@ export const swarmCommandDefinitions = {
   capacity: { mutations: ['declare', 'observe', 'policy'].map(action => ({ action })), description: 'Declare, observe or inspect a windowed capacity', flags: ['agent', 'action', 'limit', 'unit', 'window', 'resets-at', 'used', 'source', 'at', 'band', 'else'], id: true },
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
-  schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
+  schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run', 'capacity'], id: false },
   brief: { mutations: [{ continuation: true }], description: 'Read a fenced assignment or transfer it with a bounded continuation', flags: ['agent', 'token', 'token-budget', 'continuation', 'to', 'capacity'], id: true },
   next: { mutations: [{}], description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run', 'capacity'], id: false },
   start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict', 'capacity'], id: true },
@@ -197,6 +200,37 @@ function safeRendererResult(result: unknown): unknown {
   try { assertReceiptSafe(result); return result; }
   catch { return { code: 'swarm_private_path', required: 'Replace private user-home paths with project-relative references.' }; }
 }
+/** Describe capacity controls and give host help runnable feature examples. */
+const capacityHelp: Readonly<Record<string, string>> = {
+  capacity: 'Primary capacity and optional comma-separated retry order',
+  action: 'Capacity action: declare, observe, policy or status',
+  limit: 'Positive capacity limit in the declared unit',
+  unit: 'Public unit label used by observations and bands',
+  window: 'Window duration with s, m, h, d or w suffix',
+  'resets-at': 'ISO reset timestamp with time zone',
+  used: 'Caller-measured cumulative usage',
+  source: 'Public source label for the observation',
+  at: 'ISO observation time, defaults to now',
+  band: 'Repeatable strict threshold, such as forecast<88=3',
+  else: 'Allowed lanes when no band matches or forecast is unknown',
+  continuation: 'Transfer the fenced lane and emit its continuation packet',
+  to: 'Receiver of the continuation fence',
+  reason: 'Stop reason: capacity_exhausted',
+  'token-budget': 'Maximum estimated tokens in JSON and TOON',
+};
+const capacityExamples: Readonly<Record<string, string[]>> = {
+  capacity: [
+    'pm swarm capacity codex --action declare --limit 100 --unit percent --window 7d --resets-at <ISO>',
+    'pm swarm capacity codex --action observe --used 44 --source codexbar',
+    "pm swarm capacity codex --action policy --band 'forecast<88=3' --else 0",
+  ],
+  schedule: ['pm swarm schedule --agent worker --skills typescript --capacity codex,ollama --dry-run'],
+  next: ['pm swarm next --agent worker --capacity codex,ollama --json'],
+  start: ['pm swarm start task-id --agent worker --capacity codex --strict --json'],
+  interrupt: ['pm swarm interrupt task-id --agent worker --token 1 --reason capacity_exhausted --capacity codex'],
+  brief: ['pm swarm brief task-id --agent worker --token 1 --continuation --to worker-2 --token-budget 800'],
+};
+
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
   api.hooks.beforeMutation(guardItemDocument);
@@ -216,7 +250,7 @@ export function register(api: ExtensionApi): void {
   api.registerItemFields([CAPACITY_FIELD, LANE_CAPACITY_FIELD, INTERRUPTION_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
-    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
-    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' || name === 'deadlocks' ? [{ name: 'id', required: definition.id }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
+    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: Object.hasOwn(capacityExamples, name) && (flag !== 'limit' || name === 'capacity') && Object.hasOwn(capacityHelp, flag) ? capacityHelp[flag] : flag, ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
+    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' || name === 'deadlocks' ? [{ name: name === 'capacity' ? 'name' : 'id', required: definition.id }] : [], flags, examples: capacityExamples[name] ?? [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }

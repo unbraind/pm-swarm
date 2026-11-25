@@ -18,6 +18,8 @@ import { rejectedCorpus } from './privacy-corpus.ts';
 
 /** Stable production write sites: new SDK or backend writers must join this inventory and its property. */
 const WRITE_SITES = [
+  'capacity.ts:create', 'capacity.ts:update', 'interruption.ts:update',
+  'shared-tracker.ts:update', 'shared-tracker.ts:update',
   'deadlocks.ts:update',
   'swarm.ts:mutateItem',
   'lease.ts:acquireLock', 'swarm.ts:acquireLock', 'close-recovery.ts:acquireLockLease',
@@ -32,7 +34,7 @@ const WRITE_SITES = [
 ].sort();
 
 /** Every native item mutation must carry an SDK history precondition, including no-op Git cleanup. */
-const HISTORY_SITES = ['deadlocks.ts:update', 'close-recovery.ts:close', 'close-recovery.ts:update', 'close-recovery.ts:restore', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
+const HISTORY_SITES = ['capacity.ts:update', 'interruption.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'deadlocks.ts:update', 'close-recovery.ts:close', 'close-recovery.ts:update', 'close-recovery.ts:restore', 'swarm.ts:claim', 'swarm.ts:update', 'swarm.ts:update', 'swarm.ts:release', 'swarm.ts:release', 'swarm.ts:mutateItem', 'swarm.ts:files', 'resource-tracker.ts:update', 'resource-tracker.ts:update', 'shared-tracker.ts:release', 'shared-tracker.ts:update', 'shared-tracker.ts:update', 'shared-tracker.ts:files', 'progress.ts:comments'].sort();
 
 /** Minimal parser shape keeps inventory traversal independent of compiler internals. */
 interface AstNode { type: string; name?: string; property?: AstNode; object?: AstNode; callee?: AstNode; id?: AstNode; key?: AstNode; arguments?: AstNode[]; params?: AstNode[]; start?: number; end?: number }
@@ -60,7 +62,9 @@ function writeInventory(): string[] {
           while (index >= 0 && parents[index].type !== 'ArrowFunctionExpression') index--;
           assert.ok(index >= 0, `${file}:${method}: missing admission callback`);
           const callback = parents[index]; const wrapper = parents[index - 1];
-          const itemWriter = ['commitItemMutations', 'commitItemCompletion', 'commitWorkspaceTransaction', 'mutateItem'].includes(method) || /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run'].includes(method);
+          const itemWriter = ['commitItemMutations', 'commitItemCompletion', 'commitWorkspaceTransaction', 'mutateItem'].includes(method) || /(?:^|\.)client$/.test(receiver) && !['get', 'listAllComplete', 'run', 'create'].includes(method);
+          // Native creation has no earlier item revision. The SDK guards its deterministic ID.
+          if (method === 'create') assert.match(text(wrapper.arguments?.[0]), /\bid\s*:/, 'native creation must admit its explicit identity');
           assert.ok(wrapper.type === 'CallExpression' && wrapper.callee?.name === (itemWriter ? 'commitItemMutation' : 'commitMutation'), `${file}:${method}: unguarded SDK writer`);
           if (itemWriter) assert.match(text(wrapper.arguments?.[0]), /\bitem(?:\s*[:,}])/, `${file}:${method}: missing full snapshot`);
           if (itemWriter) {
@@ -116,6 +120,7 @@ test('each enumerated sink refuses private values from CLI git settings files an
         case 'commitWorkspaceTransaction': return commitMutation({ author: value, transactionId: 'privacy-probe' }, admitted => commitWorkspaceTransaction({ ...admitted, pmRoot: f.pmRoot, steps: [{ id: 'probe', async inspect() { return { state: 'pending' }; }, async apply() { return null; }, async compensate() {} }] }));
         case 'close': return commitMutation({ id, note: value }, admitted => f.client.close(admitted.id, admitted.note));
         case 'restore': return commitMutation({ id, target: value }, admitted => f.client.restore(admitted.id, admitted.target));
+        case 'create': return commitMutation({ id: 'privacy-probe', type: 'Task', title: value }, admitted => f.client.create(admitted));
         case 'update': return commitMutation({ id, options: { comment: [value] } }, admitted => f.client.update(admitted.id, admitted.options));
         case 'files': return commitMutation({ id, options: { add: [value] } }, admitted => f.client.files(admitted.id, admitted.options));
         case 'claim': return commitMutation({ id, options: { author: value } }, admitted => f.client.claim(admitted.id, admitted.options));

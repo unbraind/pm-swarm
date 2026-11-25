@@ -212,7 +212,7 @@ pm swarm reap --agent worker --dry-run
 pm swarm reap --agent worker
 ```
 
-Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm, except items tagged `swarm-resource`. Assigned-only items also block overlapping selection. `start` records fenced ownership and the linked footprint through the SDK, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
+Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm, except items tagged `swarm-resource` or `swarm-capacity`. Assigned-only items also block overlapping selection. `start` records fenced ownership and the linked footprint through the SDK, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
 
 Each shared claim persists a monotonically increasing decimal `swarm_token` and claim timestamp atomically with its assignee. `next` and `start` return `token`; keep that exact string and pass `--token` to shared `sync --apply`, `handoff` and `close`. A stale or missing token is refused with typed `StaleFenceError` / CLI code `swarm_stale_fence` before changing item data. Reusing an author ID after a takeover does not make its old token valid. Embedded `SharedTracker` instances remember the tokens they issue; separate CLI invocations require the explicit token. Legacy claims without a swarm token retain ordinary SDK ownership checks. Plan excludes candidates overlapping active assigned items and places unknown footprints in solitary waves; unknown work is deferred when active lanes prevent a safe planning recommendation. `next` retains its explicit unknown-footprint fallback. Claims made by tools outside swarm do not participate in its multi-item footprint lease; recheck status before editing.
 
@@ -275,6 +275,89 @@ also validate fencing if they allow delayed writes after resource expiry.
 
 For the typed SDK example, see [resource reservations](docs/resource-reservations.md).
 
+## Windowed capacity
+
+Use a named capacity for a provider quota, rate-limit window or shared pool of
+runners. A capacity is a native tracker item. Operators supply measurements
+with a public source label. Each accepted observation adds a native history
+revision. These commands work in Git worktrees and plain trackers.
+
+### Worked example
+
+Replay the observed Codex readings of 44%, 49%, 54% and 56% from November
+24–25, 2026. The example uses illustrative UTC measurement times and a weekly
+window ending at noon on November 25. For a live run, supply the actual reset
+and measurement times. The commands below shift the example times to the
+current clock so the replay can run in a scratch tracker. Omit `--at` to
+record the time of observation.
+
+```sh
+example_time=$(node -p 'Date.now()')
+stamp() {
+  node -p 'new Date(Number(process.argv[1]) + Number(process.argv[2]) * 3600000).toISOString()' -- "$example_time" "$1"
+}
+pm swarm capacity codex --action declare --limit 100 --unit percent \
+  --window 7d --resets-at "$(stamp 4)"
+pm swarm capacity codex --action policy \
+  --band 'forecast<88=3' --band 'forecast<95=2' --band 'forecast<98=1' --else 0
+pm swarm capacity codex --action observe --used 44 --source codexbar --at "$(stamp -23)"
+pm swarm capacity codex --action observe --used 49 --source codexbar --at "$(stamp -16)"
+pm swarm capacity codex --action observe --used 54 --source codexbar --at "$(stamp -7)"
+pm swarm capacity codex --action observe --used 56 --source codexbar --at "$(stamp 0)"
+pm swarm capacity codex --json
+```
+
+At 08:00 UTC, 164 of 168 hours have elapsed and four hours remain. The last
+two observations increased by two percentage points in seven hours, so the
+burn rate is about 0.286 percentage points per hour and the forecast is
+**57.14% at reset**. The first policy band admits **three simultaneous lanes**.
+With no current claims all three slots are available.
+
+The projection uses the newest two observations in the current window and
+reports `forecast: null` if either is missing or older than 24 hours. A
+decrease between measurements yields a zero burn rate. Status labels stale measurements and reports the elapsed share, burn rate per hour,
+forecast, lane count, current occupancy and seconds to reset. Band thresholds
+are exclusive and strictly increasing, in the declared unit. The first match
+wins. `--else` applies with no match or an unknown forecast and defaults to zero.
+A fresh measurement or forecast at or above the limit blocks admission. After
+the reset, declare the next window with its new reset time.
+
+```sh
+pm swarm capacity ollama --action declare --limit 100 --unit percent \
+  --window 7d --resets-at "$(stamp 4)"
+pm swarm capacity ollama --action policy --else 1
+pm swarm next --agent worker --capacity codex,ollama --json
+pm swarm start task-id --agent worker --capacity codex --strict --json
+```
+
+The first capacity in the list is evaluated for admission under the same
+tracker lease that grants the claim. A refusal gives the observed usage,
+forecast, reset time and a runnable retry command for the next capacity.
+Use `next --dry-run` to check the same policy without taking a slot.
+`schedule --capacity` uses the same admission check with its skill and
+priority rules.
+
+When a provider stops a worker, keep the item's claim and mark that window
+exhausted. Other workers can reclaim stale claims normally. This lane stays
+assigned until the reset or a fenced continuation transfer. Pass the item ID
+and token from the claim response.
+
+```sh
+pm swarm interrupt task-id --agent worker --token 1 \
+  --reason capacity_exhausted --capacity codex
+pm swarm brief task-id --agent worker --token 1 --continuation \
+  --to worker-2 --capacity ollama --token-budget 800 --json
+```
+
+The continuation records the interruption, the current acceptance criteria
+with an unverified status, and changes to linked files, synced paths, comments
+and tests in native revision order after the claim. A Git lane also includes
+commit IDs and uncommitted paths from its worktree. The recipient gets a new
+token. The previous window stays exhausted until its reset. A continuation
+from an interrupted lane drops the old capacity binding when no replacement
+capacity is supplied. The packet budget covers both JSON and TOON, with the
+same privacy checks and omission receipts as assignment briefs.
+
 ## Budgeted assignment briefs
 
 Use `brief` after a shared-tracker `next`, `schedule`, or `start`. Pass the assigned
@@ -291,8 +374,8 @@ The brief reads the current SDK item and requires its current owner and token.
 A brief reflects one observed snapshot and does not renew liveness. Keep using
 the regular heartbeat and fenced write commands. An explicit handoff or reclaim
 to an agent also issues a token that works with `brief`, including for Git lanes.
-A fresh Git lane with only a legacy core claim needs a fenced transfer before it
-can use `brief`.
+A capacity-bound Git lane returns a fencing token at acquisition. A Git lane
+with only a legacy core claim can obtain a token through a transfer.
 
 The response includes the item ID, owner, token and status. Its work context
 prioritizes the title, acceptance criteria, description, declared blocker and

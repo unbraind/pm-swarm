@@ -1,6 +1,7 @@
+import { interruptionRefusal } from './interruption.ts';
 import { SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import type { CapacityStatus } from './capacity.ts';
-import { assertStartWorkItem, admitCapacity, capacityFields, capacityOrder, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { retainFailureCause } from './failure-cause.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
@@ -99,7 +100,7 @@ export class Swarm {
 
   /** Select by declared skills, bounded aging and handoff cost through the existing claim path. */
   async schedule(options: ScheduleOptions): Promise<ScheduleReceipt> {
-    return scheduleNext(this, options, policy => this.next(options.parent, options.dryRun === true, policy));
+    return scheduleNext(this, options, policy => this.next(options.parent, options.dryRun === true, policy, options.capacity));
   }
 
   /** Pick and publish under one lease; previews take no lease and perform no mutations. */
@@ -116,7 +117,7 @@ export class Swarm {
     const active = await this.activeFootprints();
     const { chosen, unknown, reason, warnings, skipped } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
     assertPrivatePathSafe({ reason, warnings, skipped });
-    const admission = chosen === undefined ? undefined : await admitCapacity(this, order, chosen.item.id, 'next', [...(parent === undefined ? [] : ['--parent', parent]), ...(dryRun ? ['--dry-run'] : [])]);
+    const admission = chosen === undefined ? undefined : await admitNextCapacity(this, order, chosen.item.id, parent, dryRun, policy);
     const lane = chosen !== undefined && !dryRun ? await this.startLane(chosen.item.id, {}, !unknown, lease!, admission) : undefined;
     return { ...(admission === undefined ? {} : { capacity: admission.capacity }), ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
   }
@@ -151,6 +152,8 @@ export class Swarm {
     const initial = await clientMutationSnapshot(this.pmRoot, this.client, id, async canonicalId => (await requireActiveExtensionRead(() => readItem(this.client, canonicalId))).item); const item = initial.item;
     assertCloseIntentSettled(this, item);
     assertStartWorkItem(item);
+    const stopped = interruptionRefusal(item);
+    if (stopped !== undefined) throw stopped;
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
     const prefs = await readSettings(this.pmRoot);
@@ -161,7 +164,7 @@ export class Swarm {
     if (strict && overlap_warnings.length > 0) throw new Error(`Overlapping start refused: ${overlap_warnings.map(row => `lane ${row.lane_id} on path ${row.path} (${row.lane_path})`).join('; ')}`);
     const base = commit(this.repo, config.base); const path = resolve(this.repo, config.root, `${basename(this.repo)}-${item.id}`);
     admitReceipt({ id: item.id, branch, base, worktree: path, overlap_warnings }, this.repo);
-    const binding = admission?.capacity ?? (item.assignee ? item[LANE_CAPACITY_FIELD] : undefined);
+    const binding = admission?.capacity ?? (item.assignee === this.author ? item[LANE_CAPACITY_FIELD] : undefined);
     const token = admission === undefined ? undefined : incrementFence(item.swarm_token);
     const claimedAt = nowIso();
     const registrationFields = ['swarm_branch', 'swarm_base', 'swarm_base_ref', LANE_CAPACITY_FIELD];

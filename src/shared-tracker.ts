@@ -2,7 +2,7 @@ import { buildContinuation, SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import { assertBriefBudget, assertBriefIdentitySafe } from './assignment-brief.ts';
 import { currentInterruption, interruptionRefusal } from './interruption.ts';
 import type { CapacityStatus } from './capacity.ts';
-import { assertStartWorkItem, admitCapacity, capacityFields, capacityOrder, capacityUnset, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityUnset, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
 import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
@@ -106,7 +106,7 @@ export class SharedTracker {
       const order = directOrder.length === 0 && typeof stored === 'string' ? capacityOrder(stored) : directOrder;
       admission = await admitCapacity(this.engine, order, canonicalId, 'start', strict ? ['--strict'] : []);
     }
-    const binding = admission?.capacity ?? (item.assignee ? item[LANE_CAPACITY_FIELD] : undefined);
+    const binding = admission?.capacity ?? (item.assignee === this.engine.author ? item[LANE_CAPACITY_FIELD] : undefined);
     const receipt = { mode: 'shared-tracker', id: canonicalId, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings,
       ...(typeof binding === 'string' ? { capacity: binding } : {}) };
     assertPrivatePathSafe(receipt);
@@ -158,8 +158,7 @@ export class SharedTracker {
       const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
       const incoming = await this.incomingHandoff(corpus.items, parent, dryRun, policy);
       if (incoming !== undefined) {
-        const retry = parent === undefined ? [] : ['--parent', parent];
-        const admission = await admitCapacity(this.engine, order, incoming.id, 'next', [...retry, ...(dryRun ? ['--dry-run'] : [])]);
+        const admission = await admitNextCapacity(this.engine, order, incoming.id, parent, dryRun, policy);
         if (lease !== undefined) {
           if (admission !== undefined) await this.bindIncoming(incoming.id, incoming.token, admission.capacity, lease);
           this.tokens.set(incoming.id, incoming.token);
@@ -169,7 +168,7 @@ export class SharedTracker {
       const active = (await this.sharedLanes(corpus, false)).filter(lane => !lane.terminal);
       const { chosen, unknown, warnings, skipped, reason } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
       assertPrivatePathSafe({ warnings, skipped, reason });
-      const admission = chosen === undefined ? undefined : await admitCapacity(this.engine, order, chosen.item.id, 'next', [...(parent === undefined ? [] : ['--parent', parent]), ...(dryRun ? ['--dry-run'] : [])]);
+      const admission = chosen === undefined ? undefined : await admitNextCapacity(this.engine, order, chosen.item.id, parent, dryRun, policy);
       const lane = chosen !== undefined && lease !== undefined ? await this.claimLane(chosen.item.id, !unknown, lease, corpus, admission) : undefined;
       return { mode: 'shared-tracker', ...(admission === undefined ? {} : { capacity: admission.capacity }), ...lane, selected: chosen?.item.id ?? null, dry_run: dryRun, reason, warnings, skipped };
     };

@@ -27,6 +27,7 @@ export interface ScheduleOptions {
   limit?: number;
   parent?: string;
   dryRun?: boolean;
+  capacity?: string;
 }
 
 /** Minimal item metadata; readiness and ownership remain SDK responsibilities. */
@@ -64,6 +65,7 @@ export interface ScheduleReceipt {
   mode?: string;
   worktree?: string;
   branch?: string;
+  capacity?: string;
 }
 
 /** Common projection of the existing next engines; no second claim implementation. */
@@ -76,6 +78,7 @@ interface NextReceipt {
   mode?: string;
   worktree?: string;
   branch?: string;
+  capacity?: string;
 }
 
 /** Keep accepted skill declarations small and portable. */
@@ -163,13 +166,13 @@ export class FairPolicy {
 
   /** Bound explanations while preserving exact totals and the existing assignment context. */
   receipt(result: NextReceipt, dryRun: boolean, workspace?: string): ScheduleReceipt {
-    const receipt = { selected: result.selected, agent: this.author, dry_run: dryRun, reason: result.reason, now: this.now, max_wait_seconds: this.maxWait, counts: this.counts, decisions: this.decisions.slice(0, this.limit), omitted: Math.max(0, this.decisions.length - this.limit), warnings: result.warnings, ...(result.token === undefined ? {} : { token: result.token }), ...(result.context === undefined ? {} : { context: result.context }), ...(result.mode === undefined ? {} : { mode: result.mode }), ...(result.worktree === undefined ? {} : { worktree: result.worktree }), ...(result.branch === undefined ? {} : { branch: result.branch }) };
+    const receipt = { selected: result.selected, agent: this.author, dry_run: dryRun, reason: result.reason, now: this.now, max_wait_seconds: this.maxWait, counts: this.counts, decisions: this.decisions.slice(0, this.limit), omitted: Math.max(0, this.decisions.length - this.limit), warnings: result.warnings, ...(result.token === undefined ? {} : { token: result.token }), ...(result.context === undefined ? {} : { context: result.context }), ...(result.mode === undefined ? {} : { mode: result.mode }), ...(result.worktree === undefined ? {} : { worktree: result.worktree }), ...(result.branch === undefined ? {} : { branch: result.branch }), ...(result.capacity === undefined ? {} : { capacity: result.capacity }) };
     admitReceipt(receipt, workspace); return receipt;
   }
 }
 
 /** Bind fair ranking to either existing next engine, never a separate ownership path. */
-export async function scheduleNext(engine: { author: string; repo: string; pmRoot: string }, options: ScheduleOptions, invoke: (policy: FairPolicy) => Promise<NextReceipt>): Promise<ScheduleReceipt> {
+export async function scheduleNext(engine: { author: string; repo: string; pmRoot: string }, options: ScheduleOptions, invoke: (policy: FairPolicy, capacity?: string) => Promise<NextReceipt>): Promise<ScheduleReceipt> {
   assertPrivatePathSafe({ author: engine.author, options });
   const policy = new FairPolicy(engine.author, options);
   policy.receipt({ selected: null, reason: '', warnings: [] }, options.dryRun === true);
@@ -177,5 +180,5 @@ export async function scheduleNext(engine: { author: string; repo: string; pmRoo
   if (!discovered.effective.every(extension => extension.capabilities !== undefined && extension.capabilities.length > 0 && !extension.capabilities.includes('services'))) {
     throw new SchedulingRefusal('schedule_backend_refused', 'Use a local tracker with shared swarm coordination; service-backed storage needs a tracker-wide scheduler adapter. No local fallback was attempted.');
   }
-  return policy.receipt(await invoke(policy), options.dryRun === true, engine.repo);
+  return policy.receipt(await invoke(policy, options.capacity), options.dryRun === true, engine.repo);
 }

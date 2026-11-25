@@ -263,3 +263,36 @@ for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} recovers 
   const { bun, repo, env } = await packedNonGitConsumer(t, manager);
   assertPackedCrashRecovery(manager === 'npm' ? process.execPath : bun, repo, env);
 });
+
+/** Exercise the complete capacity lifecycle through the shipped npm/Bun extension. */
+for (const manager of ['npm', 'bun'] as const) test(`packed ${manager} admits and transfers windowed capacity lanes without Git`, { timeout: testTime(600000) }, async t => {
+  const { bun, repo, pmRoot, host, env, invoke } = await packedNonGitConsumer(t, manager);
+  const runtime = manager === 'npm' ? process.execPath : bun;
+  const now = Date.now();
+  const reset = new Date(now + 4 * 3_600_000).toISOString();
+  const ms = 3_600_000;
+  invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'declare', '--window', '7d', '--resets-at', reset, '--unit', 'percent', '--limit', '100']);
+  invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'policy', '--band', 'forecast<88=3', '--band', 'forecast<95=2', '--else', '0']);
+  for (const [hoursAgo, used] of [[23, 44], [16, 49], [7, 54], [0, 56]]) {
+    invoke(runtime, ['swarm', 'capacity', 'codex', '--action', 'observe', '--used', String(used), '--at', new Date(now - hoursAgo * ms).toISOString(), '--source', 'codexbar']);
+  }
+  const status = invoke(runtime, ['swarm', 'capacity', 'codex']);
+  assert.equal(status.admitted_lane_count, 3);
+  assert.ok(Math.abs(Number(status.forecast) - (56 + 8 / 7)) < 1e-12);
+  const toon = spawnSync(runtime, [host, '--path', pmRoot, 'swarm', 'capacity', 'codex', '--output-format', 'toon'], { cwd: repo, env, encoding: 'utf8', timeout: testTime(300000) });
+  assert.equal(toon.status, 0, toon.stderr);
+  assert.equal((decodeToon(toon.stdout) as Record<string, unknown>).admitted_lane_count, 3);
+
+  const id = String(invoke(runtime, ['create', 'Task', 'Packed capacity lane', '--ac', 'Check packet']).id);
+  invoke(runtime, ['files', id, '--add', 'src/capacity.ts']);
+  const claim = invoke(runtime, ['swarm', 'next', '--capacity', 'codex']);
+  assert.equal(claim.selected, id);
+  assert.equal(claim.capacity, 'codex');
+  invoke(runtime, ['swarm', 'interrupt', id, '--token', String(claim.token), '--capacity', 'codex', '--reason', 'capacity_exhausted']);
+  const packet = invoke(runtime, ['swarm', 'brief', id, '--continuation', '--to', 'receiver', '--token', String(claim.token), '--token-budget', '800']);
+  assert.equal(packet.to, 'receiver');
+  assert.equal(packet.token, '2');
+  assert.equal((packet.context as Record<string, unknown>).acceptance_criteria, 'Check packet');
+  assert.equal(invoke(runtime, ['swarm', 'capacity', 'codex']).reported_exhausted, true);
+  assert.equal(existsSync(join(repo, '.git')), false);
+});

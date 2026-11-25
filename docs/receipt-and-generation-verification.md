@@ -68,7 +68,7 @@ A raw Git peer changing configuration between read and unset retains its value.
 Byte comparisons cover peer item/history and Git resources. No-op cleanup tests
 require exactly claim/release history and prohibit an extra update event.
 
-The current inventory contains 26 SDK/backend write sites, including 18
+The current inventory contains 31 SDK/backend write sites, including 22
 locked-history sites; the five-source sink property checks each one with unchanged durable
 tracker bytes.
 Existing private-content and benign corpora, real fleet paths, decoder and

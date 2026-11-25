@@ -119,3 +119,20 @@ files use writable handles for `FlushFileBuffers`; this Node API does not supply
 POSIX directory barrier. Windows recovery addresses process crashes; power-loss
 durability of directory entries is not claimed. See the documented
 [Windows file flush contract](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers).
+
+## Windowed capacity and continuation
+
+Capacity configuration and observations live on native `swarm-capacity` items.
+The SDK appends each observation to the item's history. The current projection
+retains the two most recent measurements in the window. Admission counts
+nonterminal assigned lanes from the same local tracker while holding the
+operation lease. Git and shared starts publish their capacity with lane
+metadata and fencing information. Preview evaluates the same policy.
+
+A stopped lane records its claim generation and the exhausted reset time in one
+revision-guarded work-item update. That record also drives the capacity's
+exhaustion projection. Reclaim checks the current generation and reset
+before transferring ownership. Continuation advances the fence and persists
+the bounded receiver packet in the native handoff field. The old interruption
+continues to apply to its window. The packet uses the native claim revision as
+its history baseline and resolves Git paths only for a registered worktree lane.

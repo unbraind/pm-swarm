@@ -1,11 +1,12 @@
 import { RESOURCE_TAG } from './resources.ts';
+import type { FairPolicy } from './fair-scheduling.ts';
 import { currentInterruption, interruptions } from './interruption.ts';
-import { readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
+import { normalizeItemId, readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { clientMutationSnapshot, inspectItems } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
 import type { Lease } from './lease.ts';
 import { assertPrivatePathSafe, commitItemMutation, commitMutation } from './settings.ts';
-import type { PmCliErrorDetails, RuntimeStatusRegistry } from '@unbrained/pm-cli/sdk';
+import type { RuntimeStatusRegistry } from '@unbrained/pm-cli/sdk';
 import type { Swarm } from './swarm.ts';
 
 /** Native capacity records are reserved for swarm coordination. */
@@ -36,6 +37,9 @@ interface CapacityWindow {
 /** Stable capacity refusal categories. */
 export type CapacityRefusalCode = 'capacity_invalid' | 'capacity_undeclared' | 'capacity_forecast_exceeded' | 'capacity_exhausted';
 
+/** Measurement and recovery fields portable across the supported host range. */
+type CapacityRefusalDetails = Record<string, string | number | boolean | null>;
+
 /** Carry an actionable command and structured measurements through CLI and SDK refusals. */
 export class CapacityRefusal extends Error {
   /** Stable refusal reason for automation. */
@@ -43,9 +47,9 @@ export class CapacityRefusal extends Error {
   /** Runnable recovery instruction or input correction. */
   readonly remedy: string;
   /** Portable measurement context when a capacity was resolved. */
-  readonly details?: PmCliErrorDetails;
+  readonly details?: CapacityRefusalDetails;
   /** Build a refusal without echoing invalid raw values. */
-  constructor(code: CapacityRefusalCode, remedy: string, details?: PmCliErrorDetails) {
+  constructor(code: CapacityRefusalCode, remedy: string, details?: CapacityRefusalDetails) {
     super(code + ': ' + remedy);
     this.code = code;
     this.remedy = remedy;
@@ -63,7 +67,7 @@ export function assertStartWorkItem(item: Record<string, unknown>): void {
 /** Normalize logical capacity names before matching their native records or rendering a retry command. */
 export function capacityName(value: string): string {
   const name = value.trim().toLowerCase();
-  if (!/^[a-z][a-z0-9-]{0,39}$/.test(name)) throw new CapacityRefusal('capacity_invalid', 'Use a capacity name of at most 40 letters, digits and hyphens, starting with a letter.');
+  if (!/^[a-z][a-z0-9-]{0,39}$/.test(name) || scanMutationSecrets(name).length) throw new CapacityRefusal('capacity_invalid', 'Use a capacity name of at most 40 letters, digits and hyphens, starting with a letter.');
   return name;
 }
 
@@ -191,7 +195,7 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number, 
     Math.min(Number.MAX_VALUE, Math.max(0, (second.used - first.used) / (Date.parse(second.at) - Date.parse(first.at))) * 3_600_000);
   const forecast = burn_rate_per_hour === null ? null : Math.min(Number.MAX_VALUE, second!.used + burn_rate_per_hour * ((reset - Date.parse(second!.at)) / 3_600_000));
   const band = forecast === null ? undefined : state.policy.bands.map(policyBand).find(([threshold]) => forecast < threshold);
-  const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && latest.used >= state.limit;
+  const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && Date.parse(latest.at) <= now && latest.used >= state.limit;
   const forecast_exceeded = forecast !== null && forecast >= state.limit;
   const admitted_lane_count = exhausted || forecast_exceeded ? 0 : band?.[1] ?? state.policy.otherwise;
   return {
@@ -211,7 +215,7 @@ function changeWindow(name: string, previous: CapacityWindow | undefined, change
     if (reset <= now || reset - change.window > now) throw new CapacityRefusal('capacity_invalid', 'Declare a window that contains the current time.');
     if (previous !== undefined && now < Date.parse(previous.resets_at)) throw new CapacityRefusal('capacity_invalid', `The current window is active. Inspect it with pm swarm capacity ${name}.`);
     const { limit, unit, window, resets_at } = change;
-    return { name, limit, unit, window, resets_at, observations: [], policy: previous?.policy ?? { bands: [], otherwise: 0 } };
+    return { name, limit, unit, window, resets_at, observations: [], policy: previous?.unit === unit ? previous.policy : { bands: [], otherwise: 0 } };
   }
   if (previous === undefined) throw undeclared(name);
   if (change.action === 'policy') return { ...previous, policy: change.policy };
@@ -232,13 +236,21 @@ function undeclared(name: string): CapacityRefusal {
 async function registry(engine: Swarm) {
   const items = await inspectItems(engine.pmRoot, engine.repo);
   if (items === null) throw new CapacityRefusal('capacity_invalid', 'Use a local tracker with shared SDK writer fencing for capacity coordination.');
-  const statuses = resolveRuntimeStatusRegistry((await readSettings(engine.pmRoot)).schema);
-  return { items, statuses };
+  const settings = await readSettings(engine.pmRoot);
+  return { items, statuses: resolveRuntimeStatusRegistry(settings.schema), prefix: settings.id_prefix };
+}
+
+/** Locate renamed native records by their declared identity after a workspace prefix changes. */
+function hasCapacityName(value: unknown, name: string): boolean {
+  if (typeof value !== 'string') return false;
+  try { return (JSON.parse(value) as { name?: unknown } | null)?.name === name; }
+  catch { return false; }
 }
 
 /** Resolve the one active native item for this logical name. */
-function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string) {
-  const records = items.filter(item => (item.tags as string[]).includes(CAPACITY_TAG) && item.title === `Swarm capacity ${name}` && !statusIsTerminal(String(item.status), statuses));
+function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, prefix: string) {
+  const canonicalId = normalizeItemId('swarm-capacity-' + name, prefix);
+  const records = items.filter(item => (item.tags as string[]).includes(CAPACITY_TAG) && (item.id === canonicalId || hasCapacityName(item[CAPACITY_FIELD], name)) && !statusIsTerminal(String(item.status), statuses));
   if (records.length > 1) throw new CapacityRefusal('capacity_invalid', `Inspect duplicate native records for ${name} before retrying.`);
   return records[0];
 }
@@ -288,13 +300,13 @@ export function capacityDiagnosis(view: CapacityStatus) {
 }
 
 /** Evaluate the primary capacity under the caller's operation lease for writes. */
-export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'start' | 'brief', retryFlags: string[]): Promise<CapacityStatus | undefined> {
+export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief', retryFlags: string[]): Promise<CapacityStatus | undefined> {
   const [name, ...fallback] = order;
   if (name === undefined) return undefined;
-  const { items, statuses } = await registry(engine);
-  const record = recordFor(items, statuses, name);
+  const { items, statuses, prefix } = await registry(engine);
+  const record = recordFor(items, statuses, name, prefix);
   const next = fallback[0];
-  const args = [...(command === 'next' ? [] : [itemId]), ...retryFlags].map(shellArg);
+  const args = [...(command === 'start' || command === 'brief' ? [itemId] : []), ...retryFlags].map(shellArg);
   const nextCommand = next === undefined ? 'pm swarm capacity ' + name :
     ['pm swarm', command, ...args, '--agent', shellArg(engine.author), '--capacity', fallback.join(',')].join(' ');
   const recovery = { next_capacity: next ?? null, next_command: nextCommand };
@@ -308,6 +320,16 @@ export async function admitCapacity(engine: Swarm, order: string[], itemId: stri
   const code = view.exhausted || view.admitted_lane_count > 0 ? 'capacity_exhausted' : 'capacity_forecast_exceeded';
   const message = `Capacity ${name} used ${view.used ?? 'unknown'}, forecast ${view.forecast ?? 'unknown'}, resets at ${view.resets_at}. Run ${nextCommand}.`;
   throw new CapacityRefusal(code, message, { ...capacityDiagnosis(view), ...recovery });
+}
+
+/** Preserve fair ranking flags when capacity admission offers a fallback retry. */
+export function admitNextCapacity(engine: Swarm, order: string[], id: string, parent: string | undefined, dryRun: boolean, policy?: FairPolicy) {
+  const retry = [...(parent === undefined ? [] : ['--parent', parent]), ...(dryRun ? ['--dry-run'] : [])];
+  if (policy !== undefined) {
+    if (policy.skills.size > 0) retry.push('--skills', [...policy.skills].join(','));
+    retry.push('--max-wait', String(policy.maxWait), '--limit', String(policy.limit));
+  }
+  return admitCapacity(engine, order, id, policy === undefined ? 'next' : 'schedule', retry);
 }
 
 /** Coordinate one native item per logical capacity with the same shared operation lease as claims. */
@@ -332,8 +354,8 @@ export class Capacities {
     /** Re-read the selected window while the writer lease is held. */
     const mutate = async (lease?: Lease) => {
       const now = this.clock();
-      const { items, statuses } = await registry(this.engine);
-      const record = recordFor(items, statuses, name);
+      const { items, statuses, prefix } = await registry(this.engine);
+      const record = recordFor(items, statuses, name, prefix);
       if (change.action === 'status') {
         if (record === undefined) throw undeclared(name);
         return registryView(parseWindow(record[CAPACITY_FIELD], name), now, items, statuses);

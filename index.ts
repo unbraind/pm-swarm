@@ -71,3 +71,6 @@ export type { CapacityInterruption } from './src/interruption.ts';
 
 /** Portable budgeted packet emitted by SharedTracker.continuation. */
 export type { ContinuationPacket } from './src/continuation.ts';
+
+/** Portable capacity observations, status and refusal categories. */
+export type { CapacityObservation, CapacityStatus, CapacityRefusalCode } from './src/capacity.ts';
