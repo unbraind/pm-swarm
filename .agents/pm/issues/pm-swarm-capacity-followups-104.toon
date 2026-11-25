@@ -6,10 +6,10 @@ status: in_progress
 priority: 2
 tags[1]: "gh:unbraind/pm-swarm#104"
 created_at: "2026-11-25T20:53:47.579Z"
-updated_at: "2026-11-25T21:48:02.666Z"
+updated_at: "2026-11-25T22:05:05.168Z"
 author: codex-agent
 parent: pm-swarm-capacity-aware-lane-admission
-comments[10]{created_at,author,text}:
+comments[11]{created_at,author,text}:
   "2026-11-25T20:53:52.007Z",codex-agent,"Starting from 5985d7b. Reproduce the five acceptance cases and make one pass over capacity remedies, preview selection, and window bounds."
   "2026-11-25T21:00:56.247Z",codex-agent,"Item 1: the capacity-record guard now recommends capacity --help. Disposable baseline ran the command from the refusal through the real CLI and failed with exit 2 for a missing name. The same test passes with exit 0 after the fix."
   "2026-11-25T21:00:59.912Z",codex-agent,"Item 2: interrupt now refuses timestamps before starts_at. Disposable baseline completed the pre-window interruption instead of rejecting it. The matrix now expects capacity_invalid and an unchanged lane history."
@@ -20,6 +20,7 @@ comments[10]{created_at,author,text}:
   "2026-11-25T21:01:10.601Z",codex-agent,"Selection self-review: native resource records had the same dry-run handoff leak as capacity records. The disposable baseline selected the resource record. The added matrix row checks both modes, malformed metadata and unmodified control history."
   "2026-11-25T21:01:12.121Z",codex-agent,"Time-bounds self-review: a legacy report stamped before starts_at remains in history and fences its holder, but cannot exhaust the new window or mask a valid replacement report. Disposable baseline indicated reported_exhausted. With the status guard in place, reverting only the replay bound returned the old stamp and failed the in-window assertion."
   "2026-11-25T21:48:00.251Z",codex-agent,"Local gates passed: build, typecheck, lint, 0 duplicated lines across 192 sources, and 283 documented declarations across 49 source files. The PM-linked focused suite passed 123 tests. The 81 dependent files plus the matrix rerun passed 1167 tests, with zero failures or skips. The matrix grew from 85 to 89 cells. Privacy included 27130 refused inputs with zero tracker changes or partial receipts and 1785 SDK refusals with zero tracker changes. Coverage and full npm/Bun release verification are delegated to unchanged exact-head CI."
+  "2026-11-25T22:05:01.054Z",codex-agent,"At 0eb41df the CI merge checkout ran 1408 tests with no failures and met 100 percent in all four coverage dimensions across 49 files. The release gate then found the generated changelog heading stale after main published v2026.11.25. The branch now incorporates that base release, with dependency versions unchanged. Restoring the old changelog fails changelog:check on the expected Unreleased heading."
 files[9]{path,scope}:
   src/capacity.ts,project
   src/continuation.ts,project
