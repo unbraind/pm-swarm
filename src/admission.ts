@@ -18,6 +18,10 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   for (const arg of ctx.args) if (typeof arg !== 'string' || !arg.trim()) invalid('Supply nonempty item ids.');
   for (const [name, value] of Object.entries(ctx.options)) {
     if (value === undefined) continue;
+    if (command === 'capacity' && name === 'band' && Array.isArray(value)) {
+      if (value.some(entry => typeof entry !== 'string' || !entry.trim())) invalid('Supply one nonempty value per --band.');
+      continue;
+    }
     if (['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(name)) {
       if (typeof value !== 'boolean') invalid('Supply boolean switches without a value.');
     } else if (typeof value !== 'string' || !value.trim()) invalid('Supply one nonempty value for each flag.');
