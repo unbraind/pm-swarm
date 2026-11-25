@@ -269,10 +269,10 @@ function hasCapacityName(value: unknown, name: string): boolean {
   catch { return false; }
 }
 
-/** Resolve the one active native item for this logical name. */
-function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, prefix: string) {
+/** Resolve the unique native item with the requested lifecycle state for this logical name. */
+function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, prefix: string, terminal = false) {
   const canonicalId = normalizeItemId('swarm-capacity-' + name, prefix);
-  const records = items.filter(item => (item.tags as string[]).includes(CAPACITY_TAG) && (item.id === canonicalId || hasCapacityName(item[CAPACITY_FIELD], name)) && !statusIsTerminal(String(item.status), statuses));
+  const records = items.filter(item => (item.tags as string[]).includes(CAPACITY_TAG) && (item.id === canonicalId || hasCapacityName(item[CAPACITY_FIELD], name)) && statusIsTerminal(String(item.status), statuses) === terminal);
   if (records.length > 1) throw new CapacityRefusal('capacity_invalid', `Inspect duplicate native records for ${name} before retrying.`);
   return records[0];
 }
@@ -395,9 +395,13 @@ export class Capacities {
         if (record === undefined) throw undeclared(name);
         return registryView(parseWindow(record[CAPACITY_FIELD], name), now, items, statuses);
       }
-      const snapshot = record === undefined ? undefined : await clientMutationSnapshot(pmRoot, client, String(record.id));
-      if (snapshot !== undefined && recordFor([snapshot.item], statuses, name, prefix) === undefined) throw undeclared(name);
-      const state = changeWindow(name, snapshot === undefined ? undefined : parseWindow(snapshot.item[CAPACITY_FIELD], name), change, now);
+      const retired = record === undefined && change.action === 'declare' ? recordFor(items, statuses, name, prefix, true) : undefined;
+      const selected = record ?? retired;
+      const snapshot = selected === undefined ? undefined : await clientMutationSnapshot(pmRoot, client, String(selected.id));
+      const reopening = retired !== undefined;
+      if (snapshot !== undefined && recordFor([snapshot.item], statuses, name, prefix, reopening) === undefined) throw undeclared(name);
+      const previous = snapshot === undefined || reopening ? undefined : parseWindow(snapshot.item[CAPACITY_FIELD], name);
+      const state = changeWindow(name, previous, change, now);
       const field = [`${CAPACITY_FIELD}=${JSON.stringify(state)}`];
       const result = registryView(state, now, items, statuses);
       await lease!.write(async () => {
@@ -405,7 +409,8 @@ export class Capacities {
           await commitMutation({ id: `swarm-capacity-${name}`, title: `Swarm capacity ${name}`, type: 'Task', addTags: [CAPACITY_TAG], author, field }, admitted => client.create(admitted));
           return;
         }
-        await commitItemMutation({ id: String(snapshot.item.id), item: snapshot.item, options: { author, field, message: `Swarm capacity ${change.action}` } }, admitted => client.update(admitted.id, admitted.options), { history: snapshot.historyHead });
+        const options = { author, field, ...(reopening ? { status: statuses.open_status } : {}), message: `Swarm capacity ${change.action}` };
+        await commitItemMutation({ id: String(snapshot.item.id), item: snapshot.item, options }, admitted => client.update(admitted.id, admitted.options), { history: snapshot.historyHead });
       }, { announce: false });
       return result;
     };

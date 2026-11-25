@@ -325,7 +325,12 @@ recent burn rate. Band thresholds are exclusive and strictly increasing, in
 the declared unit. The first match wins. `--else` applies with no match or an
 unknown forecast and defaults to zero. A fresh measurement or selected
 forecast at or above the limit blocks admission. After the reset, declare the
-next window with its new reset time.
+next window with its new reset time. If a native edit made the capacity
+record terminal, status reports it as undeclared. Run the same
+`capacity --action declare` command with a new window to reopen the
+record and preserve its native history. Reopening starts with no
+observations and a policy that admits zero lanes. Set the policy again
+before admitting work.
 
 ```sh
 pm swarm capacity ollama --action declare --limit 100 --unit percent \

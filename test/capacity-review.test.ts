@@ -272,18 +272,55 @@ test('capacity item refusal recommends a command the host can execute', async t 
   assert.equal(result.code, 0, result.stderr || result.stdout);
 });
 
+/** Retire the fixture's only native capacity without changing its identity. */
+async function retireCapacity(f: Awaited<ReturnType<typeof sharedFixture>>) {
+  const { id } = (await f.shared.engine.corpus()).items.find(row => row.tags.includes('swarm-capacity'))!;
+  await f.client.update(id, { status: 'canceled' });
+  return id;
+}
+
 test('stopped lane remedy stays runnable when its capacity is retired', async t => {
   const f = await sharedFixture(t);
   await window(new Capacities(f.shared.engine), 'runner', Date.now());
   const id = await f.item(['src/stopped.ts']);
   const claim = await f.shared.start(id, {}, true, 'runner');
   await interruptLane(f.shared.engine, id, claim.token, 'runner', 'capacity_exhausted');
-  const record = (await f.shared.engine.corpus()).items.find(row => row.tags.includes('swarm-capacity'))!;
-  await f.client.update(record.id, { status: 'canceled' });
+  await retireCapacity(f);
   const refusal = f.cli('swarm', 'start', id, '--json');
   assert.equal(refusal.status, 2);
   const body = JSON.parse(refusal.stderr || refusal.stdout);
   assert.equal(body.code, 'capacity_exhausted');
   const result = await executeCapacityRemedy(f, body.details.next_command);
   assert.equal(result.code, 0, result.stderr || result.stdout);
+});
+
+test('terminal capacity remedy reopens its native record and admits a new lane', async t => {
+  const f = await sharedFixture(t);
+  const capacity = new Capacities(f.shared.engine);
+  const now = Date.now();
+  await window(capacity, 'runner', now);
+  await capacity.run('runner', { action: 'observe', used: 100, source: 'manual' });
+  const recordId = await retireCapacity(f);
+  const retired = await readItemHistoryHead(f.pmRoot, recordId);
+  const refusal = f.cli('swarm', 'capacity', 'runner', '--json');
+  assert.equal(refusal.status, 2);
+  const body = JSON.parse(refusal.stderr || refusal.stdout);
+  assert.equal(body.code, 'capacity_undeclared');
+  const remedy = await executeCapacityRemedy(f, body.details.next_command);
+  assert.equal(remedy.code, 0, remedy.stderr || remedy.stdout);
+  const reset = new Date(now + 7_200_000).toISOString();
+  const declared = f.cli('swarm', 'capacity', 'runner', '--action', 'declare',
+    '--limit', '100', '--unit', 'percent', '--window', '7d', '--resets-at', reset, '--json');
+  assert.equal(declared.status, 0, declared.stderr || declared.stdout);
+  assert.equal((await f.client.get(recordId)).item.status, 'open');
+  assert.equal((await readItemHistoryHead(f.pmRoot, recordId)).length, retired.length + 1);
+  assert.deepEqual(await readItemHistoryHead(f.pmRoot, recordId, retired.length), retired);
+  const active = await capacity.run('runner');
+  assert.equal(active.resets_at, reset);
+  assert.deepEqual(active.observations, []);
+  assert.equal(active.admitted_lane_count, 0);
+  await capacity.run('runner', { action: 'policy', else: 1 });
+  const receipt = await f.shared.start(await f.item(['src/reopened.ts']), {}, true, 'runner');
+  assert.equal(receipt.capacity, 'runner');
+  assert.equal((await capacity.run('runner')).active_lanes, 1);
 });
