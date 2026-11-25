@@ -77,7 +77,8 @@ function declare(f: Awaited<ReturnType<typeof sharedFixture>>, name: string, lan
 
 test('weekly replay selects the conservative forecast and respects forecast policy overrides', async t => {
   const f = await sharedFixture(t);
-  const now = Date.parse('2026-11-25T10:24:00Z');
+  const latestAt = Date.parse('2026-11-25T10:24:00Z');
+  let now = latestAt;
   const capacity = new Capacities(f.shared.engine, () => now);
   await capacity.run('codex', { action: 'declare', limit: 100, unit: 'percent', window: '7d', resetsAt: '2026-11-27T22:20:00Z' });
   const policy = { action: 'policy', band: ['forecast<88=3', 'forecast<95=2', 'forecast<98=1'], else: 0 };
@@ -96,6 +97,23 @@ test('weekly replay selects the conservative forecast and respects forecast poli
   assert.equal(view.forecast_window?.toFixed(2), '90.17');
   assert.equal(view.forecast, view.forecast_window);
   assert.equal(view.admitted_lane_count, 2);
+  for (const minutes of [85, 360]) {
+    now = latestAt + minutes * 60_000;
+    const later = await capacity.run('codex');
+    assert.ok(later.elapsed_share > view.elapsed_share);
+    assert.equal(later.forecast_window, view.forecast_window, `Whole-window forecast changed after ${minutes} minutes without a new observation`);
+    assert.equal(later.forecast_recent, view.forecast_recent);
+    assert.equal(later.forecast, view.forecast);
+    assert.equal(later.admitted_lane_count, 2);
+  }
+  now = latestAt + OBSERVATION_MAX_AGE_MS + 1;
+  const stale = await capacity.run('codex');
+  assert.equal(stale.observation_stale, true);
+  assert.deepEqual([stale.forecast_recent, stale.forecast_window, stale.forecast], [null, null, null]);
+  assert.equal(stale.exhausted, false);
+  assert.equal(stale.admitted_lane_count, policy.else);
+  now = latestAt;
+
   const recent = await capacity.run('codex', { ...policy, forecast: 'recent' });
   assert.equal(recent.forecast, view.forecast_recent);
   assert.equal(recent.admitted_lane_count, 3);
@@ -112,6 +130,11 @@ test('weekly replay selects the conservative forecast and respects forecast poli
   old.policy = { bands: policy.band, otherwise: 0 };
   await f.client.update(record.id, { field: [CAPACITY_FIELD + '=' + JSON.stringify(old)] });
   assert.equal((await capacity.run('codex')).admitted_lane_count, 2);
+
+  now = latestAt + 6 * 3_600_000;
+  const updated = await capacity.run('codex', { action: 'observe', used: 58, source: 'codexbar' });
+  assert.equal(updated.forecast_window, 58 / updated.elapsed_share);
+  assert.equal(updated.admitted_lane_count, 3);
 });
 
 test('one last capacity slot admits exactly one of two independent next processes', async t => {

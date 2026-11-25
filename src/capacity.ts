@@ -198,8 +198,8 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number, 
     Math.min(Number.MAX_VALUE, Math.max(0, (second.used - first.used) / (Date.parse(second.at) - Date.parse(first.at))) * 3_600_000);
   const elapsed_share = Math.max(0, Math.min(1, (now - start) / state.window));
   const forecast_recent = burn_rate_per_hour === null ? null : Math.min(Number.MAX_VALUE, second!.used + burn_rate_per_hour * ((reset - Date.parse(second!.at)) / 3_600_000));
-  // A second distinct in-window observation means a positive elapsed share.
-  const forecast_window = second === undefined ? null : Math.min(Number.MAX_VALUE, second.used / elapsed_share);
+  // The second observation is strictly after the window start. Use its elapsed share.
+  const forecast_window = second === undefined ? null : Math.min(Number.MAX_VALUE, second.used / ((Date.parse(second.at) - start) / state.window));
   const forecast = forecast_recent === null ? null : state.policy.forecast === 'recent' ? forecast_recent :
     state.policy.forecast === 'window' ? forecast_window : Math.max(forecast_recent, forecast_window!);
   const band = forecast === null ? undefined : state.policy.bands.map(policyBand).find(([threshold]) => forecast < threshold);

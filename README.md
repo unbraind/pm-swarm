@@ -309,12 +309,14 @@ pm swarm capacity codex --json
 
 At 10:24 UTC, 64.33% of the weekly window has elapsed. The last two readings
 rose by three percentage points in 9h 59m. Extending that rate to reset gives
-`forecast_recent` of **76.01%**. Dividing 58% used by the elapsed share gives
-`forecast_window` of **90.17%**. The default `--forecast max` selects 90.17%
-and admits **two simultaneous lanes** in the `forecast<95=2` band. Use
+`forecast_recent` of **76.01%**. Dividing 58% used by the elapsed share at
+the latest observation gives `forecast_window` of **90.17%**. The default
+`--forecast max` selects 90.17% and admits **two simultaneous lanes** in the
+`forecast<95=2` band. Use
 `--forecast recent` or `--forecast window` on the policy to select one
-projection explicitly. Status shows both projections and the selected
-`forecast`.
+projection explicitly. Both projections hold their values between fresh
+observations. Status shows both projections, the selected `forecast`, and
+the current `elapsed_share`.
 
 Both projections are unknown if either of the two latest observations is
 missing or older than 24 hours. A decrease between observations yields a zero

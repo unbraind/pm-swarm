@@ -125,10 +125,13 @@ durability of directory entries is not claimed. See the documented
 Capacity configuration and observations live on native `swarm-capacity` items.
 The SDK appends each observation to the item's history. The current projection
 retains the two most recent measurements in the window. Two fresh points
-yield both a recent-rate projection and a whole-window pace projection.
-The policy defaults to the larger projection and can select either one
-explicitly. Admission counts nonterminal assigned lanes from the same local
-tracker while holding the operation lease. It reports occupied lane pools,
+yield both a recent-rate projection and a whole-window pace projection. The
+whole-window projection divides the latest usage by the elapsed share at the
+latest observation. Both projections use observation timestamps. The current
+clock determines freshness and whether the window is still active. The policy
+defaults to the larger projection and can select either one explicitly.
+Admission counts nonterminal assigned lanes from the same local tracker while
+holding the operation lease. It reports occupied lane pools,
 recorded or measured exhaustion, and forecasts at or above the limit
 separately. Git and shared starts publish their capacity with lane metadata
 and fencing information. Preview evaluates the same policy.
