@@ -151,7 +151,7 @@ export class SharedTracker {
     /** Keep the read/claim decision inside a single bounded operation. */
     const choose = async (lease?: Lease) => {
       const { candidates, corpus } = await this.engine.readyCandidates(parent, false);
-      const incoming = await this.incomingHandoff(corpus.items, parent, dryRun, policy);
+      const { incoming, stop } = await this.incomingHandoff(corpus.items, parent, dryRun, policy);
       if (incoming !== undefined) {
         const { receipt, binding } = incoming;
         /** Use the selected binding in preview and the checked native binding when resuming. */
@@ -165,6 +165,7 @@ export class SharedTracker {
       const { chosen, unknown, warnings, skipped, reason } = policy === undefined ? selectNext(candidates, active) : policy.select(candidates, active, corpus.items);
       assertPrivatePathSafe({ warnings, skipped, reason });
       const selected = chosen?.item.id ?? null;
+      if (selected === null && stop !== undefined) throw stop;
       /** Use the same provider decision for preview and the live item read under its claim lease. */
       const admit = (item: Record<string, unknown>) => admitNextCapacity(this.engine, order, String(item.id), parent, dryRun, policy, this.retainedCapacity(item));
       const preview = selected !== null && dryRun ? await admit(corpus.items.find(item => item.id === selected)!) : undefined;
@@ -202,15 +203,20 @@ export class SharedTracker {
   /** Admit the complete prospective receiver receipt before caching a token or announcing liveness. */
   private async incomingHandoff(items: Awaited<ReturnType<Swarm['corpus']>>['items'], parent: string | undefined, dryRun: boolean, policy?: FairPolicy) {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
-    const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string' && closeIntentSettled(this.engine, item));
-    if (incoming === undefined) return undefined;
-    const stopped = interruptionRefusal(incoming);
-    if (stopped !== undefined) throw stopped;
+    let stop: CapacityRefusal | undefined;
+    const incoming = items.find(item => {
+      if (item.assignee !== this.engine.author || statusIsTerminal(item.status, statuses) || (parent !== undefined && item.parent !== parent) ||
+          typeof item.swarm_handoff !== 'string' || !closeIntentSettled(this.engine, item)) return false;
+      const stopped = interruptionRefusal(item);
+      stop ??= stopped;
+      return stopped === undefined;
+    });
+    if (incoming === undefined) return { stop };
     policy?.handoff(incoming);
     const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
     const receipt = { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
     assertPrivatePathSafe(receipt);
-    return { receipt, binding: incoming[LANE_CAPACITY_FIELD] };
+    return { incoming: { receipt, binding: incoming[LANE_CAPACITY_FIELD] }, stop };
   }
 
   /** Report ownership, claim age and declared overlaps without inventing Git measurements. */

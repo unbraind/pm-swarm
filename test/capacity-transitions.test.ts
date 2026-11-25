@@ -54,6 +54,12 @@ function expectedRefusal(action: Transition, binding: Binding) {
   return undefined;
 }
 
+/** Declare an independent capacity for a targeted transition row. */
+async function declareCapacity(capacity: Capacities, name: string, resetsAt: string, lanes = 1) {
+  await capacity.run(name, { action: 'declare', limit: 100, unit: 'percent', window: '7d', resetsAt });
+  await capacity.run(name, { action: 'policy', else: lanes });
+}
+
 test('capacity transitions keep every field coherent', async t => {
   for (const action of transitions) for (const binding of bindings) {
     await t.test(action + ' / ' + binding, async cell => {
@@ -157,6 +163,39 @@ test('capacity transitions keep every field coherent', async t => {
           await assert.rejects(fresh.start(freshId, {}, true, name), { code });
         }
       }
+    });
+  }
+
+  for (const command of ['next', 'schedule'] as const) {
+    await t.test(command + ' / interrupted handoff with other ready work', async cell => {
+      const f = await sharedFixture(cell);
+      const capacity = new Capacities(f.shared.engine);
+      const resetsAt = new Date(Date.now() + 3_600_000).toISOString();
+      await declareCapacity(capacity, 'runner', resetsAt);
+      await declareCapacity(capacity, 'spare', resetsAt);
+      const receiver = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'receiver'));
+      const id = await f.item(['src/stopped.ts'], 1);
+      const claim = await f.shared.start(id, {}, true, 'runner');
+      const handoff = await f.shared.handoff(id, 'receiver', 'Public checkpoint', claim.token);
+      await interruptLane(receiver.engine, id, handoff.token, 'runner', 'capacity_exhausted');
+      const head = await readItemHistoryHead(f.pmRoot, id);
+      const choose = (dryRun: boolean) => command === 'next'
+        ? receiver.next(undefined, dryRun, undefined, 'spare')
+        : receiver.schedule({ skills: [], capacity: 'spare', dryRun });
+      await f.item(['src/stopped.ts']);
+      for (const dryRun of [true, false]) await assert.rejects(choose(dryRun), { code: 'capacity_exhausted' });
+      const ready = await f.item(['src/ready.ts']);
+      const available = await readItemHistoryHead(f.pmRoot, ready);
+      assert.equal((await choose(true)).selected, ready);
+      assert.deepEqual(await readItemHistoryHead(f.pmRoot, ready), available);
+      const assigned = await choose(false);
+      assert.equal(assigned.selected, ready);
+      assert.equal(assigned.capacity, 'spare');
+      const stopped = (await f.client.get(id, { depth: 'full' })).item;
+      assert.deepEqual([stopped.assignee, stopped.swarm_token, stopped.swarm_capacity], ['receiver', handoff.token, 'runner']);
+      assert.deepEqual(await readItemHistoryHead(f.pmRoot, id), head);
+      assert.equal((await capacity.run('runner')).active_lanes, 0);
+      assert.equal((await capacity.run('spare')).active_lanes, 1);
     });
   }
 
