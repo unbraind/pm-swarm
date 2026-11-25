@@ -28,8 +28,9 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   }
   validateActionInputs(command, ctx.options);
   const options = ctx.options as Record<string, string | boolean | undefined>;
-  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress', 'brief', 'capacity'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
+  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress', 'brief', 'capacity', 'interrupt'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
   if (options.token !== undefined && !/^\d+$/.test(String(options.token))) invalid('Use the decimal --token returned by the last successful claim.');
+  if (command === 'interrupt' && (options.reason !== 'capacity_exhausted' || options.capacity === undefined || options.token === undefined)) invalid('interrupt requires --capacity, --reason capacity_exhausted and the current --token.');
   if (['settings', 'start', 'plan'].includes(command)) {
     const config = resolveSwarmSettings({}, {
       ...(options.base === undefined ? {} : { base: String(options.base) }),

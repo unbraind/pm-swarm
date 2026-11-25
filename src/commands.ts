@@ -1,3 +1,4 @@
+import { INTERRUPTION_FIELD, interruptLane } from './interruption.ts';
 import { CAPACITY_FIELD, LANE_CAPACITY_FIELD, Capacities, CapacityRefusal } from './capacity.ts';
 import { validateCommandInputs } from './admission.ts';
 import { readAssignmentBrief } from './assignment-brief.ts';
@@ -63,7 +64,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
   if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
   const sdk = ctx.sdk; assertSdkInstance(sdk.client);
   const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief', 'capacity'].includes(command) ? undefined : repositoryRoot(workspace);
+  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief', 'capacity', 'interrupt'].includes(command) ? undefined : repositoryRoot(workspace);
   const client = sdk.client;
   const opts = command === 'capacity' ? {} : overrides(ctx.options);
   const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
@@ -89,6 +90,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       }
       return { ...await progress.witness(id, { ...options, stage: stage as ProgressStage, step: textOption(ctx.options.step)!, revision: options.revision!, evidence: textOption(ctx.options.evidence)!, apply: ctx.options.apply === true }) };
     }
+    case 'interrupt': return interruptLane((swarm as SharedTracker).engine, id, textOption(ctx.options.token), textOption(ctx.options.capacity)!, textOption(ctx.options.reason)!);
     case 'capacity': return { ...await new Capacities((swarm as SharedTracker).engine).run(id, ctx.options) };
     case 'resource': {
       const resources = new ResourceReservations(trackerResourceBackend((swarm as SharedTracker).engine), author);
@@ -164,6 +166,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
 export const swarmCommandDefinitions = {
   deadlocks: { mutations: [{ action: 'request', apply: true }], description: 'Declare fenced resource waits or observe bounded deadlock witnesses', flags: ['agent', 'action', 'token', 'resources', 'revision', 'clear', 'apply', 'limit'], id: false },
   progress: { mutations: ['claimed', 'produced', 'reviewed', 'accepted'].map(stage => ({ stage, apply: true })), description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
+  interrupt: { mutations: [{}], description: 'Record capacity exhaustion and retain the lane fence until reset or continuation', flags: ['agent', 'token', 'reason', 'capacity'], id: true },
   capacity: { mutations: ['declare', 'observe', 'policy'].map(action => ({ action })), description: 'Declare, observe or inspect a windowed capacity', flags: ['agent', 'action', 'limit', 'unit', 'window', 'resets-at', 'used', 'source', 'at', 'band', 'else'], id: true },
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
@@ -204,7 +207,7 @@ export function register(api: ExtensionApi): void {
       return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'capacity', 'cycles', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
     },
   });
-  api.registerItemFields([CAPACITY_FIELD, LANE_CAPACITY_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields([CAPACITY_FIELD, LANE_CAPACITY_FIELD, INTERRUPTION_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));

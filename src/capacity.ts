@@ -1,4 +1,5 @@
 import { RESOURCE_TAG } from './resources.ts';
+import { currentInterruption, interruptions } from './interruption.ts';
 import { readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import { clientMutationSnapshot, inspectItems } from './inspection.ts';
 import { withSwarmLease } from './lease.ts';
@@ -180,7 +181,7 @@ function parseWindow(raw: unknown, name: string): CapacityWindow {
 }
 
 /** Derive the read model at a single instant, retaining stale values only as labeled evidence. */
-function capacityView(state: CapacityWindow, now: number, active_lanes: number) {
+function capacityView(state: CapacityWindow, now: number, active_lanes: number, reported_exhausted: boolean) {
   const reset = Date.parse(state.resets_at);
   const start = reset - state.window;
   const observations = state.observations.map(entry => ({ ...entry, stale: now - Date.parse(entry.at) > OBSERVATION_MAX_AGE_MS }));
@@ -190,7 +191,7 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number) 
     Math.min(Number.MAX_VALUE, Math.max(0, (second.used - first.used) / (Date.parse(second.at) - Date.parse(first.at))) * 3_600_000);
   const forecast = burn_rate_per_hour === null ? null : Math.min(Number.MAX_VALUE, second!.used + burn_rate_per_hour * ((reset - Date.parse(second!.at)) / 3_600_000));
   const band = forecast === null ? undefined : state.policy.bands.map(policyBand).find(([threshold]) => forecast < threshold);
-  const exhausted = now >= reset || latest !== undefined && !latest.stale && latest.used >= state.limit;
+  const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && latest.used >= state.limit;
   const forecast_exceeded = forecast !== null && forecast >= state.limit;
   const admitted_lane_count = exhausted || forecast_exceeded ? 0 : band?.[1] ?? state.policy.otherwise;
   return {
@@ -198,7 +199,7 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number) 
     window_seconds: state.window / 1000, elapsed_share: Math.max(0, Math.min(1, (now - start) / state.window)),
     seconds_to_reset: Math.max(0, (reset - now) / 1000), used: latest?.used ?? null, observation_stale: latest?.stale ?? null,
     observation_max_age_seconds: OBSERVATION_MAX_AGE_MS / 1000, observations, burn_rate_per_hour,
-    forecast, policy: state.policy, exhausted, forecast_exceeded, admitted_lane_count, active_lanes,
+    forecast, reported_exhausted, policy: state.policy, exhausted, forecast_exceeded, admitted_lane_count, active_lanes,
     available_lanes: Math.max(0, admitted_lane_count - active_lanes),
   };
 }
@@ -244,7 +245,13 @@ function recordFor(items: Record<string, unknown>[], statuses: RuntimeStatusRegi
 
 /** Count active ownership only, including across Git and shared lane modes. */
 function occupancy(items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, name: string, except?: string): number {
-  return items.filter(item => item.id !== except && item[LANE_CAPACITY_FIELD] === name && typeof item.assignee === 'string' && item.assignee.trim() && !statusIsTerminal(String(item.status), statuses)).length;
+  return items.filter(item => item.id !== except && item[LANE_CAPACITY_FIELD] === name && typeof item.assignee === 'string' && item.assignee.trim() && !statusIsTerminal(String(item.status), statuses) && currentInterruption(item) === undefined).length;
+}
+
+/** Project both occupation and provider exhaustion from the same native registry snapshot. */
+function registryView(state: CapacityWindow, now: number, items: Record<string, unknown>[], statuses: RuntimeStatusRegistry, except?: string) {
+  const stopped = items.some(item => interruptions(item).some(stop => stop.capacity === state.name && stop.resets_at === state.resets_at && Date.parse(stop.resets_at) > now));
+  return capacityView(state, now, occupancy(items, statuses, state.name, except), stopped);
 }
 
 /** Safely quote a value for the POSIX retry command. */
@@ -296,7 +303,7 @@ export async function admitCapacity(engine: Swarm, order: string[], itemId: stri
     if (next === undefined) throw missing;
     throw new CapacityRefusal(missing.code, `Declare ${name} or try ${nextCommand}.`, { ...missing.details, ...recovery });
   }
-  const view = capacityView(parseWindow(record[CAPACITY_FIELD], name), Date.now(), occupancy(items, statuses, name, itemId));
+  const view = registryView(parseWindow(record[CAPACITY_FIELD], name), Date.now(), items, statuses, itemId);
   if (view.available_lanes > 0) return view;
   const code = view.exhausted || view.admitted_lane_count > 0 ? 'capacity_exhausted' : 'capacity_forecast_exceeded';
   const message = `Capacity ${name} used ${view.used ?? 'unknown'}, forecast ${view.forecast ?? 'unknown'}, resets at ${view.resets_at}. Run ${nextCommand}.`;
@@ -327,15 +334,14 @@ export class Capacities {
       const now = this.clock();
       const { items, statuses } = await registry(this.engine);
       const record = recordFor(items, statuses, name);
-      const active = occupancy(items, statuses, name);
       if (change.action === 'status') {
         if (record === undefined) throw undeclared(name);
-        return capacityView(parseWindow(record[CAPACITY_FIELD], name), now, active);
+        return registryView(parseWindow(record[CAPACITY_FIELD], name), now, items, statuses);
       }
       const snapshot = record === undefined ? undefined : await clientMutationSnapshot(pmRoot, client, String(record.id));
       const state = changeWindow(name, snapshot === undefined ? undefined : parseWindow(snapshot.item[CAPACITY_FIELD], name), change, now);
       const field = [`${CAPACITY_FIELD}=${JSON.stringify(state)}`];
-      const result = capacityView(state, now, active);
+      const result = registryView(state, now, items, statuses);
       await lease!.write(async () => {
         if (snapshot === undefined) {
           await commitMutation({ id: `swarm-capacity-${name}`, title: `Swarm capacity ${name}`, type: 'Task', addTags: [CAPACITY_TAG], author, field }, admitted => client.create(admitted));

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
-import { Capacities, OBSERVATION_MAX_AGE_MS, withStartTransitionObserver } from '../index.ts';
+import { Capacities, OBSERVATION_MAX_AGE_MS, withStartTransitionObserver, Swarm, SharedTracker } from '../index.ts';
 import { fixture } from './helpers.ts';
 import { runProcess } from './process-helpers.ts';
 import { sharedFixture } from './shared-helpers.ts';
@@ -146,4 +146,45 @@ test('Git start binds a fenced capacity lane and cleans up its slot after public
   assert.equal(lane.token, '1');
   assert.equal((await capacities.run('runner')).active_lanes, 1);
   await assert.rejects(f.swarm.start(first, {}, true, 'runner'), /capacity_exhausted/);
+});
+
+test('a fenced interruption is idempotent and prevents reclaim until its reset', async t => {
+  const f = await sharedFixture(t);
+  const reset = declare(f, 'runner', 2);
+  declare(f, 'other', 1);
+  const lane = await f.item(['src/paused.ts']);
+  const waiting = await f.item(['src/waiting.ts']);
+  const { token } = await f.shared.start(lane, {}, true, 'runner');
+  const interrupt = ['swarm', 'interrupt', lane, '--reason', 'capacity_exhausted', '--capacity', 'runner'];
+  const wrong = f.cli(...interrupt, '--token', '0', '--json');
+  assert.equal(wrong.status, 2);
+  assert.match(wrong.stderr + wrong.stdout, /swarm_stale_fence/);
+  const paused = f.run(...interrupt, '--token', token);
+  assert.equal((paused.interruption as { resets_at: string }).resets_at, reset);
+  const history = () => readHistoryEntries(getHistoryPath(f.pmRoot, lane), lane);
+  const count = (await history()).length;
+  assert.deepEqual(f.run(...interrupt, '--token', token), paused);
+  assert.equal((await history()).length, count);
+  assert.equal((await f.client.get(lane)).item.assignee, 'shared-test');
+  assert.equal(f.run('swarm', 'capacity', 'runner').reported_exhausted, true);
+  const next = f.cli('swarm', 'next', '--agent', 'dispatcher', '--capacity', 'runner,other', '--json');
+  assert.equal(next.status, 2);
+  assert.match(next.stderr + next.stdout, /capacity_exhausted/);
+  assert.equal((await f.client.get(waiting)).item.assignee, undefined);
+  await assert.rejects(f.shared.start(lane), /capacity_exhausted/);
+  await assert.rejects(f.shared.handoff(lane, 'receiver', 'Public checkpoint', token), /capacity_exhausted/);
+
+  const dispatcher = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, 'dispatcher'));
+  for (const preview of [true, false]) {
+    const result = await dispatcher.reclaim(0.001, 'receiver', preview);
+    assert.deepEqual(result.recovered, []);
+    assert.equal(result.refused.find(row => row.id === lane)?.code, 'capacity_exhausted');
+  }
+  assert.equal((await history()).length, count);
+  const clock = t.mock.method(Date, 'now', () => Date.parse(reset) + 1);
+  const released = await dispatcher.reclaim(0.001, 'receiver');
+  clock.mock.restore();
+  assert.equal(released.recovered[0].agent, 'receiver');
+  assert.equal((await f.client.get(lane)).item.swarm_token, '2');
+  await assert.rejects(f.shared.heartbeat(lane, token), /swarm_stale_fence/);
 });

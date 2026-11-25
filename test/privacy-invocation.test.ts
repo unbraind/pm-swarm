@@ -43,7 +43,7 @@ test('every registered command admits private tracker coordinates while keeping 
       cases++;
     }
   }
-  assert.equal(cases, 26 * rejectedCorpus.length);
+  assert.equal(cases, 27 * rejectedCorpus.length);
   console.log(JSON.stringify({ invocation_admissions: cases, content_refusals: cases, preserved_encodings: rejectedCorpus.length }));
 });
 

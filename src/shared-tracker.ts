@@ -1,3 +1,4 @@
+import { interruptionRefusal } from './interruption.ts';
 import type { CapacityStatus } from './capacity.ts';
 import { assertStartWorkItem, admitCapacity, capacityFields, capacityOrder, capacityUnset, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import type { ItemHistoryHead } from './settings.ts';
@@ -79,16 +80,14 @@ export class SharedTracker {
   /** Claim a shared lane under the same lease as automatic selection. */
   async start(id: string, _overrides: Partial<SwarmSettings> = {}, strict = false, capacity?: string) {
     assertPrivatePathSafe({ id, overrides: _overrides, capacity, author: this.engine.author });
-    const order = capacityOrder(capacity);
+    const requested = capacityOrder(capacity);
     return withSwarmLease(this.engine.pmRoot, this.engine.author, async lease => {
-      const local = order.length === 0 ? null : await inspectItem(this.engine.pmRoot, this.engine.repo, id);
-      const admission = await admitCapacity(this.engine, order, String(local?.item.id ?? id), 'start', strict ? ['--strict'] : []);
-      return this.claimLane(id, strict, lease, undefined, admission);
+      return this.claimLane(id, strict, lease, undefined, undefined, requested);
     });
   }
 
   /** Validate terminal status, ownership and declared overlap before claiming. */
-  private async claimLane(id: string, strict: boolean, lease: Lease, corpus?: Awaited<ReturnType<Swarm['corpus']>>, admission?: CapacityStatus) {
+  private async claimLane(id: string, strict: boolean, lease: Lease, corpus?: Awaited<ReturnType<Swarm['corpus']>>, admission?: CapacityStatus, directOrder?: string[]) {
     const local = await inspectItem(this.engine.pmRoot, this.engine.repo, id);
     if (local !== null) assertPrivatePathSafe({ ...local.item, body: local.body }, 'document');
     const preliminary = local ?? await readItem(this.engine.client, id);
@@ -100,6 +99,11 @@ export class SharedTracker {
     const initial = await clientMutationSnapshot(this.engine.pmRoot, this.engine.client, canonicalId); const item = initial.item;
     const token = await this.claimState(item); const heartbeat = new Date().toISOString();
     const overlap_warnings = this.claimWarnings(itemFootprint(item), active, strict);
+    if (directOrder !== undefined) {
+      const stored = item.assignee === this.engine.author ? item[LANE_CAPACITY_FIELD] : undefined;
+      const order = directOrder.length === 0 && typeof stored === 'string' ? capacityOrder(stored) : directOrder;
+      admission = await admitCapacity(this.engine, order, canonicalId, 'start', strict ? ['--strict'] : []);
+    }
     const binding = admission?.capacity ?? (item.assignee ? item[LANE_CAPACITY_FIELD] : undefined);
     const receipt = { mode: 'shared-tracker', id: canonicalId, agent: this.engine.author, token, files: itemFootprint(item), overlap_warnings,
       ...(typeof binding === 'string' ? { capacity: binding } : {}) };
@@ -124,6 +128,7 @@ export class SharedTracker {
     assertStartWorkItem(item);
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot start a terminal item');
+    const stopped = interruptionRefusal(item); if (stopped !== undefined) throw stopped;
     const owner = String(item.assignee ?? '').trim();
     if (owner && owner !== this.engine.author) throw new Error(`Item claimed by ${owner}`);
     return this.nextToken(item);
@@ -188,6 +193,8 @@ export class SharedTracker {
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     const incoming = items.find(item => item.assignee === this.engine.author && !statusIsTerminal(item.status, statuses) && (parent === undefined || item.parent === parent) && typeof item.swarm_handoff === 'string' && closeIntentSettled(this.engine, item));
     if (incoming === undefined) return undefined;
+    const stopped = interruptionRefusal(incoming);
+    if (stopped !== undefined) throw stopped;
     policy?.handoff(incoming);
     const context = parseHandoffContext(incoming.id, String(incoming.swarm_handoff), incoming.swarm_token);
     const receipt = { mode: 'shared-tracker', selected: incoming.id, id: incoming.id, agent: this.engine.author, token: String(incoming.swarm_token), context, dry_run: dryRun, reason: 'Assigned handoff', warnings: [], skipped: [] };
@@ -321,6 +328,7 @@ export class SharedTracker {
     const transfer = async (item: Record<string, unknown>, lease?: Lease, history?: ItemHistoryHead) => {
       const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
       if (statusIsTerminal(String(item.status), statuses)) throw new Error('Cannot hand off a terminal item');
+      const stopped = interruptionRefusal(item); if (stopped !== undefined) throw stopped;
       return this.transfer(item, to, note, lease, history);
     };
     return this.owned(id, token, (item, lease, history) => transfer(item, lease, history), item => transfer(item));
@@ -370,6 +378,11 @@ export class SharedTracker {
         if (recovery === undefined) continue;
         const { item, historyHead } = recovery;
         if (decimalFencingGeneration(item.swarm_token) === undefined) { refused.push({ id: row.id, reason: 'Malformed swarm_token; repair the fencing generation before reclaiming' }); continue; }
+        const stopped = interruptionRefusal(item);
+        if (stopped !== undefined) {
+          refused.push({ ...stopped.details, id: row.id, code: stopped.code, reason: stopped.remedy });
+          continue;
+        }
         const laneRefusal = gitLanePoolRefusal(item.swarm_branch, to);
         if (laneRefusal !== undefined) { refused.push({ id: row.id, reason: laneRefusal }); continue; }
         const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
