@@ -133,16 +133,19 @@ export function capacityOrder(value: string | undefined): string[] {
 }
 
 /** Capacity operations accept only their own input fields and the operator identity. */
-const ACTION_FIELDS = new Map<string, readonly string[]>([
-  ['status', []], ['declare', ['limit', 'unit', 'window', 'resetsAt']],
-  ['observe', ['used', 'source', 'at']], ['policy', ['band', 'else']],
-]);
+const ACTION_FIELDS = {
+  status: [], declare: ['limit', 'unit', 'window', 'resetsAt'],
+  observe: ['used', 'source', 'at'], policy: ['band', 'else'],
+} as const;
 
 /** Use the same validated values for CLI and embedded callers. */
 export function capacityAction(options: Record<string, unknown>, now: number) {
-  const action = options.action ?? 'status';
-  const fields = typeof action === 'string' ? ACTION_FIELDS.get(action) : undefined;
-  if (fields === undefined) throw new CapacityRefusal('capacity_invalid', 'Use --action declare, observe, policy or status.');
+  const input = options.action ?? 'status';
+  if (typeof input !== 'string' || !Object.hasOwn(ACTION_FIELDS, input)) {
+    throw new CapacityRefusal('capacity_invalid', 'Use --action declare, observe, policy or status.');
+  }
+  const action = input as keyof typeof ACTION_FIELDS;
+  const fields: readonly string[] = ACTION_FIELDS[action];
   for (const [field, value] of Object.entries(options)) {
     if (value !== undefined && field !== 'action' && field !== 'agent' && !fields.includes(field)) {
       throw new CapacityRefusal('capacity_invalid', 'Use only the options for the selected capacity action. Run pm swarm capacity --help.');
@@ -157,7 +160,6 @@ export function capacityAction(options: Record<string, unknown>, now: number) {
     }
     case 'observe': return { action: 'observe', observation: { used: amount(options.used, '--used'), source: label(options.source, '--source'), at: instant(options.at ?? new Date(now).toISOString(), '--at') } } as const;
     case 'policy': return { action: 'policy', policy: capacityPolicy(options.band, options.else) } as const;
-    default: throw new CapacityRefusal('capacity_invalid', 'Use --action declare, observe, policy or status.');
   }
 }
 

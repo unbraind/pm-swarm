@@ -65,10 +65,10 @@ test('declarations and admission reject corrupt, duplicate and undeclared capaci
 
 test('capacity options distinguish missing values and enforce explicit command combinations', () => {
   for (const options of [
-    { action: 5 }, { action: 'declare' }, { action: 'declare', unit: 'units', limit: 1, window: false },
+    { action: 5 }, { action: 'constructor' }, { action: 'declare' }, { action: 'declare', unit: 'units', limit: 1, window: false },
     { action: 'observe', used: 1, source: 'manual', at: false },
     { action: 'observe', used: 1, source: 'manual', at: '2026-99-99T00:00:00Z' },
-    { action: 'policy', band: Array(33).fill('forecast<10=1') },
+    { action: 'policy', band: Array(33).fill('forecast<10=1') }, { action: 'policy', band: [false] },
     { action: 'status', used: 1 },
   ]) assert.throws(() => capacityAction(options, Date.now()), /capacity_invalid/);
   assert.throws(() => capacityOrder('same,SAME'), /distinct/);
@@ -132,6 +132,11 @@ test('Git capacity next preserves previews and continuation can retain an unmoun
   const capacities = new Capacities(f.swarm);
   await enable(capacities, 'runner');
   const id = await f.item(['src/git.ts']);
+  const flags = { base: 'main', root: 'worktree lanes', branch_prefix: 'capacity/' };
+  await assert.rejects(f.swarm.start(id, flags, true, 'missing,runner'), /--strict --base main --root 'worktree lanes' --branch-prefix 'capacity\/'/);
+  await f.client.update(id, { field: ['swarm_token=malformed'] });
+  await assert.rejects(f.swarm.start(id, {}, true, 'runner'), /Inspect malformed native lane generation/);
+  await f.client.update(id, { unset: ['swarm_token'] });
   assert.equal((await f.swarm.next(undefined, true, undefined, 'runner')).capacity, 'runner');
   const lane = await f.swarm.next(undefined, false, undefined, 'runner');
   assert.equal(lane.id, id);
@@ -197,7 +202,7 @@ test('continuation refuses a real Git ref advancement between its read and packe
     const command = args[1];
     if (!advanced && args[0] === 'git' && Array.isArray(command) && command[0] === '--no-optional-locks') {
       advanced = true;
-      const moved = spawn('git', ['update-ref', 'refs/heads/' + lane.branch, tip, base], { cwd: f.repo });
+      const moved = spawn('git', ['update-ref', 'refs/heads/' + lane.branch, tip, base], { cwd: f.repo, timeout: 300000 });
       assert.equal(moved.status, 0, moved.stderr?.toString());
     }
     return result;
@@ -248,4 +253,35 @@ test('rollover retains history and changes the policy when its units change', as
   delete raw.policy;
   await f.client.update(capacityId, { field: [CAPACITY_FIELD + '=' + JSON.stringify(raw)] });
   assert.equal((await capacity.run('meter')).admitted_lane_count, 0);
+});
+
+test('capacity refusal quotes a receiver identity while preserving the parent and recommended fallback', async t => {
+  const f = await sharedFixture(t);
+  const invalid = new Capacities(new Swarm(f.repo, f.pmRoot, f.client, 'ghp_' + 'A1'.repeat(18)));
+  await assert.rejects(invalid.run('runner'), /public operator identity/);
+  const parent = (await f.client.create({ type: 'Epic', title: 'Public parent' })).item.id;
+  const id = await f.item(['src/parent.ts']);
+  await f.client.update(id, { parent });
+  const quoted = new SharedTracker(new Swarm(f.repo, f.pmRoot, f.client, "worker's team"));
+  await assert.rejects(quoted.next(parent, true, undefined, 'missing,runner'), error => {
+    const details = (error as { details: Record<string, string> }).details;
+    assert.equal(details.next_command, 'pm swarm next --parent ' + parent + " --dry-run --agent 'worker'\\''s team' --capacity runner");
+    return true;
+  });
+});
+
+test('empty evidence and native capacity records preserve their separate command boundaries', async t => {
+  const f = await sharedFixture(t);
+  await enable(new Capacities(f.shared.engine), 'runner');
+  const { items } = await f.shared.engine.corpus();
+  const capacity = items.find(item => item.tags.includes('swarm-capacity'))!;
+  await assert.rejects(f.shared.sync(capacity.id, false, ['src/public.ts']), /Capacity records require/);
+  await assert.rejects(f.shared.heartbeat(capacity.id), /Capacity records require/);
+  await assert.rejects(f.shared.close(capacity.id, 'Public context'), /Capacity records require/);
+  const resource = (await f.client.create({ type: 'Task', title: 'Public resource', addTags: ['swarm-resource'] })).item.id;
+  await assert.rejects(f.shared.start(resource), /Resource items require/);
+  const task = (await f.client.create({ type: 'Task', title: 'Empty evidence lane' })).item.id;
+  const claim = await f.shared.start(task);
+  const packet = await f.shared.continuation(task, 'receiver', claim.token);
+  assert.equal(packet.context.activity, undefined);
 });
