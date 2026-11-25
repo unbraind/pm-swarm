@@ -1,3 +1,4 @@
+import { CAPACITY_TAG } from './capacity.ts';
 import { estimatePmOutputTokens, readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import type { GetResult } from '@unbrained/pm-cli/sdk';
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
@@ -121,7 +122,7 @@ export async function readAssignmentBrief(engine: Swarm, id: string, token: stri
   if (item.assignee !== engine.author || item.swarm_token !== token) throw new StaleFenceError(item.id);
   const statuses = resolveRuntimeStatusRegistry((await readSettings(engine.pmRoot)).schema);
   const status = String(item.status);
-  if (statusIsTerminal(status, statuses) || item.tags!.includes(RESOURCE_TAG)) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item with an ordinary swarm claim.');
+  if (statusIsTerminal(status, statuses) || (item.tags!.includes(RESOURCE_TAG) || item.tags!.includes(CAPACITY_TAG))) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item with an ordinary swarm claim.');
   assertCloseIntentSettled(engine, item);
 
   const brief: AssignmentBrief = { id: item.id, agent: engine.author, token, token_budget: tokenBudget, context: {}, omission_receipt: {} };

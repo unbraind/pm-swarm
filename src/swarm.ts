@@ -1,3 +1,4 @@
+import { CAPACITY_TAG, assertStartWorkItem } from './capacity.ts';
 import { retainFailureCause } from './failure-cause.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
@@ -72,7 +73,7 @@ export class Swarm {
     const ready = selectActionableEntries(report, statuses, {}, types).ready;
     const candidates: (Candidate & { priority: number; created_at: string })[] = [];
     for (const { item } of ready) {
-      if (item.tags.includes(RESOURCE_TAG) || item.status !== statuses.open_status || (gitLanes && item.swarm_branch) || (parent !== undefined && item.parent !== parent)) continue;
+      if ((item.tags.includes(RESOURCE_TAG) || item.tags.includes(CAPACITY_TAG)) || item.status !== statuses.open_status || (gitLanes && item.swarm_branch) || (parent !== undefined && item.parent !== parent)) continue;
       if (item.assignee?.trim()) continue;
       if (!closeIntentSettled(this, item)) continue;
       candidates.push({ id: item.id, files: itemFootprint(item), dependencies: (item.dependencies ?? []).map(dep => dep.id), priority: item.priority, created_at: item.created_at });
@@ -115,7 +116,7 @@ export class Swarm {
     const localIds = new Set(lanes.map(lane => lane.id));
     const gitLanes = lanes.filter(lane => !lane.terminal).map(lane => ({ ...lane, changed: changedFiles(this.repo, commit(this.repo, lane.target), lane.sha) }));
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.pmRoot)).schema);
-    const assigned = corpus.items.filter(item => !item.tags.includes(RESOURCE_TAG) && item.assignee?.trim() && !statusIsTerminal(item.status, statuses) && !localIds.has(item.id));
+    const assigned = corpus.items.filter(item => !item.tags.includes(RESOURCE_TAG) && !item.tags.includes(CAPACITY_TAG) && item.assignee?.trim() && !statusIsTerminal(item.status, statuses) && !localIds.has(item.id));
     return [...gitLanes, ...assigned.map(item => ({ id: item.id, files: itemFootprint(item) }))];
   }
 
@@ -137,7 +138,7 @@ export class Swarm {
     if (local !== null) { assertPrivatePathSafe({ ...local.item, body: local.body }, 'document'); assertCloseIntentSettled(this, local.item); }
     const initial = await clientMutationSnapshot(this.pmRoot, this.client, id, async canonicalId => (await requireActiveExtensionRead(() => readItem(this.client, canonicalId))).item); const item = initial.item;
     assertCloseIntentSettled(this, item);
-    if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
+    assertStartWorkItem(item);
     const branch = `${config.branch_prefix}${item.id}`; git(this.repo, ['check-ref-format', '--branch', branch]);
     if (branchExists(this.repo, branch) || item.swarm_branch) throw new Error('Lane already exists');
     const prefs = await readSettings(this.pmRoot);

@@ -1,0 +1,29 @@
+id: pm-swarm-capacity-aware-lane-admission
+title: Capacity-aware lane admission and continuation packets
+description: "Track https://github.com/unbraind/pm-swarm/issues/99 and coordinate with companion item pm-cli-website-8yz0."
+type: Issue
+status: in_progress
+priority: 2
+tags[1]: "gh:unbraind/pm-swarm#99"
+created_at: "2026-11-25T08:30:21.206Z"
+updated_at: "2026-11-25T08:53:26.820Z"
+assignee: codex-agent
+claim_principal: codex-agent
+author: codex-agent
+acceptance_criteria: "Declare and observe windowed capacities, enforce counted admission for next and start, fence interruptions across reclaim, and transfer a bounded continuation packet in Git and shared tracker modes."
+comments[2]{created_at,author,text}:
+  "2026-11-25T08:30:46.293Z",codex-agent,"Baseline reproduced in a real non-Git tracker: capacity and interrupt were missing, capacity flags on next/start and continuation on brief were rejected, and plain next admitted two workers without a quota bound. Implementing five pushed slices with native revision checks and a real process race."
+  "2026-11-25T08:33:41.905Z",codex-agent,"Slice 1: capacities are native tagged items and each observation is revision-checked and appended to the item history. The read model uses the last two in-window points when both are at most 24 hours old. Revert proof: replacing the forecast with null failed the historical 56 + 8/7 forecast assertion; restored the implementation."
+files[9]{path,scope}:
+  index.ts,project
+  src/admission.ts,project
+  src/assignment-brief.ts,project
+  src/capacity.ts,project
+  src/close.ts,project
+  src/commands.ts,project
+  src/shared-tracker.ts,project
+  src/swarm.ts,project
+  test/capacity.test.ts,project
+tests[1]{command,scope,provenance{author,created_at,source_kind,source_ref}}:
+  node --test --test-concurrency=2 test/capacity.test.ts,project,codex-agent,"2026-11-25T08:33:40.509Z",local_mutation,feat/capacity-aware-lane-admission
+body: ""

@@ -1,3 +1,4 @@
+import { CAPACITY_TAG } from './capacity.ts';
 import { retainFailureCause } from './failure-cause.ts';
 import { relative, sep } from 'node:path';
 import { readSettings, resolveRuntimeStatusRegistry, statusIsTerminal, validateWorkspaceTransactionIdentity, getHistoryPath, readHistoryEntries } from '@unbrained/pm-cli/sdk';
@@ -59,6 +60,7 @@ function admitCloseDocument(engine: Swarm, item: Record<string, unknown>, token:
   assertPrivatePathSafe(item, 'document'); refuseLegacyMarker(engine, item);
   const canonicalId = String(item.id); const journal = relative(engine.pmRoot, getHistoryPath(engine.pmRoot, canonicalId)).split(sep).join('/');
   if (statusIsTerminal(String(item.status), statuses)) throw new CloseRecoveryUnsupported(canonicalId, journal);
+  if ((item.tags as string[]).includes(CAPACITY_TAG)) throw new Error('Capacity records require pm swarm capacity.');
   if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; close cannot change reservations.');
   if (item.swarm_token !== undefined && !/^\d+$/.test(String(item.swarm_token))) throw new Error(`Item ${canonicalId} has a malformed swarm_token; repair it before changing ownership`);
   const selected = token ?? tokens.get(canonicalId);

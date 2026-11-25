@@ -1,3 +1,4 @@
+import { CAPACITY_FIELD, Capacities, CapacityRefusal } from './capacity.ts';
 import { validateCommandInputs } from './admission.ts';
 import { readAssignmentBrief } from './assignment-brief.ts';
 import { ResourceDeadlocks, DeadlockRefusal, RESOURCE_REQUEST_FIELD } from './deadlocks.ts';
@@ -62,9 +63,9 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
   if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
   const sdk = ctx.sdk; assertSdkInstance(sdk.client);
   const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief'].includes(command) ? undefined : repositoryRoot(workspace);
+  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief', 'capacity'].includes(command) ? undefined : repositoryRoot(workspace);
   const client = sdk.client;
-  const opts = overrides(ctx.options);
+  const opts = command === 'capacity' ? {} : overrides(ctx.options);
   const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
   const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
   const id = ctx.args[0];
@@ -88,6 +89,7 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       }
       return { ...await progress.witness(id, { ...options, stage: stage as ProgressStage, step: textOption(ctx.options.step)!, revision: options.revision!, evidence: textOption(ctx.options.evidence)!, apply: ctx.options.apply === true }) };
     }
+    case 'capacity': return { ...await new Capacities((swarm as SharedTracker).engine).run(id, ctx.options) };
     case 'resource': {
       const resources = new ResourceReservations(trackerResourceBackend((swarm as SharedTracker).engine), author);
       const action = (textOption(ctx.options.action) ?? 'status') as ResourceAction;
@@ -151,7 +153,8 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
   } catch (error) {
     try { assertPrivatePathSafe(String(error)); } catch (refusal) { error = refusal; }
     throw createPmCliExpectedError(String(error), { exitCode: error instanceof GitCommandFailure ? error.exitCode : 2, context: {
-      ...(error instanceof SettingsRefusal || error instanceof DeadlockRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
+      ...(error instanceof SettingsRefusal || error instanceof CapacityRefusal || error instanceof DeadlockRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
+      ...(error instanceof CapacityRefusal ? error.details : {}),
       ...(error instanceof SettingsRefusal && error.field !== undefined ? { field: error.field } : {}),
       recovery: { recovery_mode: 'compact', attempted_command: 'pm swarm [values withheld]', normalized_args: ['swarm', '[values withheld]'], parsed_positionals: [{ role: 'arguments', value: '[values withheld]' }], provided_fields: ['[values withheld]'] },
     } });
@@ -161,6 +164,7 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
 export const swarmCommandDefinitions = {
   deadlocks: { mutations: [{ action: 'request', apply: true }], description: 'Declare fenced resource waits or observe bounded deadlock witnesses', flags: ['agent', 'action', 'token', 'resources', 'revision', 'clear', 'apply', 'limit'], id: false },
   progress: { mutations: ['claimed', 'produced', 'reviewed', 'accepted'].map(stage => ({ stage, apply: true })), description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
+  capacity: { mutations: ['declare', 'observe'].map(action => ({ action })), description: 'Declare, observe or inspect a windowed capacity', flags: ['agent', 'action', 'limit', 'unit', 'window', 'resets-at', 'used', 'source', 'at'], id: true },
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
   schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
@@ -197,10 +201,10 @@ export function register(api: ExtensionApi): void {
     commands: swarmCommandNames.map(name => `swarm ${name}`),
     resultDiscriminator: result => {
       try { assertReceiptSafe(result); } catch { return true; }
-      return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'cycles', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
+      return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'capacity', 'cycles', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
     },
   });
-  api.registerItemFields([RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields([CAPACITY_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
     const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));

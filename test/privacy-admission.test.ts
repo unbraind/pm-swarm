@@ -57,6 +57,7 @@ test('every mutating command cross rejected encoding and input position is byte-
   const requestRevision = (await new ResourceDeadlocks(f.shared.engine).inspect(resource)).revision;
   const { plan, view } = await ownedPlan(f);
   const inputs: Record<string, { args: string[]; options: Record<string, unknown> }> = {
+    capacity: { args: ['runner'], options: { limit: '100', unit: 'percent', window: '7d', resetsAt: '2026-12-01T00:00:00Z', used: '50', source: 'Public measurement', at: '2026-11-25T00:00:00Z' } },
     deadlocks: { args: [resource], options: { action: 'request', token: reservation.token, resources: target, revision: requestRevision, apply: true } },
     schedule: { args: [], options: { skills: 'typescript' } }, next: { args: [], options: { parent: 'public-parent' } },
     start: { args: [ready], options: { root: 'lanes', base: 'main', branchPrefix: 'work/' } },
@@ -91,7 +92,7 @@ test('every mutating command cross rejected encoding and input position is byte-
       await unchanged(f.pmRoot, () => runCommand(command, ctx), `${command}/invalid-scalar`); checked++;
     }
   }
-  assert.equal(scenarios.length, 20); assert.ok(checked > 2000);
+  assert.equal(scenarios.length, 22); assert.ok(checked > 2000);
   console.log(JSON.stringify({ mutating_variants: scenarios.length, encodings: rejectedCorpus.length, refused_input_cases: checked, tracker_changes: 0, partial_receipts: 0 }));
 });
 
