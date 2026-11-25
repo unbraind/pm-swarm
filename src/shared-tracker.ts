@@ -1,8 +1,9 @@
+import { parseHandoffContext } from './handoff-context.ts';
 import { buildContinuation, replayContinuation, SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import { assertBriefBudget, assertBriefIdentitySafe } from './assignment-brief.ts';
-import { laneCapacityState, interruptionRefusal } from './interruption.ts';
+import { advanceCapacity, laneCapacityState, interruptionRefusal } from './interruption.ts';
 import type { CapacityStatus } from './capacity.ts';
-import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityOrderFor, capacityUnset, CapacityRefusal, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { assertNotCapacity, assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityOrderFor, CapacityRefusal, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import { scheduleNext } from './fair-scheduling.ts';
 import type { FairPolicy, ScheduleOptions, ScheduleReceipt } from './fair-scheduling.ts';
@@ -29,17 +30,6 @@ export type SharedNextReceipt = Pick<ReturnType<typeof selectNext>, 'reason' | '
 function decimalFencingGeneration(value: unknown): string | undefined {
   const current = String(value ?? '0');
   return /^\d+$/.test(current) ? current : undefined;
-}
-
-/** Decode receiver context only when its object shape and decimal fence are valid. */
-function parseHandoffContext(id: string, raw: string, token: unknown): Record<string, unknown> {
-  let parsed: unknown;
-  try { parsed = JSON.parse(raw); } catch { throw new StaleFenceError(id); }
-  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) throw new StaleFenceError(id);
-  const context = parsed as Record<string, unknown>;
-  if (typeof context.token !== 'string' || decimalFencingGeneration(context.token) === undefined || context.token !== token) throw new StaleFenceError(id);
-  assertPrivatePathSafe(context, 'context');
-  return context;
 }
 
 /** Refuse returning a Git lane to the pool; explicit reassignment keeps its branch. */
@@ -122,7 +112,8 @@ export class SharedTracker {
         this.tokens.delete(String(item.id));
       }
     });
-    await lease.write(() => commitItemMutation({ id: canonicalId, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`, ...capacityFields(binding)], unset: capacityUnset(item, binding, ['swarm_handoff']), comment: [`Swarm claim token ${token}`] }, item }, async admitted => {
+    const capacity = advanceCapacity(item, binding, ['swarm_handoff']);
+    await lease.write(() => commitItemMutation({ id: canonicalId, options: { author: this.engine.author, assignee: this.engine.author, field: [`swarm_token=${token}`, `swarm_claimed_at=${heartbeat}`, ...capacity.field], unset: capacity.unset, comment: [`Swarm claim token ${token}`] }, item }, async admitted => {
       const result = await this.engine.client.update(admitted.id, admitted.options); publication = result.item; return result;
     }, { history: initial.historyHead, onCommitted: (_before, after) => { publication = after.metadata; } }));
     this.tokens.set(String(item.id), token);
@@ -166,7 +157,7 @@ export class SharedTracker {
         const { receipt, binding } = incoming;
         /** Use the selected binding in preview and the checked native binding when resuming. */
         const admit = (stored: unknown) => admitNextCapacity(this.engine, capacityOrderFor(order, stored), receipt.id, parent, dryRun, policy);
-        const admission = lease === undefined || (order.length === 0 && typeof binding !== 'string')
+        const admission = lease === undefined
           ? await admit(binding) : await this.resumeIncoming(receipt.id, receipt.token, lease, admit);
         if (lease !== undefined) this.tokens.set(receipt.id, receipt.token);
         return { ...receipt, ...(admission === undefined ? {} : { capacity: admission.capacity }) };
@@ -193,6 +184,8 @@ export class SharedTracker {
   /** Recheck the provider under the incoming fence and publish an explicit rebind if needed. */
   private async resumeIncoming(id: string, token: string, lease: Lease, admit: (stored: unknown) => Promise<CapacityStatus | undefined>) {
     const { item, historyHead } = await this.fence(id, token);
+    const stopped = interruptionRefusal(item);
+    if (stopped !== undefined) throw stopped;
     const binding = item[LANE_CAPACITY_FIELD];
     const admission = await admit(binding);
     if (admission === undefined || binding === admission.capacity) return admission;
@@ -252,7 +245,7 @@ export class SharedTracker {
 
   /** Validate sync ownership and prospective links without materializing SDK read receipts. */
   private async syncDecision(item: Record<string, unknown>, apply: boolean, files: string[], token?: string): Promise<string[]> {
-    if ((item.tags as string[]).includes(CAPACITY_TAG)) throw new Error('Capacity records require pm swarm capacity.');
+    assertNotCapacity(item);
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for sync.');
     if (apply && token !== undefined) this.assertFence(item, token);
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
@@ -295,7 +288,7 @@ export class SharedTracker {
 
   /** Refuse stale principal or generation against an already-read item. */
   private assertFence(item: Record<string, unknown>, token?: string): void {
-    if ((item.tags as string[]).includes(CAPACITY_TAG)) throw new Error('Capacity records require pm swarm capacity.');
+    assertNotCapacity(item);
     if ((item.tags as string[]).includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; item handoff, heartbeat and close cannot change reservations.');
     const id = String(item.id);
     if (item.assignee !== this.engine.author) throw new StaleFenceError(`${id}: Item claimed by ${String(item.assignee)}`);
@@ -394,16 +387,16 @@ export class SharedTracker {
       await this.assertContinuationActive(item);
       const retry = ['--continuation', '--to', to, '--token-budget', String(tokenBudget), ...(token === undefined ? [] : ['--token', token])];
       const { capacity: existing } = laneCapacityState(item, Date.now());
-      const requested = typeof item.swarm_branch === 'string' ? capacityOrderFor(order, existing) : order;
+      const requested = capacityOrderFor(order, existing);
       const admission = await admitCapacity(this.engine, requested, String(item.id), 'brief', retry);
       return buildContinuation(this.engine, item, to, this.nextToken(item), tokenBudget, admission?.capacity ?? existing ?? null, history);
     };
     return this.owned(id, token, async (item, lease, history) => {
       const packet = await prepare(item, history);
-      const fields = ['swarm_token=' + packet.token, 'swarm_claimed_at=' + new Date().toISOString(), 'swarm_handoff=' + JSON.stringify(packet),
-        ...capacityFields(packet.capacity)];
+      const capacity = advanceCapacity(item, packet.capacity);
+      const fields = ['swarm_token=' + packet.token, 'swarm_claimed_at=' + new Date().toISOString(), 'swarm_handoff=' + JSON.stringify(packet), ...capacity.field];
       await lease.write(() => commitItemMutation({ id: packet.id, item, options: {
-        author: this.engine.author, force: true, assignee: packet.to, field: fields, unset: capacityUnset(item, packet.capacity ?? undefined),
+        author: this.engine.author, force: true, assignee: packet.to, field: fields, unset: capacity.unset,
         comment: ['Swarm continuation transferred to ' + packet.to],
       } }, admitted => this.engine.client.update(admitted.id, admitted.options), { history, generation: { token: item.swarm_token } }));
       this.tokens.delete(packet.id);
@@ -412,12 +405,11 @@ export class SharedTracker {
   }
 
   /** Capture a compact snapshot and append its transfer evidence in the same transaction. */
-  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease, history?: ItemHistoryHead) {
+  private async transfer(item: Record<string, unknown>, to: string | undefined, note: string, lease?: Lease, history?: ItemHistoryHead, command: 'handoff' | 'reclaim' = 'handoff') {
     assertCloseIntentSettled(this.engine, item);
     const id = String(item.id); const token = this.nextToken(item); const at = new Date().toISOString();
-    if (typeof item.swarm_branch === 'string') {
-      await admitCapacity(this.engine, capacityOrderFor([], item[LANE_CAPACITY_FIELD]), id, 'handoff', []);
-    }
+    const order = capacityOrderFor([], to === undefined ? undefined : item[LANE_CAPACITY_FIELD]);
+    const binding = (await admitCapacity(this.engine, order, id, command, []))?.capacity;
     let files: string[];
     try { files = itemFootprint(item); }
     catch { throw new SettingsRefusal('swarm_input_invalid', 'Repair foreign footprint declarations before transferring this item.'); }
@@ -425,10 +417,11 @@ export class SharedTracker {
     const context = { id, title: item.title, status: item.status, priority: item.priority, files: files.slice(0, 50), files_omitted: Math.max(0, files.length - 50), comments, from: item.assignee, to: to ?? null, token, note, at };
     const statuses = resolveRuntimeStatusRegistry((await readSettings(this.engine.pmRoot)).schema);
     assertPrivatePathSafe(context);
+    const capacity = advanceCapacity(item, binding, to === undefined ? ['assignee', 'swarm_handoff'] : []);
     if (lease !== undefined) await lease.write(() => commitItemMutation({ id, options: {
       author: this.engine.author, force: true, ...(to === undefined ? { status: statuses.open_status } : { assignee: to }),
-      unset: [...(to === undefined ? ['assignee'] : []), ...(to === undefined ? ['swarm_handoff'] : [])],
-      field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
+      unset: capacity.unset,
+      field: [`swarm_token=${token}`, `swarm_claimed_at=${at}`, ...capacity.field, ...(to === undefined ? [] : [`swarm_handoff=${JSON.stringify(context)}`])],
       comment: [note],
     }, item }, admitted => this.engine.client.update(admitted.id, admitted.options), { history: history! }));
     if (lease !== undefined) this.tokens.delete(id);
@@ -468,7 +461,7 @@ export class SharedTracker {
         const renewed = readRuntime<{ heartbeat: string }>(heartbeatPath(this.engine.pmRoot, row.assignee))?.heartbeat;
         if (renewed !== undefined && Date.now() - Date.parse(renewed) < staleAfter * 1000) continue;
         const note = `Swarm reclaim: previous owner ${row.assignee}; last heartbeat ${renewed ?? observed ?? 'not recorded'}; previous token ${String(row.swarm_token ?? '0')}; destination ${to ?? 'pool'}; claim baseline ${recorded}`;
-        try { recovered.push(await this.transfer(item, to, note, lease, historyHead)); }
+        try { recovered.push(await this.transfer(item, to, note, lease, historyHead, 'reclaim')); }
         catch (error) {
           if (error instanceof CapacityRefusal) {
             refused.push({ ...error.details, id: row.id, code: error.code, reason: error.remedy });

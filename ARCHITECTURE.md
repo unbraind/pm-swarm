@@ -128,8 +128,9 @@ retains the two most recent measurements in the window. Two fresh points
 yield both a recent-rate projection and a whole-window pace projection. The
 whole-window projection divides the latest usage by the elapsed share at the
 latest observation. Both projections use observation timestamps. The current
-clock determines freshness and whether the window is still active. The policy
-defaults to the larger projection and can select either one explicitly.
+clock excludes future observations, determines freshness and decides whether
+the window is still active. The policy defaults to the larger projection and
+can select either one explicitly.
 Admission counts nonterminal assigned lanes from the same local tracker while
 holding the operation lease. A retained claim counts again once its
 interruption expires. Admission reports occupied lane pools, recorded or
@@ -140,10 +141,14 @@ provider against the same capacity registry. Preview evaluates the same policy.
 A stopped lane records its claim generation and the exhausted reset time in one
 revision-guarded work-item update. That record also drives the capacity's
 exhaustion projection. Reclaim checks the current generation and reset
-before transferring ownership. Continuation advances the fence and persists
-the bounded receiver packet in the native handoff field. The old interruption
-continues to apply to its window. The packet uses the native claim revision as
-its history baseline and resolves Git paths only for a registered worktree lane.
+before transferring ownership. A reclaim to a new holder checks admission for the
+retained capacity, and releases the binding if its window has expired.
+Continuation advances the fence and persists the bounded receiver packet in
+the native handoff field. The old interruption
+continues to apply to its window as provider evidence with a retired token.
+Ownership changes update the live handoff, capacity binding and interruptions
+together. The packet uses the native claim revision as its history baseline and
+resolves Git paths only for a registered worktree lane.
 A continuation read checks the current owner and token against a stable native
 history head. It returns the saved transfer packet for that generation or
 builds context from the current claim. The read appends no history and takes

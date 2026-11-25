@@ -76,6 +76,17 @@ function interpolation(node: SyntaxNode, prefix: string): string {
   return /\b(?:from|import)\s*$/.test(prefix) ? '"embedded-module"' : 'undefined';
 }
 
+/** Credit only the native, literal deadline on an asynchronous streaming process. */
+function spawnDeadlineSignal(options: SyntaxNode | undefined): boolean {
+  const signal = options?.properties?.find(property => property.key?.name === 'signal')?.value as SyntaxNode | undefined;
+  const callee = signal?.callee;
+  const owner = callee?.object;
+  const value = signal?.arguments?.[0];
+  return signal?.type === 'CallExpression' && callee?.type === 'MemberExpression' && !callee.computed && callee.property?.name === 'timeout' &&
+    owner?.type === 'MemberExpression' && !owner.computed && owner.object?.name === 'globalThis' && owner.property?.name === 'AbortSignal' &&
+    signal.arguments?.length === 1 && value?.type === 'NumericLiteral' && Number(value.value) > 0;
+}
+
 /** Find unbounded calls in executable sources and embedded driver programs without trusting outer timeouts. */
 function unboundedChildren(source: string, label: string): string[] {
   const failures: string[] = [];
@@ -98,7 +109,7 @@ function unboundedChildren(source: string, label: string): string[] {
         && expression.arguments?.length === 1 && sharedTestTimeBound(program) ? expression.arguments[0] : expression;
       const positive = typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'NumericLiteral' && Number((value as SyntaxNode).value) > 0;
       const parameter = timeout?.type === 'ObjectProperty' && typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'Identifier' && (value as SyntaxNode).name === 'timeout';
-      if (!positive && !parameter) failures.push(`${label}:${name}: missing positive per-child timeout`);
+      if (!positive && !parameter && !(name === 'spawn' && spawnDeadlineSignal(options))) failures.push(`${label}:${name}: missing positive per-child timeout`);
     }
     let embedded = node.type === 'StringLiteral' ? String(node.value) : undefined;
     if (node.type === 'TemplateLiteral') {
@@ -142,6 +153,14 @@ test('child deadline inventory rejects any missing, zero or negative deadline ev
       assert.equal(unboundedChildren(`const program = ${JSON.stringify(source)};`, 'embedded').length, 1, source);
     }
     assert.deepEqual(unboundedChildren(`${name}(${args}, { timeout: 120000 });`, 'control'), []);
+  }
+});
+
+test('child deadline inventory accepts only an explicitly bounded native spawn signal', () => {
+  const call = ['sp', 'awn'].join('');
+  assert.deepEqual(unboundedChildren(`${call}('git', [], { signal: globalThis.AbortSignal.timeout(1000) });`, 'stream'), []);
+  for (const signal of ['AbortSignal.timeout(1000)', 'globalThis.AbortSignal.timeout(0)', 'globalThis.AbortSignal.timeout(duration)', 'controller.signal']) {
+    assert.equal(unboundedChildren(`${call}('git', [], { signal: ${signal} });`, 'unbounded stream').length, 1);
   }
 });
 

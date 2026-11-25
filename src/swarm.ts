@@ -1,4 +1,5 @@
-import { interruptionRefusal } from './interruption.ts';
+import { reissueHandoff } from './handoff-context.ts';
+import { advanceCapacity, interruptionRefusal } from './interruption.ts';
 import { SYNC_HISTORY_MESSAGE } from './continuation.ts';
 import type { CapacityStatus } from './capacity.ts';
 import { assertStartWorkItem, admitCapacity, admitNextCapacity, capacityFields, capacityOrder, capacityOrderFor, capacityUnset, incrementFence, CAPACITY_TAG, LANE_CAPACITY_FIELD } from './capacity.ts';
@@ -171,7 +172,9 @@ export class Swarm {
     const binding = admission?.capacity;
     const token = admission === undefined ? undefined : incrementFence(item.swarm_token);
     const claimedAt = nowIso();
-    const registrationFields = ['swarm_branch', 'swarm_base', 'swarm_base_ref', LANE_CAPACITY_FIELD];
+    const registrationFields = ['swarm_branch', 'swarm_base', 'swarm_base_ref', LANE_CAPACITY_FIELD, ...(token === undefined ? [] : ['swarm_handoff'])];
+    const capacity = token === undefined ? { field: capacityFields(binding), unset: capacityUnset(item, binding) }
+      : advanceCapacity(item, binding, ['swarm_handoff']);
     let receipt: Pick<ClaimResult, 'item' | 'previous_assignee' | 'skipped'> | undefined; let claimed: Record<string, unknown> | undefined; let publication: Record<string, unknown> | undefined;
     let branchOwned = false; let created = false; let configured = false;
     const ownSuccessors = new Map<number, Record<string, unknown>>();
@@ -193,7 +196,8 @@ export class Swarm {
         const registration = (metadata: Record<string, unknown>) => Object.fromEntries(registrationFields.map(key => [key, metadata[key]]));
         assertMutationReceipt(registration(current.document.metadata), registration(publication!), 'A peer changed lane metadata; preserve its claim and Git resources before retrying.');
         const keys = registrationFields;
-        await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => item[key] !== undefined).map(key => `${key}=${String(item[key])}`), unset: keys.filter(key => item[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options), { generation: { token: publication!.swarm_token }, history: current.historyHead, onCommitted: (_before, after) => { ownSuccessors.set(current.version + 1, { ...after.metadata, body: after.body }); } }), { announce: false });
+        const restored: Record<string, unknown> = token === undefined ? item : { ...item, swarm_handoff: reissueHandoff(item, token) };
+        await lease.write(() => commitItemMutation({ id: item.id, item: { ...current.document.metadata, body: current.document.body }, options: { author: this.author, field: keys.filter(key => restored[key] !== undefined).map(key => `${key}=${String(restored[key])}`), unset: keys.filter(key => restored[key] === undefined) } }, admitted => this.client.update(admitted.id, admitted.options), { generation: { token: publication!.swarm_token }, history: current.historyHead, onCommitted: (_before, after) => { ownSuccessors.set(current.version + 1, { ...after.metadata, body: after.body }); } }), { announce: false });
         metadataClean = true;
       });
       if (metadataClean && receipt !== undefined && (configured || created || branchOwned)) await clean(() => this.guardAcquisitionCleanup(String(item.id), claimVersion, receipt!.item, lease, async () => {
@@ -239,7 +243,7 @@ export class Swarm {
       await startTransition('worktree_created');
       git(this.repo, ['config', '--local', `swarm.lane.${item.id}`, path]); configured = true;
       await startTransition('configured');
-      await lease.write(async () => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`, ...capacityFields(binding), ...(token === undefined ? [] : ['swarm_token=' + token, 'swarm_claimed_at=' + claimedAt])], unset: capacityUnset(item, binding) }, item: claimed! }, async admitted => {
+      await lease.write(async () => commitItemMutation({ id: item.id, options: { author: this.author, field: [`swarm_branch=${branch}`, `swarm_base=${base}`, `swarm_base_ref=${config.base}`, ...capacity.field, ...(token === undefined ? [] : ['swarm_token=' + token, 'swarm_claimed_at=' + claimedAt])], unset: capacity.unset }, item: claimed! }, async admitted => {
         const published = await this.client.update(admitted.id, admitted.options); publication = published.item; return published;
       }, { history: claimVersion === initial.version ? initial.historyHead : await readItemHistoryHead(this.pmRoot, String(item.id), claimVersion), onCommitted: (_before, after) => { publication = after.metadata; ownSuccessors.set(claimVersion + 1, { ...after.metadata, body: after.body }); } }));
       await startTransition('published');

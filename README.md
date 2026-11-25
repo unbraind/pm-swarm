@@ -343,9 +343,11 @@ grants the claim. Once both Codex lanes are active, another worker using
 `capacity_exhausted`, a selected forecast at or above the limit returns
 `capacity_forecast_exceeded`, and a policy admitting zero lanes returns
 `capacity_policy_denied`. They also provide a runnable retry for the next
-capacity in the list. Use `next --dry-run` to check admission without taking
-a slot. `schedule --capacity` applies the same check with its skill and
-priority rules.
+capacity in the list. Retries carry a tracker selector supplied through
+`--path` or `PM_PATH` as a path relative to the original working directory.
+Run the retry from that directory. Use `next --dry-run` to check admission
+without taking a slot. `schedule --capacity` applies the same check with its
+skill and priority rules.
 
 When a provider stops a worker, keep the item's claim and mark that window
 exhausted. Other workers can reclaim stale claims normally. This lane stays
@@ -367,10 +369,12 @@ unverified status, linked files, and changes to files, synced paths, comments
 and tests in native revision order after the claim. A Git lane also includes
 commit IDs and uncommitted paths from its worktree. Git status and live
 continuation packets report a missing registered checkout as unavailable.
-The packet still includes the branch commits. The recipient gets a new
-token. The previous window stays exhausted until its reset. A continuation
-from an interrupted lane drops the old capacity binding when no replacement
-capacity is supplied. With no `--to`, the current token holder can read the
+The packet still includes the branch commits. Large Git evidence is read
+as complete records, with the packet budget reporting omitted paths or
+commits. The recipient gets a new token. The previous window stays exhausted
+until its reset. A continuation from an interrupted lane drops the old capacity
+binding when no replacement capacity is supplied. With no `--to`, the current
+token holder can read the
 saved transfer packet again without appending history or renewing liveness.
 Before any transfer, this form reads the current claim's continuation. The
 packet budget covers both JSON and TOON, with the same privacy checks and

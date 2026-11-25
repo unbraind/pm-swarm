@@ -1,11 +1,12 @@
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { statSync } from 'node:fs';
+import type { Readable } from 'node:stream';
 import { gitEnvironment } from './git-environment.ts';
 import type { Prediction } from './types.ts';
 
 /** Distinguish an unavailable probe from an authoritative Git exit status before interpreting absence. */
 export function gitProbe(repo: string, args: string[], input?: string) {
-  const result = spawnSync('git', args, { timeout: 300000, cwd: repo, input, encoding: 'utf8', env: gitEnvironment() });
+  const result = spawnSync('git', args, { timeout: 300000, maxBuffer: 32 * 1024 * 1024, cwd: repo, input, encoding: 'utf8', env: gitEnvironment() });
   if (result.error !== undefined || result.status === null) throw new Error(`git ${args[0]} failed; probe unavailable; inspect repository state`, { cause: result.error });
   return result;
 }
@@ -21,6 +22,33 @@ export function git(repo: string, args: string[], input?: string): string {
   if (result.status !== 0) throw new Error(`git ${args[0]} failed; inspect repository state`);
   return result.stdout.trimEnd();
 }
+/** Split a Git evidence stream without trimming path whitespace or cutting records at chunk boundaries. */
+async function readRecords(output: Readable, separator: string): Promise<string[]> {
+  const records: string[] = [];
+  let pending = '';
+  for await (const chunk of output.setEncoding('utf8') as AsyncIterable<string>) {
+    const complete = (pending + chunk).split(separator);
+    pending = complete.pop()!;
+    records.push(...complete);
+  }
+  if (pending !== '') throw new Error('Git returned an incomplete evidence record');
+  return records;
+}
+
+/** Stream record-based evidence without imposing the synchronous Git probe buffer. */
+export async function gitRecords(repo: string, args: string[], separator: string): Promise<string[]> {
+  const child = spawn('git', args, { cwd: repo, signal: globalThis.AbortSignal.timeout(300000), env: gitEnvironment(), stdio: ['ignore', 'pipe', 'ignore'] });
+  const exit = new Promise<number | null>((resolve, reject) => {
+    child.once('error', error => reject(new Error(`git ${args[0]} failed; probe unavailable; inspect repository state`, { cause: error })));
+    child.once('close', resolve);
+  });
+  try {
+    const [records, status] = await Promise.all([readRecords(child.stdout, separator), exit]);
+    if (status !== 0) throw new Error(`git ${args[0]} failed; inspect repository state`);
+    return records;
+  } finally { child.stdout.destroy(); }
+}
+
 /** Resolve only commits, protecting option parsing and rejecting ambiguous refs. */
 export function commit(repo: string, ref: string): string {
   return git(repo, ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`]);

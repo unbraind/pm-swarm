@@ -1,6 +1,7 @@
+import { capacityCommand } from './capacity-command.ts';
 import { capacityInstant } from './capacity-time.ts';
 import { resolveRuntimeStatusRegistry, readSettings, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
-import { Capacities, capacityDiagnosis, capacityName, CapacityRefusal, LANE_CAPACITY_FIELD } from './capacity.ts';
+import { Capacities, capacityDiagnosis, capacityFields, capacityName, capacityUnset, CapacityRefusal, LANE_CAPACITY_FIELD } from './capacity.ts';
 import { assertCloseIntentSettled } from './close.ts';
 import { clientMutationSnapshot, inspectItem } from './inspection.ts';
 import { StaleFenceError, withSwarmLease } from './lease.ts';
@@ -22,22 +23,25 @@ export interface CapacityInterruption {
   forecast: number | null;
 }
 
+/** Retired stops remain provider evidence without naming a live fence. */
+type CapacityStop = Omit<CapacityInterruption, 'token'> & { token: string | null };
+
 /** Check the canonical ISO timestamps used to compare window identities. */
 function isIsoInstant(value: unknown): value is string {
   return typeof value === 'string' && capacityInstant(value) === value;
 }
 
 /** Parse and project the native record without returning foreign fields. */
-export function interruptions(item: Record<string, unknown>): CapacityInterruption[] {
+export function interruptions(item: Record<string, unknown>): CapacityStop[] {
   const raw = item[INTERRUPTION_FIELD];
   if (raw === undefined) return [];
   try {
     if (typeof raw !== 'string') throw new Error('Invalid interruption field');
-    const rows = JSON.parse(raw) as CapacityInterruption[];
+    const rows = JSON.parse(raw) as CapacityStop[];
     if (!Array.isArray(rows)) throw new Error('Invalid interruptions');
     return rows.map(({ capacity, agent, token, reason, at, resets_at, used, forecast }) => {
       if (capacityName(capacity) !== capacity || typeof agent !== 'string' || !agent.trim() || scanMutationSecrets(agent).length > 0 ||
-          typeof token !== 'string' || !/^\d+$/.test(token) || reason !== 'capacity_exhausted' ||
+          token !== null && (typeof token !== 'string' || !/^\d+$/.test(token)) || reason !== 'capacity_exhausted' ||
           !isIsoInstant(at) || !isIsoInstant(resets_at) || at >= resets_at ||
           [used, forecast].some(value => value !== null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0))) {
         throw new Error('Invalid interruption');
@@ -53,7 +57,14 @@ export function interruptions(item: Record<string, unknown>): CapacityInterrupti
 
 /** A transfer advances the generation but deliberately leaves exhaustion evidence intact. */
 export function currentInterruption(item: Record<string, unknown>) {
-  return interruptions(item).filter(stop => stop.token === item.swarm_token && stop.agent === item.assignee).at(-1);
+  return interruptions(item).filter((stop): stop is CapacityInterruption => stop.token !== null && stop.token === item.swarm_token && stop.agent === item.assignee).at(-1);
+}
+
+/** Publish capacity metadata with a new ownership generation and retire older live stops. */
+export function advanceCapacity(item: Record<string, unknown>, binding: unknown, unset: string[] = []) {
+  const stops = interruptions(item);
+  const retired = stops.some(stop => stop.token !== null) ? [INTERRUPTION_FIELD + '=' + JSON.stringify(stops.map(stop => ({ ...stop, token: null })))] : [];
+  return { field: [...capacityFields(binding), ...retired], unset: capacityUnset(item, binding, unset) };
 }
 
 /** Project the binding and the live stop of the same ownership generation at one instant. */
@@ -70,7 +81,7 @@ export function laneCapacityState(item: Record<string, unknown>, now: number) {
 export function interruptionRefusal(item: Record<string, unknown>, now = Date.now()): CapacityRefusal | undefined {
   const { interruption: stop } = laneCapacityState(item, now);
   if (stop === undefined) return undefined;
-  const next = 'pm swarm capacity ' + stop.capacity;
+  const next = capacityCommand('capacity', stop.capacity);
   const message = 'Capacity ' + stop.capacity + ' used ' + (stop.used ?? 'unknown') + ', forecast ' + (stop.forecast ?? 'unknown') +
     ', resets at ' + stop.resets_at + '. Take a continuation or run ' + next + '.';
   return new CapacityRefusal('capacity_exhausted', message, { ...stop, next_command: next });
@@ -97,7 +108,7 @@ export async function interruptLane(engine: Swarm, id: string, token: string | u
     assertCloseIntentSettled(engine, item);
     const statuses = resolveRuntimeStatusRegistry((await readSettings(engine.pmRoot)).schema);
     const view = await new Capacities(engine).run(name);
-    const next = 'pm swarm capacity ' + name;
+    const next = capacityCommand('capacity', name);
     const details = { ...capacityDiagnosis(view), next_command: next };
     if (statusIsTerminal(String(item.status), statuses) || item[LANE_CAPACITY_FIELD] !== name || view.seconds_to_reset === 0) {
       throw new CapacityRefusal('capacity_invalid', 'Use an active lane bound to this capacity in its current window. Run ' + next + '.', details);
@@ -105,7 +116,7 @@ export async function interruptLane(engine: Swarm, id: string, token: string | u
     const at = new Date().toISOString();
     if (at >= view.resets_at) throw new CapacityRefusal('capacity_exhausted', 'The capacity window has ended. Run ' + next + '.', details);
     const previous = interruptions(item).filter(stop => stop.resets_at > at);
-    const replay = previous.find(stop => stop.token === token && stop.capacity === name && stop.resets_at === view.resets_at && stop.agent === engine.author);
+    const replay = previous.find((stop): stop is CapacityInterruption => stop.token === token && stop.capacity === name && stop.resets_at === view.resets_at && stop.agent === engine.author);
     if (replay !== undefined) return { id: canonicalId, interruption: replay };
     const interruption: CapacityInterruption = { capacity: name, agent: engine.author, token, reason, at, resets_at: view.resets_at, used: view.used, forecast: view.forecast };
     const field = [INTERRUPTION_FIELD + '=' + JSON.stringify([...previous, interruption])];

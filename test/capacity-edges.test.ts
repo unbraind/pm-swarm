@@ -198,12 +198,13 @@ test('continuation refuses a real Git ref advancement between its read and packe
   const tip = f.save(['src/race.ts'], lane.worktree);
   const spawn = childProcess.spawnSync;
   let advanced = false;
-  const change = t.mock.method(childProcess, 'spawnSync', (...args: Parameters<typeof childProcess.spawnSync>) => {
-    const result = Reflect.apply(spawn, childProcess, args);
+  const launch = childProcess.spawn;
+  const change = t.mock.method(childProcess, 'spawn', (...args: Parameters<typeof childProcess.spawn>) => {
+    const result = Reflect.apply(launch, childProcess, args);
     const command = args[1];
     if (!advanced && args[0] === 'git' && Array.isArray(command) && command[0] === '--no-optional-locks') {
       advanced = true;
-      const moved = spawn('git', ['update-ref', 'refs/heads/' + lane.branch, tip, base], { cwd: f.repo, timeout: 300000 });
+      const moved = spawn('git', ['update-ref', 'refs/heads/' + lane.branch, tip, base], { cwd: f.repo, timeout: 300000, maxBuffer: 32 * 1024 * 1024 });
       assert.equal(moved.status, 0, moved.stderr?.toString());
     }
     return result;

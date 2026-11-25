@@ -3,7 +3,7 @@ import type { ItemDocument } from '@unbrained/pm-cli/sdk';
 import { assertBriefBudget, assertBriefIdentitySafe, packBrief } from './assignment-brief.ts';
 import { currentInterruption } from './interruption.ts';
 import type { CapacityInterruption } from './interruption.ts';
-import { git, commit, branchExists, registeredWorktrees, availableWorktree } from './git.ts';
+import { git, gitRecords, commit, branchExists, registeredWorktrees, availableWorktree } from './git.ts';
 import { SettingsRefusal, readItemHistoryHead } from './settings.ts';
 import type { ItemHistoryHead } from './settings.ts';
 import type { Swarm } from './swarm.ts';
@@ -114,21 +114,21 @@ async function laneHistory(engine: Swarm, item: Record<string, unknown>, expecte
 }
 
 /** Resolve the registered branch's actual checkout and capture paths without refreshing its index. */
-function gitEvidence(engine: Swarm, item: Record<string, unknown>) {
+async function gitEvidence(engine: Swarm, item: Record<string, unknown>) {
   if (typeof item.swarm_branch !== 'string' || typeof item.swarm_base !== 'string') return {};
   const repo = repositoryRoot(engine.repo);
   if (repo === undefined || !branchExists(repo, item.swarm_branch)) return { git_worktree_available: false };
   const branch = 'refs/heads/' + item.swarm_branch;
   const base = commit(repo, item.swarm_base);
   const tip = commit(repo, branch);
-  const commits = git(repo, ['rev-list', '--reverse', base + '..' + tip]).split('\n').filter(Boolean);
+  const commits = await gitRecords(repo, ['rev-list', '--reverse', base + '..' + tip], '\n');
   const worktree = registeredWorktrees(repo).get(item.swarm_branch);
   if (!availableWorktree(worktree)) return { commits, git_worktree_available: false };
-  const dirty = git(worktree, ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames']);
+  const dirty = await gitRecords(worktree, ['--no-optional-locks', 'status', '--porcelain=v1', '-z', '--untracked-files=all', '--no-renames'], '\0');
   if (git(worktree, ['symbolic-ref', 'HEAD']) !== branch || commit(repo, branch) !== tip) {
     throw new SettingsRefusal('swarm_superseded', 'The lane branch advanced while preparing the continuation. Inspect its current Git evidence and retry.');
   }
-  return { commits, git_worktree_available: true, uncommitted_paths: dirty.split('\0').filter(Boolean).map(row => row.slice(3)) };
+  return { commits, git_worktree_available: true, uncommitted_paths: dirty.map(row => row.slice(3)) };
 }
 
 /** Build and admit a budgeted receiver packet before changing the current ownership generation. */
@@ -138,7 +138,7 @@ export async function buildContinuation(engine: Swarm, item: Record<string, unkn
   const interruption = currentInterruption(item) ?? null;
   assertBriefIdentitySafe({ id, from, to, token, capacity, interruption });
   const { claim_started_at, activity } = await laneHistory(engine, item, expected);
-  const { git_worktree_available, commits, uncommitted_paths } = gitEvidence(engine, item);
+  const { git_worktree_available, commits, uncommitted_paths } = await gitEvidence(engine, item);
   const packet: ContinuationPacket = {
     id, from, to, token, token_budget, claim_started_at, interruption, capacity, acceptance_state: 'unverified',
     ...(git_worktree_available === undefined ? {} : { git_worktree_available }), context: {}, omission_receipt: {},

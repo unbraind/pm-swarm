@@ -1,3 +1,4 @@
+import { capacityCommand } from './capacity-command.ts';
 import { capacityInstant } from './capacity-time.ts';
 import { RESOURCE_TAG } from './resources.ts';
 import type { FairPolicy } from './fair-scheduling.ts';
@@ -58,10 +59,15 @@ export class CapacityRefusal extends Error {
   }
 }
 
+/** Refuse to operate on a capacity record as a work item. */
+export function assertNotCapacity(item: Record<string, unknown>): void {
+  if ((item.tags as string[]).includes(CAPACITY_TAG)) throw new Error(`Capacity records require ${capacityCommand('capacity')}.`);
+}
+
 /** Keep capacity and resource control items outside both start engines. */
 export function assertStartWorkItem(item: Record<string, unknown>): void {
   const tags = item.tags as string[];
-  if (tags.includes(CAPACITY_TAG)) throw new Error('Capacity records require pm swarm capacity.');
+  assertNotCapacity(item);
   if (tags.includes(RESOURCE_TAG)) throw new Error('Resource items require swarm resource; use an ordinary work item for start.');
 }
 
@@ -155,7 +161,7 @@ export function capacityAction(options: Record<string, unknown>, now: number) {
   const fields: readonly string[] = ACTION_FIELDS[action];
   for (const [field, value] of Object.entries(options)) {
     if (value !== undefined && field !== 'action' && field !== 'agent' && !fields.includes(field)) {
-      throw new CapacityRefusal('capacity_invalid', 'Use only the options for the selected capacity action. Run pm swarm capacity --help.');
+      throw new CapacityRefusal('capacity_invalid', `Use only the options for the selected capacity action. Run ${capacityCommand('capacity', '--help')}.`);
     }
   }
   switch (action) {
@@ -193,13 +199,19 @@ function parseWindow(raw: unknown, name: string): CapacityWindow {
   }
 }
 
+/** Select only measurements available at the decision clock and label stale evidence. */
+function observationsAsOf(state: CapacityWindow, now: number) {
+  return state.observations.filter(entry => Date.parse(entry.at) <= now)
+    .map(entry => ({ ...entry, stale: now - Date.parse(entry.at) > OBSERVATION_MAX_AGE_MS }));
+}
+
 /** Derive the read model at a single instant, retaining stale values only as labeled evidence. */
 function capacityView(state: CapacityWindow, now: number, active_lanes: number, reported_exhausted: boolean) {
   const reset = Date.parse(state.resets_at);
   const start = reset - state.window;
-  const observations = state.observations.map(entry => ({ ...entry, stale: now - Date.parse(entry.at) > OBSERVATION_MAX_AGE_MS }));
+  const observations = observationsAsOf(state, now);
   const latest = observations.at(-1);
-  const [first, second] = observations.filter(entry => !entry.stale && Date.parse(entry.at) <= now && now < reset);
+  const [first, second] = observations.filter(entry => !entry.stale && now < reset);
   const burn_rate_per_hour = first === undefined || second === undefined ? null :
     Math.min(Number.MAX_VALUE, Math.max(0, (second.used - first.used) / (Date.parse(second.at) - Date.parse(first.at))) * 3_600_000);
   const elapsed_share = Math.max(0, Math.min(1, (now - start) / state.window));
@@ -209,7 +221,7 @@ function capacityView(state: CapacityWindow, now: number, active_lanes: number, 
   const forecast = forecast_recent === null ? null : state.policy.forecast === 'recent' ? forecast_recent :
     state.policy.forecast === 'window' ? forecast_window : Math.max(forecast_recent, forecast_window!);
   const band = forecast === null ? undefined : state.policy.bands.map(policyBand).find(([threshold]) => forecast < threshold);
-  const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && Date.parse(latest.at) <= now && latest.used >= state.limit;
+  const exhausted = reported_exhausted || now >= reset || latest !== undefined && !latest.stale && latest.used >= state.limit;
   const forecast_exceeded = forecast !== null && forecast >= state.limit;
   const admitted_lane_count = exhausted || forecast_exceeded ? 0 : band?.[1] ?? state.policy.otherwise;
   return {
@@ -227,7 +239,7 @@ function changeWindow(name: string, previous: CapacityWindow | undefined, change
   if (change.action === 'declare') {
     const reset = Date.parse(change.resets_at);
     if (reset <= now || reset - change.window > now) throw new CapacityRefusal('capacity_invalid', 'Declare a window that contains the current time.');
-    if (previous !== undefined && now < Date.parse(previous.resets_at)) throw new CapacityRefusal('capacity_invalid', `The current window is active. Inspect it with pm swarm capacity ${name}.`);
+    if (previous !== undefined && now < Date.parse(previous.resets_at)) throw new CapacityRefusal('capacity_invalid', `The current window is active. Inspect it with ${capacityCommand('capacity', name)}.`);
     const { limit, unit, window, resets_at } = change;
     return { name, limit, unit, window, resets_at, observations: [], policy: previous?.unit === unit ? previous.policy : { bands: [], otherwise: 0, forecast: 'max' } };
   }
@@ -236,14 +248,15 @@ function changeWindow(name: string, previous: CapacityWindow | undefined, change
   const at = Date.parse(change.observation.at);
   const reset = Date.parse(previous.resets_at);
   if (at > now || at < reset - previous.window || at >= reset || now >= reset || at <= Date.parse(previous.observations.at(-1)?.at ?? '')) {
-    throw new CapacityRefusal('capacity_invalid', `Supply a newer observation in the active window. Inspect it with pm swarm capacity ${name}.`);
+    throw new CapacityRefusal('capacity_invalid', `Supply a newer observation in the active window. Inspect it with ${capacityCommand('capacity', name)}.`);
   }
   return { ...previous, observations: [...previous.observations.slice(-1), change.observation] };
 }
 
 /** Point callers to the declaration contract for a missing capacity. */
 function undeclared(name: string): CapacityRefusal {
-  return new CapacityRefusal('capacity_undeclared', `Declare ${name} using the capacity options shown by pm swarm capacity --help.`, { capacity: name, used: null, forecast: null, resets_at: null, next_command: 'pm swarm capacity --help' });
+  const next_command = capacityCommand('capacity', '--help');
+  return new CapacityRefusal('capacity_undeclared', `Declare ${name} using the capacity options shown by ${next_command}.`, { capacity: name, used: null, forecast: null, resets_at: null, next_command });
 }
 
 /** One write-free SDK snapshot for capacity decisions. */
@@ -281,11 +294,6 @@ function registryView(state: CapacityWindow, now: number, items: Record<string, 
   return capacityView(state, now, occupancy(items, statuses, state.name, now, except), stopped);
 }
 
-/** Safely quote a value for the POSIX retry command. */
-function shellArg(value: string): string {
-  return /^[a-zA-Z0-9_,.-]+$/.test(value) ? value : "'" + value.replaceAll("'", "'\\''") + "'";
-}
-
 /** Create the lane binding field only when a capacity was selected. */
 export function capacityFields(binding: unknown): string[] {
   return typeof binding === 'string' ? [LANE_CAPACITY_FIELD + '=' + binding] : [];
@@ -315,15 +323,15 @@ export function capacityDiagnosis(view: CapacityStatus) {
 }
 
 /** Evaluate the primary capacity under the caller's operation lease for writes. */
-export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief' | 'handoff', retryFlags: string[]): Promise<CapacityStatus | undefined> {
+export async function admitCapacity(engine: Swarm, order: string[], itemId: string, command: 'next' | 'schedule' | 'start' | 'brief' | 'handoff' | 'reclaim', retryFlags: string[]): Promise<CapacityStatus | undefined> {
   const [name, ...fallback] = order;
   if (name === undefined) return undefined;
   const { items, statuses, prefix } = await registry(engine);
   const record = recordFor(items, statuses, name, prefix);
   const next = fallback[0];
-  const args = [...(command === 'start' || command === 'brief' ? [itemId] : []), ...retryFlags].map(shellArg);
-  const nextCommand = next === undefined ? 'pm swarm capacity ' + name :
-    ['pm swarm', command, ...args, '--agent', shellArg(engine.author), '--capacity', fallback.join(',')].join(' ');
+  const args = [...(command === 'start' || command === 'brief' ? [itemId] : []), ...retryFlags];
+  const nextCommand = next === undefined ? capacityCommand('capacity', name) :
+    capacityCommand(command, ...args, '--agent', engine.author, '--capacity', fallback.join(','));
   const recovery = { next_capacity: next ?? null, next_command: nextCommand };
   if (record === undefined) {
     const missing = undeclared(name);
@@ -331,6 +339,7 @@ export async function admitCapacity(engine: Swarm, order: string[], itemId: stri
     throw new CapacityRefusal(missing.code, `Declare ${name} or try ${nextCommand}.`, { ...missing.details, ...recovery });
   }
   const view = registryView(parseWindow(record[CAPACITY_FIELD], name), Date.now(), items, statuses, itemId);
+  if (command === 'reclaim' && view.seconds_to_reset === 0) return undefined;
   if (view.available_lanes > 0) return view;
   const code = view.exhausted ? 'capacity_exhausted' : view.forecast_exceeded ? 'capacity_forecast_exceeded' :
     view.admitted_lane_count > 0 ? 'capacity_lanes_occupied' : 'capacity_policy_denied';

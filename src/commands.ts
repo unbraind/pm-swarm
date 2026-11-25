@@ -1,3 +1,5 @@
+import { relative } from 'node:path';
+import { withCapacityTracker } from './capacity-command.ts';
 import { INTERRUPTION_FIELD, interruptLane } from './interruption.ts';
 import { CAPACITY_FIELD, LANE_CAPACITY_FIELD, Capacities, CapacityRefusal } from './capacity.ts';
 import { validateCommandInputs } from './admission.ts';
@@ -160,7 +162,8 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
     // Accepted leaves are immutable scalars; snapshot caller-owned containers before any await.
     ctx = { ...ctx, args: [...ctx.args], options: { ...ctx.options, ...(Array.isArray(ctx.options.band) ? { band: [...ctx.options.band] } : {}) }, global: { ...ctx.global } };
     validateCommandInputs(command, ctx);
-    const result = await dispatch(command, ctx);
+    const selector = ctx.global.path === undefined && process.env.PM_PATH === undefined ? undefined : relative(process.cwd(), ctx.pm_root) || '.';
+    const result = await withCapacityTracker(selector, () => dispatch(command, ctx));
     assertReceiptSafe(result);
     return result;
   } catch (error) {

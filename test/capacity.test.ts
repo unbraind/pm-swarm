@@ -280,7 +280,9 @@ test('a fenced interruption is idempotent and prevents reclaim until its reset',
   const released = await dispatcher.reclaim(0.001, 'receiver');
   clock.mock.restore();
   assert.equal(released.recovered[0].agent, 'receiver');
-  assert.equal((await f.client.get(lane)).item.swarm_token, '2');
+  const recovered = (await f.client.get(lane)).item;
+  assert.equal(recovered.swarm_token, '2');
+  assert.equal(recovered.swarm_capacity, undefined);
   await assert.rejects(f.shared.heartbeat(lane, token), /swarm_stale_fence/);
 });
 
