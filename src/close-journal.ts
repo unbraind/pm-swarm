@@ -1,3 +1,5 @@
+import { LANE_CAPACITY_FIELD } from './capacity.ts';
+import { advanceCapacity, INTERRUPTION_FIELD } from './interruption.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { deriveMutationTransactionId, getHistoryPath, getItemAt, hashDocument, hashHistoryStream, locateItem, readHistoryEntries, readLocatedItem, readSettings, replayHistoryToTarget, replayToCanonicalItemDocument, validateWorkspaceTransactionIdentity, verifyHistoryEntries } from '@unbrained/pm-cli/sdk';
 import type { Swarm } from './swarm.ts';
@@ -126,10 +128,21 @@ async function inspectMember(engine: Swarm, journal: CloseJournal, member: Close
     if (member.id === journal.id && entry.op === 'update' && typeof view.document.metadata[CLOSE_INTENT] === 'string') {
       const recorded = parseCloseJournal(engine, view.document.metadata[CLOSE_INTENT]);
       const allowedFields = new Set([`/metadata/${CLOSE_INTENT}`, '/metadata/updated_at']);
+      /** Replay only when verifying a legacy null removal or a retired stop. */
+      const predecessor = () => replayToCanonicalItemDocument(replayHistoryToTarget(entries, member.head.length + offset - 1), { schema });
+      const capacityPath = `/metadata/${LANE_CAPACITY_FIELD}`;
+      if (entry.patch.some(patch => patch.path === capacityPath && patch.op === 'remove')) {
+        if (recorded.phase === 'committed' || offset === 0 && predecessor().metadata[LANE_CAPACITY_FIELD] === null) allowedFields.add(capacityPath);
+      }
       if (recorded.phase === 'committed') {
         if (!forwarded || !validCloseResult(recorded)) throw foreign();
         if (recorded.token !== null) allowedFields.add('/metadata/swarm_token');
         for (const field of ['swarm_handoff', 'swarm_claimed_at']) allowedFields.add(`/metadata/${field}`);
+        const stopPath = `/metadata/${INTERRUPTION_FIELD}`;
+        if (entry.patch.some(patch => patch.path === stopPath)) {
+          const retired = advanceCapacity(predecessor().metadata, undefined).field;
+          if (retired.includes(INTERRUPTION_FIELD + '=' + view.document.metadata[INTERRUPTION_FIELD])) allowedFields.add(stopPath);
+        }
         if (view.document.metadata.swarm_handoff !== undefined || view.document.metadata.swarm_claimed_at !== undefined || recorded.token !== null && view.document.metadata.swarm_token !== String(BigInt(recorded.token) + 1n)) throw foreign();
       }
       if (closePlanIdentity(recorded) !== closePlanIdentity(journal) || entry.agent_episode?.id !== closeEpisode(recorded, 'journal', recorded) || entry.patch.some(patch => !allowedFields.has(patch.path))) throw foreign();

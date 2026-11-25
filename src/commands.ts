@@ -1,3 +1,7 @@
+import { relative } from 'node:path';
+import { withCapacityTracker } from './capacity-command.ts';
+import { INTERRUPTION_FIELD, interruptLane } from './interruption.ts';
+import { CAPACITY_FIELD, LANE_CAPACITY_FIELD, Capacities, CapacityRefusal } from './capacity.ts';
 import { validateCommandInputs } from './admission.ts';
 import { readAssignmentBrief } from './assignment-brief.ts';
 import { ResourceDeadlocks, DeadlockRefusal, RESOURCE_REQUEST_FIELD } from './deadlocks.ts';
@@ -31,7 +35,7 @@ async function laneOperation(operation: Promise<Record<string, unknown>>, repo: 
   try {
     return await operation;
   }
-  catch (error) { if (repo === undefined || error instanceof SettingsRefusal) throw error; throw new GitCommandFailure(error); }
+  catch (error) { if (repo === undefined || error instanceof SettingsRefusal || error instanceof CapacityRefusal) throw error; throw new GitCommandFailure(error); }
 }
 /** Read a scalar from the immutable input frame already checked by admission. */
 function textOption(value: unknown): string | undefined { return value as string | undefined; }
@@ -62,9 +66,9 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
   if (ctx.sdk === undefined) throw new Error('pm-swarm requires the host SDK command context');
   const sdk = ctx.sdk; assertSdkInstance(sdk.client);
   const workspace = ctx.source_workspace_root ?? ctx.repo_root ?? ctx.pm_root;
-  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief'].includes(command) ? undefined : repositoryRoot(workspace);
+  const repo = ['settings', 'heartbeat', 'reclaim', 'handoff', 'close', 'resource', 'progress', 'deadlocks', 'brief', 'capacity', 'interrupt'].includes(command) ? undefined : repositoryRoot(workspace);
   const client = sdk.client;
-  const opts = overrides(ctx.options);
+  const opts = command === 'capacity' ? {} : overrides(ctx.options);
   const author = resolveAuthor(textOption(ctx.options.agent) ?? ctx.global.author, (await readSettings(ctx.pm_root)).author_default);
   const swarm = repo === undefined ? new SharedTracker(new Swarm(workspace, ctx.pm_root, client, author)) : new Swarm(repo, ctx.pm_root, client, author);
   const id = ctx.args[0];
@@ -88,6 +92,8 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       }
       return { ...await progress.witness(id, { ...options, stage: stage as ProgressStage, step: textOption(ctx.options.step)!, revision: options.revision!, evidence: textOption(ctx.options.evidence)!, apply: ctx.options.apply === true }) };
     }
+    case 'interrupt': return interruptLane((swarm as SharedTracker).engine, id, textOption(ctx.options.token), textOption(ctx.options.capacity)!, textOption(ctx.options.reason)!);
+    case 'capacity': return { ...await new Capacities((swarm as SharedTracker).engine).run(id, ctx.options) };
     case 'resource': {
       const resources = new ResourceReservations(trackerResourceBackend((swarm as SharedTracker).engine), author);
       const action = (textOption(ctx.options.action) ?? 'status') as ResourceAction;
@@ -99,14 +105,25 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
       const { complete_list: _complete, read_output: _read, ...compact } = result;
       return compact;
     }
-    case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true }) };
-    case 'brief': return { ...await readAssignmentBrief((swarm as SharedTracker).engine, id, textOption(ctx.options.token), ctx.options.tokenBudget === undefined ? undefined : Number(ctx.options.tokenBudget)) };
+    case 'schedule': return { ...await swarm.schedule({ skills: textOption(ctx.options.skills)?.split(',').map(skill => skill.trim()) ?? [], maxWaitSeconds: ctx.options.maxWait === undefined ? undefined : Number(textOption(ctx.options.maxWait)), limit: ctx.options.limit === undefined ? undefined : Number(textOption(ctx.options.limit)), parent: textOption(ctx.options.parent), dryRun: ctx.options.dryRun === true, capacity: textOption(ctx.options.capacity) }) };
+    case 'brief': {
+      const shared = swarm as SharedTracker;
+      const token = textOption(ctx.options.token);
+      const budget = ctx.options.tokenBudget === undefined ? undefined : Number(textOption(ctx.options.tokenBudget));
+      if (ctx.options.continuation === true) {
+        const to = textOption(ctx.options.to);
+        return { ...await (to === undefined
+          ? shared.readContinuation(id, token, budget)
+          : shared.continuation(id, to, token, budget, textOption(ctx.options.capacity))) };
+      }
+      return { ...await readAssignmentBrief(shared.engine, id, token, budget) };
+    }
     case 'next': {
-      const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true);
+      const operation = swarm.next(textOption(ctx.options.parent), ctx.options.dryRun === true, undefined, textOption(ctx.options.capacity));
       return laneOperation(operation, repo);
     }
     case 'start': {
-      const operation = swarm.start(id, opts, ctx.options.strict === true);
+      const operation = swarm.start(id, opts, ctx.options.strict === true, textOption(ctx.options.capacity));
       return laneOperation(operation, repo);
     }
     case 'status': {
@@ -143,15 +160,20 @@ async function dispatch(command: string, ctx: CommandHandlerContext): Promise<Re
 export async function runCommand(command: string, ctx: CommandHandlerContext): Promise<Record<string, unknown>> {
   try {
     // Accepted leaves are immutable scalars; snapshot caller-owned containers before any await.
-    ctx = { ...ctx, args: [...ctx.args], options: { ...ctx.options }, global: { ...ctx.global } };
+    ctx = { ...ctx, args: [...ctx.args], options: { ...ctx.options, ...(Array.isArray(ctx.options.band) ? { band: [...ctx.options.band] } : {}) }, global: { ...ctx.global } };
     validateCommandInputs(command, ctx);
-    const result = await dispatch(command, ctx);
+    const selector = ctx.global.path === undefined && process.env.PM_PATH === undefined ? undefined : relative(process.cwd(), ctx.pm_root) || '.';
+    const result = await withCapacityTracker(selector, () => dispatch(command, ctx));
     assertReceiptSafe(result);
     return result;
   } catch (error) {
-    try { assertPrivatePathSafe(String(error)); } catch (refusal) { error = refusal; }
+    try {
+      assertPrivatePathSafe(String(error));
+      if (error instanceof CapacityRefusal) assertReceiptSafe(error.details);
+    } catch (refusal) { error = refusal; }
     throw createPmCliExpectedError(String(error), { exitCode: error instanceof GitCommandFailure ? error.exitCode : 2, context: {
-      ...(error instanceof SettingsRefusal || error instanceof DeadlockRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
+      ...(error instanceof SettingsRefusal || error instanceof CapacityRefusal || error instanceof DeadlockRefusal || error instanceof SchedulingRefusal || error instanceof ResourceRefusal || error instanceof ProgressRefusal ? { code: error.code, required: error.remedy } : error instanceof StaleFenceError ? { code: error.code } : {}),
+      ...(error instanceof CapacityRefusal && error.details !== undefined ? { details: error.details } : {}),
       ...(error instanceof SettingsRefusal && error.field !== undefined ? { field: error.field } : {}),
       recovery: { recovery_mode: 'compact', attempted_command: 'pm swarm [values withheld]', normalized_args: ['swarm', '[values withheld]'], parsed_positionals: [{ role: 'arguments', value: '[values withheld]' }], provided_fields: ['[values withheld]'] },
     } });
@@ -161,12 +183,14 @@ export async function runCommand(command: string, ctx: CommandHandlerContext): P
 export const swarmCommandDefinitions = {
   deadlocks: { mutations: [{ action: 'request', apply: true }], description: 'Declare fenced resource waits or observe bounded deadlock witnesses', flags: ['agent', 'action', 'token', 'resources', 'revision', 'clear', 'apply', 'limit'], id: false },
   progress: { mutations: ['claimed', 'produced', 'reviewed', 'accepted'].map(stage => ({ stage, apply: true })), description: 'Read revision-bound Plan progress or explicitly append a witness', flags: ['agent', 'orchestrator', 'revision', 'offset', 'limit', 'stage', 'step', 'evidence', 'apply'], id: true },
+  interrupt: { mutations: [{}], description: 'Record capacity exhaustion and retain the lane fence until reset or continuation', flags: ['agent', 'token', 'reason', 'capacity'], id: true },
+  capacity: { mutations: ['declare', 'observe', 'policy'].map(action => ({ action })), description: 'Declare, observe or inspect a windowed capacity', flags: ['agent', 'action', 'limit', 'unit', 'window', 'resets-at', 'used', 'source', 'at', 'band', 'else', 'forecast'], id: true },
   resource: { mutations: ['reserve', 'renew', 'release', 'publish'].map(action => ({ action })), description: 'Reserve, renew, release or publish with an exclusive resource fence', flags: ['agent', 'action', 'ttl', 'token', 'note'], id: true },
   plan: { mutations: [], description: 'Partition ready unclaimed work into safe parallel waves', flags: ['parent', 'limit', 'full'], id: false },
-  schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run'], id: false },
-  brief: { mutations: [], description: 'Read one fenced assignment with a bounded work context', flags: ['agent', 'token', 'token-budget'], id: true },
-  next: { mutations: [{}], description: 'Pick and start the best safe ready item', flags: ['agent', 'parent', 'dry-run'], id: false },
-  start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict'], id: true },
+  schedule: { mutations: [{}], description: 'Select qualified ready work with starvation promotion and handoff costs', flags: ['agent', 'skills', 'max-wait', 'parent', 'limit', 'dry-run', 'capacity'], id: false },
+  brief: { mutations: [{ continuation: true, to: 'receiver' }], description: 'Read a fenced assignment or continuation, or transfer it with --to', flags: ['agent', 'token', 'token-budget', 'continuation', 'to', 'capacity'], id: true },
+  next: { mutations: [{}], description: 'Start ready work. A full capacity pool returns capacity_lanes_occupied.', flags: ['agent', 'parent', 'dry-run', 'capacity'], id: false },
+  start: { mutations: [{}], description: 'Claim an item; create a worktree lane when inside Git', flags: ['agent', 'base', 'root', 'branch-prefix', 'strict', 'capacity'], id: true },
   status: { mutations: [], description: 'Report active lanes and overlaps; predict conflicts in Git', flags: ['full', 'watch', 'interval'], id: false },
   sync: { mutations: [{ apply: true }], description: 'Preview changed-file links; --apply records them', flags: ['agent', 'dry-run', 'apply', 'files', 'token'], id: true },
   heartbeat: { mutations: [{}], description: 'Renew agent liveness, optionally fencing an item', flags: ['agent', 'token'], id: false },
@@ -184,6 +208,45 @@ function safeRendererResult(result: unknown): unknown {
   try { assertReceiptSafe(result); return result; }
   catch { return { code: 'swarm_private_path', required: 'Replace private user-home paths with project-relative references.' }; }
 }
+/** Describe capacity controls and give host help runnable feature examples. */
+const capacityHelp: Readonly<Record<string, string>> = {
+  capacity: 'Primary capacity and optional comma-separated retry order',
+  action: 'Capacity action: declare, observe, policy or status',
+  limit: 'Positive capacity limit in the declared unit',
+  unit: 'Public unit label used by observations and bands',
+  window: 'Window duration with s, m, h, d or w suffix',
+  'resets-at': 'ISO reset timestamp with time zone',
+  used: 'Caller-measured cumulative usage',
+  source: 'Public source label for the observation',
+  at: 'ISO observation time, defaults to now',
+  band: 'Repeatable strict threshold, such as forecast<88=3',
+  else: 'Allowed lanes when no band matches or forecast is unknown',
+  forecast: 'Projection for admission: recent, window or max (default max)',
+  continuation: 'Read the current fenced continuation packet. Add --to to transfer it.',
+  to: 'Receiver of the continuation fence',
+  reason: 'Stop reason: capacity_exhausted',
+  'token-budget': 'Maximum estimated tokens in JSON and TOON',
+};
+const capacityExamples: Readonly<Record<string, string[]>> = {
+  capacity: [
+    'pm swarm capacity codex --action declare --limit 100 --unit percent --window 7d --resets-at <ISO>',
+    'pm swarm capacity codex --action observe --used 44 --source codexbar',
+    "pm swarm capacity codex --action policy --band 'forecast<88=3' --else 0 --forecast max",
+  ],
+  schedule: ['pm swarm schedule --agent worker --skills typescript --capacity codex,ollama --dry-run'],
+  next: ['pm swarm next --agent worker --capacity codex,ollama --json'],
+  start: ['pm swarm start task-id --agent worker --capacity codex --strict --json'],
+  interrupt: ['pm swarm interrupt task-id --agent worker --token 1 --reason capacity_exhausted --capacity codex'],
+  brief: ['pm swarm brief task-id --agent worker --token 1 --continuation --to worker-2 --token-budget 800', 'pm swarm brief task-id --agent worker-2 --token 2 --continuation'],
+};
+
+/** Describe the accepted capacity value and any flags that enable it. */
+function flagDescription(command: string, flag: string): string {
+  if (flag === 'capacity' && command === 'interrupt') return 'Single capacity name bound to the lane';
+  if (flag === 'capacity' && command === 'brief') return capacityHelp.capacity + ' with --continuation --to';
+  return Object.hasOwn(capacityExamples, command) && (flag !== 'limit' || command === 'capacity') && Object.hasOwn(capacityHelp, flag) ? capacityHelp[flag] : flag;
+}
+
 /** Register portable fields and command metadata for host TOON/JSON rendering. */
 export function register(api: ExtensionApi): void {
   api.hooks.beforeMutation(guardItemDocument);
@@ -197,13 +260,13 @@ export function register(api: ExtensionApi): void {
     commands: swarmCommandNames.map(name => `swarm ${name}`),
     resultDiscriminator: result => {
       try { assertReceiptSafe(result); } catch { return true; }
-      return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'cycles', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
+      return typeof result === 'object' && result !== null && !Array.isArray(result) && Object.keys(result).some(key => ['id', 'swarm', 'mode', 'suggested_start_set', 'lanes', 'selected', 'order', 'removed', 'dry_run', 'resource', 'capacity', 'cycles', 'revision', 'branch', 'heartbeat', 'swarm_watch_complete'].includes(key)) && (!('swarm_watch_complete' in result) || result.swarm_watch_complete === true);
     },
   });
-  api.registerItemFields([RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
+  api.registerItemFields([CAPACITY_FIELD, LANE_CAPACITY_FIELD, INTERRUPTION_FIELD, RESOURCE_REQUEST_FIELD, 'swarm_branch', 'swarm_base', 'swarm_base_ref', 'swarm_token', 'swarm_claimed_at', 'swarm_handoff', 'swarm_close_transaction', 'swarm_close_intent', 'swarm_resource_expires_at', 'swarm_preferred_agent', 'swarm_handoff_cost'].map(name => ({ name, type: 'string', optional: true })));
 
   for (const [name, definition] of Object.entries(swarmCommandDefinitions)) {
-    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flag, ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
-    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' || name === 'deadlocks' ? [{ name: 'id', required: definition.id }] : [], flags, examples: [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
+    const flags: FlagDefinition[] = definition.flags.map(flag => ({ long: `--${flag}`, description: flagDescription(name, flag), ...(flag === 'band' ? { repeatable: true } : {}), ...(['dry-run', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(flag) ? { value_type: 'boolean' as const } : { value_name: 'value', value_type: 'string' as const }) }));
+    api.registerCommand(defineCommand({ name: `swarm ${name}`, description: definition.description, intent: 'Project management = context management: coordinate parallel agents on a shared tracker, with optional Git lanes', arguments: definition.id || name === 'heartbeat' || name === 'deadlocks' ? [{ name: name === 'capacity' ? 'name' : 'id', required: definition.id }] : [], flags, examples: capacityExamples[name] ?? [`pm swarm ${name}${definition.id ? ' task-id' : ''} --json`], run: ctx => runCommand(name, ctx) }));
   }
 }

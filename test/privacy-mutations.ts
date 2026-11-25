@@ -23,6 +23,7 @@ export function mutationInputs(variant: MutationVariant, id = 'public-item'): { 
     const key = flag.replace(/-([a-z])/g, (_match, letter: string) => letter.toUpperCase());
     if (required[key] !== undefined) options[key] = required[key];
   }
+  if (variant.command === 'interrupt') Object.assign(options, { reason: 'capacity_exhausted', capacity: 'public-capacity' });
   return { args: variant.id || variant.command === 'deadlocks' ? [id] : [], options: { ...options, ...variant.options } };
 }
 

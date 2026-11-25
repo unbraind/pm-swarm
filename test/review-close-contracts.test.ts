@@ -8,7 +8,7 @@ interface SyntaxNode {
   type: string; name?: string; value?: unknown; callee?: SyntaxNode; arguments?: SyntaxNode[];
   properties?: SyntaxNode[]; key?: SyntaxNode; property?: SyntaxNode; object?: SyntaxNode; computed?: boolean;
   expressions?: SyntaxNode[]; quasis?: { value: { cooked: string } }[];
-  argument?: SyntaxNode; left?: SyntaxNode; elements?: (SyntaxNode | null)[]; param?: SyntaxNode;
+  argument?: SyntaxNode; left?: SyntaxNode; elements?: (SyntaxNode | null)[]; param?: SyntaxNode; parameter?: SyntaxNode;
   id?: SyntaxNode; params?: SyntaxNode[]; local?: SyntaxNode; specifiers?: SyntaxNode[]; source?: SyntaxNode;
 }
 
@@ -21,13 +21,14 @@ const CHILD_CALL = /\b(?:spawn|spawnSync|fork|execFile|execFileSync|exec|execSyn
 /** The shared scale helper's module specifier, the only binding accepted for testTime. */
 const SHARED_TIME_HELPER = /(^|\/)support\/time(\.ts)?$/;
 
-/** Credit testTime only when the program binds that name exactly to the shared helper import. */
-function sharedTestTimeBound(program: SyntaxNode): boolean {
+/** Refuse shadowed deadline bindings anywhere in the program. */
+function deadlineBinding(program: SyntaxNode, name: 'testTime' | 'globalThis'): boolean {
   let helper = false;
   let foreign = false;
   const binds = (node: SyntaxNode | null | undefined): boolean => {
     if (!node) return false;
-    if (node.type === 'Identifier') return node.name === 'testTime';
+    if (node.type === 'Identifier') return node.name === name;
+    if (node.type === 'TSParameterProperty') return binds(node.parameter);
     if (node.type === 'ObjectPattern') return (node.properties ?? []).some(property =>
       property.type === 'RestElement' ? binds(property.argument) : binds(property.value as SyntaxNode));
     if (node.type === 'ArrayPattern') return (node.elements ?? []).some(binds);
@@ -41,10 +42,10 @@ function sharedTestTimeBound(program: SyntaxNode): boolean {
     const node = raw as SyntaxNode;
     if (node.type === 'ImportDeclaration') {
       for (const specifier of node.specifiers ?? []) if (binds(specifier.local)) {
-        if (typeof node.source?.value === 'string' && SHARED_TIME_HELPER.test(node.source.value)) helper = true;
+        if (name === 'testTime' && typeof node.source?.value === 'string' && SHARED_TIME_HELPER.test(node.source.value)) helper = true;
         else foreign = true;
       }
-    } else if (['VariableDeclarator', 'FunctionDeclaration', 'FunctionExpression', 'ClassDeclaration', 'ClassExpression'].includes(node.type) && binds(node.id)) {
+    } else if (['VariableDeclarator', 'FunctionDeclaration', 'FunctionExpression', 'ClassDeclaration', 'ClassExpression', 'TSImportEqualsDeclaration', 'TSEnumDeclaration', 'TSModuleDeclaration'].includes(node.type) && binds(node.id)) {
       foreign = true;
     } else if (binds(node.param) || (node.params ?? []).some(binds)) {
       foreign = true;
@@ -52,7 +53,7 @@ function sharedTestTimeBound(program: SyntaxNode): boolean {
     for (const [key, value] of Object.entries(raw)) if (!['loc', 'extra', 'comments', 'tokens'].includes(key)) visit(value);
   };
   visit(program);
-  return helper && !foreign;
+  return (name === 'globalThis' || helper) && !foreign;
 }
 
 /** Resolve direct and member call names, including optional and string-computed members. */
@@ -76,6 +77,19 @@ function interpolation(node: SyntaxNode, prefix: string): string {
   return /\b(?:from|import)\s*$/.test(prefix) ? '"embedded-module"' : 'undefined';
 }
 
+/** Credit only the native, literal deadline on an asynchronous streaming process. */
+function spawnDeadlineSignal(options: SyntaxNode | undefined, program: SyntaxNode): boolean {
+  const last = options?.properties?.slice().reverse().find(property => property.type === 'SpreadElement' || property.computed ||
+    property.key?.name === 'signal' || property.key?.value === 'signal');
+  const signal = last?.type === 'ObjectProperty' && !last.computed ? last.value as SyntaxNode : undefined;
+  const callee = signal?.callee;
+  const owner = callee?.object;
+  const value = signal?.arguments?.[0];
+  return signal?.type === 'CallExpression' && callee?.type === 'MemberExpression' && !callee.computed && callee.property?.name === 'timeout' &&
+    owner?.type === 'MemberExpression' && !owner.computed && owner.object?.name === 'globalThis' && owner.property?.name === 'AbortSignal' &&
+    signal.arguments?.length === 1 && value?.type === 'NumericLiteral' && Number(value.value) > 0 && deadlineBinding(program, 'globalThis');
+}
+
 /** Find unbounded calls in executable sources and embedded driver programs without trusting outer timeouts. */
 function unboundedChildren(source: string, label: string): string[] {
   const failures: string[] = [];
@@ -95,10 +109,10 @@ function unboundedChildren(source: string, label: string): string[] {
       // Only the helper's own binding counts: a shadowed local or a same-name
       // member on another object is an unvalidated wrapper.
       const value = expression?.type === 'CallExpression' && expression.callee?.type === 'Identifier' && expression.callee.name === 'testTime'
-        && expression.arguments?.length === 1 && sharedTestTimeBound(program) ? expression.arguments[0] : expression;
+        && expression.arguments?.length === 1 && deadlineBinding(program, 'testTime') ? expression.arguments[0] : expression;
       const positive = typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'NumericLiteral' && Number((value as SyntaxNode).value) > 0;
       const parameter = timeout?.type === 'ObjectProperty' && typeof value === 'object' && value !== null && (value as SyntaxNode).type === 'Identifier' && (value as SyntaxNode).name === 'timeout';
-      if (!positive && !parameter) failures.push(`${label}:${name}: missing positive per-child timeout`);
+      if (!positive && !parameter && !(name === 'spawn' && spawnDeadlineSignal(options, program))) failures.push(`${label}:${name}: missing positive per-child timeout`);
     }
     let embedded = node.type === 'StringLiteral' ? String(node.value) : undefined;
     if (node.type === 'TemplateLiteral') {
@@ -143,6 +157,28 @@ test('child deadline inventory rejects any missing, zero or negative deadline ev
     }
     assert.deepEqual(unboundedChildren(`${name}(${args}, { timeout: 120000 });`, 'control'), []);
   }
+});
+
+test('child deadline inventory accepts only an explicitly bounded native spawn signal', () => {
+  const call = ['sp', 'awn'].join('');
+  assert.deepEqual(unboundedChildren(`${call}('git', [], { signal: globalThis.AbortSignal.timeout(1000) });`, 'stream'), []);
+  for (const signal of ['AbortSignal.timeout(1000)', 'globalThis.AbortSignal.timeout(0)', 'globalThis.AbortSignal.timeout(duration)', 'controller.signal']) {
+    assert.equal(unboundedChildren(`${call}('git', [], { signal: ${signal} });`, 'unbounded stream').length, 1);
+  }
+});
+
+test('child deadline inventory rejects a native spawn signal overwritten by a later option', () => {
+  const call = ['sp', 'awn'].join('');
+  for (const override of ['...{ signal: controller.signal }', 'signal: controller.signal', "['signal']: controller.signal"]) {
+    const source = `${call}('git', [], { signal: globalThis.AbortSignal.timeout(1000), ${override} });`;
+    assert.equal(unboundedChildren(source, 'overwritten signal').length, 1, override);
+  }
+});
+
+test('child deadline inventory rejects a native spawn signal from a shadowed globalThis', () => {
+  const call = ['sp', 'awn'].join('');
+  const source = `function run(globalThis) { ${call}('git', [], { signal: globalThis.AbortSignal.timeout(1000) }); }`;
+  assert.equal(unboundedChildren(source, 'shadowed global').length, 1);
 });
 
 test('child deadline inventory permits scaled positive budgets and refuses invalid scaled arguments', () => {

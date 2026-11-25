@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Capacity admission follow-ups from review six ([pm-swarm-capacity-followups-104](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-capacity-followups-104.toon))
+- Capacity-aware lane admission and continuation packets ([pm-swarm-capacity-aware-lane-admission](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-capacity-aware-lane-admission.toon))
+
 ## 2026.11.25 - 2026-11-25
 
 ### Fixed

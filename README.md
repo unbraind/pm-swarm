@@ -212,7 +212,7 @@ pm swarm reap --agent worker --dry-run
 pm swarm reap --agent worker
 ```
 
-Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm, except items tagged `swarm-resource`. Assigned-only items also block overlapping selection. `start` records fenced ownership and the linked footprint through the SDK, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
+Shared lanes are all items with a nonblank assignee, including items with SDK claims made inside or outside swarm, except items tagged `swarm-resource` or `swarm-capacity`. Assigned-only items also block overlapping selection. `start` records fenced ownership and the linked footprint through the SDK, without branch or base fields. Selection and shared writes enter an ordered request queue and hold a tracker-local operation pin, with a 30-second lease renewed every five seconds during long mutations. Expiry refuses a resumed writer before its next SDK mutation. The pin is never stolen from a live process during an awaited SDK write; a killed process releases it through the next caller's recovery check. Contention retries use jittered backoff, bounded at five minutes, and exhausted contention fails explicitly. A hung but live process blocks other mutations until it finishes or is terminated.
 
 Each shared claim persists a monotonically increasing decimal `swarm_token` and claim timestamp atomically with its assignee. `next` and `start` return `token`; keep that exact string and pass `--token` to shared `sync --apply`, `handoff` and `close`. A stale or missing token is refused with typed `StaleFenceError` / CLI code `swarm_stale_fence` before changing item data. Reusing an author ID after a takeover does not make its old token valid. Embedded `SharedTracker` instances remember the tokens they issue; separate CLI invocations require the explicit token. Legacy claims without a swarm token retain ordinary SDK ownership checks. Plan excludes candidates overlapping active assigned items and places unknown footprints in solitary waves; unknown work is deferred when active lanes prevent a safe planning recommendation. `next` retains its explicit unknown-footprint fallback. Claims made by tools outside swarm do not participate in its multi-item footprint lease; recheck status before editing.
 
@@ -275,6 +275,123 @@ also validate fencing if they allow delayed writes after resource expiry.
 
 For the typed SDK example, see [resource reservations](docs/resource-reservations.md).
 
+## Windowed capacity
+
+Use a named capacity for a provider quota, rate-limit window or shared pool of
+runners. A capacity is a native tracker item. Operators supply measurements
+with a public source label. Each accepted observation adds a native history
+revision. These commands work in Git worktrees and plain trackers.
+
+### Worked example
+
+Replay the Codex readings of 44%, 49%, 55% and 58% at 10:15 and 18:54 UTC
+on November 24, 2026, and at 00:25 and 10:24 UTC on November 25. The
+seven-day window resets on November 27 at 22:20 UTC. The commands shift those
+timestamps together so the replay can run in a scratch tracker. For live
+observations, supply ISO timestamps with `Z` or an explicit UTC offset.
+Calendar fields must describe a real local date and time. Omit `--at` to record
+the current time.
+
+```sh
+example_time=$(node -p 'Date.now()')
+stamp() {
+  node -p 'new Date(Number(process.argv[1]) + Number(process.argv[2]) * 60000).toISOString()' -- "$example_time" "$1"
+}
+pm swarm capacity codex --action declare --limit 100 --unit percent \
+  --window 7d --resets-at "$(stamp 3596)"
+pm swarm capacity codex --action policy \
+  --band 'forecast<88=3' --band 'forecast<95=2' --band 'forecast<98=1' --else 0 --forecast max
+pm swarm capacity codex --action observe --used 44 --source codexbar --at "$(stamp -1449)"
+pm swarm capacity codex --action observe --used 49 --source codexbar --at "$(stamp -930)"
+pm swarm capacity codex --action observe --used 55 --source codexbar --at "$(stamp -599)"
+pm swarm capacity codex --action observe --used 58 --source codexbar --at "$(stamp 0)"
+pm swarm capacity codex --json
+```
+
+At 10:24 UTC, 64.33% of the weekly window has elapsed. The last two readings
+rose by three percentage points in 9h 59m. Extending that rate to reset gives
+`forecast_recent` of **76.01%**. Dividing 58% used by the elapsed share at
+the latest observation gives `forecast_window` of **90.17%**. The default
+`--forecast max` selects 90.17% and admits **two simultaneous lanes** in the
+`forecast<95=2` band. Use
+`--forecast recent` or `--forecast window` on the policy to select one
+projection explicitly. Both projections hold their values between fresh
+observations. Status shows both projections, the selected `forecast`, and
+the current `elapsed_share`.
+
+Both projections are unknown if either of the two latest observations is
+missing or older than 24 hours. A decrease between observations yields a zero
+recent burn rate. Band thresholds are exclusive and strictly increasing, in
+the declared unit. The first match wins. `--else` applies with no match or an
+unknown forecast and defaults to zero. A fresh measurement or selected
+forecast at or above the limit blocks admission. After the reset, declare the
+next window with its new reset time. If a native edit made the capacity
+record terminal, status reports it as undeclared. Run the same
+`capacity --action declare` command with a new window to reopen the
+record and preserve its native history. Reopening starts with no
+observations and a policy that admits zero lanes. Set the policy again
+before admitting work. Removing the native capacity tag releases the name.
+A later declaration creates its own record and leaves the untagged item alone.
+
+```sh
+pm swarm capacity ollama --action declare --limit 100 --unit percent \
+  --window 7d --resets-at "$(stamp 3596)"
+pm swarm capacity ollama --action policy --else 1
+pm swarm next --agent worker --capacity codex,ollama --json
+pm swarm start task-id --agent worker --capacity codex --strict --json
+```
+
+Admission evaluates the first capacity under the same tracker lease that
+grants the claim. Once both Codex lanes are active, another worker using
+`--capacity codex,ollama` gets `capacity_lanes_occupied` with
+“2 of 2 admitted lanes active,” the reset time and a retry such as
+`pm swarm next --agent worker --capacity ollama`. Provider exhaustion returns
+`capacity_exhausted`, a selected forecast at or above the limit returns
+`capacity_forecast_exceeded`, and a policy admitting zero lanes returns
+`capacity_policy_denied`. They also provide a runnable retry for the next
+capacity in the list. Retries carry a tracker selector supplied through
+`--path` or `PM_PATH` as a path relative to the original working directory.
+Run the retry from that directory. Use `next --dry-run` to check admission
+without taking a slot. `schedule --capacity` applies the same check with its
+skill and priority rules.
+
+When a provider stops a worker, keep the item's claim and mark that window
+exhausted. Other workers can reclaim stale claims normally. This lane stays
+assigned until the reset or a fenced continuation transfer. A lane whose
+holder and token survive the reset counts toward capacity in the new window.
+Attaching or resuming a Git lane rechecks its existing capacity when the lane
+keeps that binding. Pass the item ID and token from the claim response.
+Use a single bound capacity name with `interrupt --capacity`. Next, start,
+schedule, and continuation transfers accept retry lists.
+
+```sh
+pm swarm interrupt task-id --agent worker --token 1 \
+  --reason capacity_exhausted --capacity codex
+pm swarm brief task-id --agent worker --token 1 --continuation \
+  --to worker-2 --capacity ollama --token-budget 800 --json
+pm swarm brief task-id --agent worker-2 --token 2 --continuation --json
+```
+
+The continuation records the interruption, acceptance criteria with an
+unverified status, linked files, and changes to files, synced paths, comments
+and tests in native revision order after the claim. A Git lane also includes
+commit IDs and uncommitted paths from its worktree. Git status and live
+continuation packets mark a missing, unreadable, or mismatched checkout
+unavailable and include `git_worktree_unavailable_reason`. The packet
+still includes the branch commits. Large Git evidence is read
+as complete records, with the packet budget reporting omitted paths or
+commits. The recipient gets a new token. The previous window stays exhausted
+until its reset. A continuation from an interrupted lane drops the old capacity
+binding when no replacement capacity is supplied. A capacity record retired by
+a native edit no longer provides a live binding. A subsequent fenced heartbeat
+or admission clears the old binding. An explicit request still requires a
+declared capacity. With no `--to`, the current token holder can read the saved
+transfer packet again without appending history or renewing liveness.
+Before any transfer, this form reads the current claim's continuation. The
+packet budget covers both JSON and TOON, with the same privacy checks and
+omission receipts as assignment briefs. A saved packet keeps its original
+budget by default.
+
 ## Budgeted assignment briefs
 
 Use `brief` after a shared-tracker `next`, `schedule`, or `start`. Pass the assigned
@@ -291,8 +408,8 @@ The brief reads the current SDK item and requires its current owner and token.
 A brief reflects one observed snapshot and does not renew liveness. Keep using
 the regular heartbeat and fenced write commands. An explicit handoff or reclaim
 to an agent also issues a token that works with `brief`, including for Git lanes.
-A fresh Git lane with only a legacy core claim needs a fenced transfer before it
-can use `brief`.
+A capacity-bound Git lane returns a fencing token at acquisition. A Git lane
+with only a legacy core claim can obtain a token through a transfer.
 
 The response includes the item ID, owner, token and status. Its work context
 prioritizes the title, acceptance criteria, description, declared blocker and

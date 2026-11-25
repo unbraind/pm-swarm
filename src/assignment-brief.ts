@@ -1,3 +1,4 @@
+import { CAPACITY_TAG } from './capacity.ts';
 import { estimatePmOutputTokens, readSettings, resolveRuntimeStatusRegistry, scanMutationSecrets, statusIsTerminal } from '@unbrained/pm-cli/sdk';
 import type { GetResult } from '@unbrained/pm-cli/sdk';
 import { encodeToon } from '@unbrained/pm-cli/sdk/testing';
@@ -55,7 +56,7 @@ function briefContext(item: GetResult['item']): BriefContext {
 }
 
 /** Preserve the identity refusal and add the SDK's credential checks. */
-function assertBriefIdentitySafe(value: unknown): void {
+export function assertBriefIdentitySafe(value: unknown): void {
   assertPrivatePathSafe(value);
   if (scanMutationSecrets(value).length > 0) throw new SettingsRefusal('swarm_input_invalid', 'Remove credential-shaped text from the assignment identity.');
 }
@@ -71,23 +72,32 @@ function hasPrivacyFinding(value: unknown): boolean {
 }
 
 /** Count the whole receipt, including the renderer's trailing newline, in both formats. */
-function fits(brief: AssignmentBrief): boolean {
+function fits(brief: { token_budget: number }): boolean {
   const bytes = Math.max(Buffer.byteLength(JSON.stringify(brief)), Buffer.byteLength(encodeToon(brief)));
   return estimatePmOutputTokens(bytes + 1) <= brief.token_budget;
 }
 
+/** A portable packet with work fields that can be packed independently. */
+interface BriefPacket<Work extends object> {
+  token_budget: number;
+  context: Partial<Work>;
+  omission_receipt: Partial<Record<keyof Work, number | typeof WITHHELD>>;
+}
+
 /** Add whole fields or collection prefixes while preserving exact omission counts. */
-function pack(brief: AssignmentBrief, work: BriefContext): AssignmentBrief {
-  const fields = Object.keys(work) as (keyof BriefContext)[];
+export function packBrief<Work extends object, Packet extends BriefPacket<Work>>(
+  brief: Packet, work: Work, normalize?: (field: keyof Work) => void,
+): Packet {
+  const fields = Object.keys(work) as (keyof Work)[];
   for (const field of fields) {
     const value = work[field];
     const count = Array.isArray(value) ? value.length : Number(Boolean(value));
-    if (count > 0) brief.omission_receipt[field] = hasPrivacyFinding(value) ? WITHHELD : count;
-  }
-  // Inspect stored paths before normalization can reject or remove private text.
-  if (typeof brief.omission_receipt.files === 'number') {
-    work.files = work.files!.map(footprintPath);
-    if (hasPrivacyFinding(work.files)) brief.omission_receipt.files = WITHHELD;
+    if (count === 0) continue;
+    if (hasPrivacyFinding(value)) brief.omission_receipt[field] = WITHHELD;
+    else {
+      normalize?.(field);
+      brief.omission_receipt[field] = hasPrivacyFinding(work[field]) ? WITHHELD : count;
+    }
   }
 
   for (const field of fields) {
@@ -108,11 +118,16 @@ function pack(brief: AssignmentBrief, work: BriefContext): AssignmentBrief {
   return brief;
 }
 
+/** Share the renderer token budget contract with continuation packets. */
+export function assertBriefBudget(tokenBudget: number): void {
+  if (!Number.isSafeInteger(tokenBudget) || tokenBudget < 1 || tokenBudget > 8192) throw new SettingsRefusal('swarm_input_invalid', 'Set --token-budget to an integer from 1 through 8192.');
+}
+
 /** Read one authoritative item snapshot and disclose work only to the matching swarm fence. */
 export async function readAssignmentBrief(engine: Swarm, id: string, token: string | undefined, tokenBudget = 512): Promise<AssignmentBrief> {
   assertBriefIdentitySafe({ id, token, author: engine.author });
   if (typeof token !== 'string' || !/^\d+$/.test(token)) throw new SettingsRefusal('swarm_input_invalid', 'Supply the decimal --token returned by the current swarm claim.');
-  if (!Number.isSafeInteger(tokenBudget) || tokenBudget < 1 || tokenBudget > 8192) throw new SettingsRefusal('swarm_input_invalid', 'Set --token-budget to an integer from 1 through 8192.');
+  assertBriefBudget(tokenBudget);
 
   const local = await inspectItem(engine.pmRoot, engine.repo, id);
   const fields = `status,assignee,tags,swarm_token,${CLOSE_INTENT},title,acceptance_criteria,description,blocked_by,blocked_reason,dependencies,files,docs,tests,body,comments`;
@@ -121,11 +136,14 @@ export async function readAssignmentBrief(engine: Swarm, id: string, token: stri
   if (item.assignee !== engine.author || item.swarm_token !== token) throw new StaleFenceError(item.id);
   const statuses = resolveRuntimeStatusRegistry((await readSettings(engine.pmRoot)).schema);
   const status = String(item.status);
-  if (statusIsTerminal(status, statuses) || item.tags!.includes(RESOURCE_TAG)) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item with an ordinary swarm claim.');
+  if (statusIsTerminal(status, statuses) || (item.tags!.includes(RESOURCE_TAG) || item.tags!.includes(CAPACITY_TAG))) throw new SettingsRefusal('swarm_input_invalid', 'Use an active work item with an ordinary swarm claim.');
   assertCloseIntentSettled(engine, item);
 
   const brief: AssignmentBrief = { id: item.id, agent: engine.author, token, token_budget: tokenBudget, context: {}, omission_receipt: {} };
   if (hasPrivacyFinding(status)) brief.omission_receipt.status = WITHHELD;
   else brief.status = status;
-  return admitReceipt(pack(brief, briefContext(item)));
+  const work = briefContext(item);
+  return admitReceipt(packBrief(brief, work, field => {
+    if (field === 'files') work.files = work.files!.map(footprintPath);
+  }));
 }

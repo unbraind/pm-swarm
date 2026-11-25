@@ -18,14 +18,23 @@ export function validateCommandInputs(command: string, ctx: CommandHandlerContex
   for (const arg of ctx.args) if (typeof arg !== 'string' || !arg.trim()) invalid('Supply nonempty item ids.');
   for (const [name, value] of Object.entries(ctx.options)) {
     if (value === undefined) continue;
-    if (['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear'].includes(name)) {
+    if (command === 'capacity' && name === 'band' && Array.isArray(value)) {
+      if (value.some(entry => typeof entry !== 'string' || !entry.trim())) invalid('Supply one nonempty value per --band.');
+      continue;
+    }
+    if (['dryRun', 'apply', 'execute', 'full', 'strict', 'watch', 'clear', 'continuation'].includes(name)) {
       if (typeof value !== 'boolean') invalid('Supply boolean switches without a value.');
     } else if (typeof value !== 'string' || !value.trim()) invalid('Supply one nonempty value for each flag.');
   }
   validateActionInputs(command, ctx.options);
   const options = ctx.options as Record<string, string | boolean | undefined>;
-  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress', 'brief'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
+  if (['start', 'sync', 'handoff', 'close', 'resource', 'progress', 'brief', 'capacity', 'interrupt'].includes(command) && ctx.args[0] === undefined) invalid('An item id is required.');
   if (options.token !== undefined && !/^\d+$/.test(String(options.token))) invalid('Use the decimal --token returned by the last successful claim.');
+  if (command === 'brief') {
+    if (options.capacity !== undefined && options.to === undefined) invalid('Supply --to to select a capacity for continuation transfer.');
+    if (options.continuation !== true && (options.to !== undefined || options.capacity !== undefined)) invalid('Use --continuation with --to or --capacity.');
+  }
+  if (command === 'interrupt' && (options.reason !== 'capacity_exhausted' || options.capacity === undefined || options.token === undefined)) invalid('interrupt requires --capacity, --reason capacity_exhausted and the current --token.');
   if (['settings', 'start', 'plan'].includes(command)) {
     const config = resolveSwarmSettings({}, {
       ...(options.base === undefined ? {} : { base: String(options.base) }),

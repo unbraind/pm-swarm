@@ -60,3 +60,17 @@ export { CloseRecoveryUnsupported } from './src/close.ts';
 export { CloseCompensation } from './src/close-recovery.ts';
 /** Registered intent and native-boundary observer used by embedded hosts and packed acceptance. */
 export { CLOSE_INTENT, withCloseObserver } from './src/close-journal.ts';
+
+/** Declare and inspect native windowed capacity records and typed refusals. */
+export { Capacities, CapacityRefusal, CAPACITY_TAG, OBSERVATION_MAX_AGE_MS } from './src/capacity.ts';
+
+/** Stop a lane without giving up its fencing generation. */
+export { interruptLane } from './src/interruption.ts';
+/** Portable capacity stop receipt for dispatchers. */
+export type { CapacityInterruption } from './src/interruption.ts';
+
+/** Portable budgeted packet emitted by SharedTracker.continuation. */
+export type { ContinuationPacket } from './src/continuation.ts';
+
+/** Portable capacity observations, status and refusal categories. */
+export type { CapacityObservation, CapacityStatus, CapacityRefusalCode } from './src/capacity.ts';

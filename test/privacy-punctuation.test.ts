@@ -6,17 +6,17 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 test('whole punctuation runs normalize before privacy decisions across random homes and every mutating variant', () => {
-  const seed = 0xc0ffee71; let privateCases = 0; let allowedCases = 0; let renderers = 0;
-  for (let index = 0; index < 20; index++) {
+  const seed = 0xc0ffee71; const homes = 20; const variants = 25; let privateCases = 0; let allowedCases = 0; let renderers = 0;
+  for (let index = 0; index < homes; index++) {
     const suffix = `demo-${((seed ^ (index * 2654435761)) >>> 0).toString(36)}${['', ';root', ',root', '=root', '#root', ']root', "'root", '"root'][index % 8]}`;
     const home = ['', 'srv', 'profiles', suffix].join('/');
     const child = spawnSync(process.execPath, [fileURLToPath(new URL('./privacy-punctuation-worker.ts', import.meta.url)), String(testDepth(250)), String(seed ^ index)], { encoding: 'utf8', env: { ...process.env, HOME: home, USERPROFILE: '' }, timeout: testTime(120000) });
     assert.equal(child.status, 0, `Punctuation worker ${index}: ${child.stderr.replaceAll(home, '[configured-home]')}`);
     const result = JSON.parse(child.stdout) as { private_cases: number; allowed_cases: number; renderer_cases: number; variants: number };
-    assert.equal(result.variants, 20); privateCases += result.private_cases; allowedCases += result.allowed_cases; renderers += result.renderer_cases;
+    assert.equal(result.variants, variants); privateCases += result.private_cases; allowedCases += result.allowed_cases; renderers += result.renderer_cases;
   }
-  assert.equal(privateCases, 20 * testDepth(250)); assert.equal(allowedCases, 20 * testDepth(250));
-  console.log(JSON.stringify({ seed: '0xc0ffee71', random_homes: 20, private_cases: privateCases, allowed_cases: allowedCases, command_refusals: privateCases * 19, command_admissions: allowedCases * 19, renderer_cases: renderers, false_refusals: 0, escapes: 0 }));
+  assert.equal(privateCases, homes * testDepth(250)); assert.equal(allowedCases, homes * testDepth(250));
+  console.log(JSON.stringify({ seed: '0xc0ffee71', random_homes: homes, private_cases: privateCases, allowed_cases: allowedCases, command_refusals: privateCases * variants, command_admissions: allowedCases * variants, renderer_cases: renderers, false_refusals: 0, escapes: 0 }));
 });
 
 test('native handoff refuses punctuation aliases before any tracker byte or receipt changes', () => {
