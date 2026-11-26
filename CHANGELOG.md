@@ -1,10 +1,10 @@
 # Changelog
 
-## Unreleased
+## 2026.11.26 - 2026-11-26
 
 ### Dependencies
 
-- Bump unbraind/pm-ops/.github/workflows/daily-release.yml
+- Bump unbraind/pm-ops/.github/workflows/daily-release.yml from 2026.11.15 to 2026.11.22 ([#107](https://github.com/unbraind/pm-swarm/pull/107))
 
 ## 2026.11.25 - 2026-11-25
 
