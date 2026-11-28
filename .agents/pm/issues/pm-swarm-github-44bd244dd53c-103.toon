@@ -1,0 +1,21 @@
+id: pm-swarm-github-44bd244dd53c-103
+title: "Continuation preparation reads the full item history 28 times for a 1,000-revision lane; reuse one verified projection"
+description: "GH issue #103: https://github.com/unbraind/pm-swarm/issues/103 · author @unbraind · created 2026-11-25T15:37:09Z · updated 2026-11-25T15:55:14Z"
+type: Issue
+status: open
+priority: 2
+tags[2]: "gh:unbraind/pm-swarm#103","github_author:unbraind"
+created_at: "2026-11-25T15:37:09Z"
+updated_at: "2026-11-28T11:54:33.002Z"
+author: pm-github
+github_close_reason: ""
+github_closed_at: ""
+github_created_at: "2026-11-25T15:37:09Z"
+github_link_only: false
+github_number: 103
+github_release: ""
+github_state: open
+github_state_reason: unspecified
+github_updated_at: "2026-11-25T15:55:14Z"
+github_url: "https://github.com/unbraind/pm-swarm/issues/103"
+body: "## Summary\n\nReview of the capacity-aware lane admission pull request raised a performance note on continuation preparation: `laneHistory` reads and hashes the complete item history, allocates full-history selector arrays, then requests separate revision snapshots, and transfer preparation repeats this before and inside the lease.\n\nIt was deferred from that pull request with measurements instead of being changed there: a 1,000-revision transfer took 1,831 ms and made 28 native history opens or reads. Reusing one verified projection needs its own replay-verification and packet-parity work.\n\n## Acceptance\n\n- Continuation preparation reads the history at most twice (once before and once inside the lease, or a verified projection reused across both) for a 1,000-revision item; the benchmark from that review round is committed as a test with that bound.\n- The continuation packet is byte-identical to the current one for the same history, in JSON and TOON, with and without git (parity test over the existing continuation fixtures).\n- No weakening of the fenced re-read inside the lease."
