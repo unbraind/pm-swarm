@@ -17,6 +17,10 @@
 
 - Adopt pm-cli 2026.11.24 host-aligned SDK behaviour ([pm-swarm-sdk-host-alignment](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/chores/pm-swarm-sdk-host-alignment.toon))
 
+### Closed
+
+- Closed: Deep coverage gate exhausts its 60-minute budget on eligible local runners ([pm-swarm-github-44bd244dd53c-97](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-97.toon))
+
 ## 2026.11.22 - 2026-11-22
 
 ### Dependencies
@@ -90,6 +94,11 @@
 ### Fixed
 
 - The identity gate now recognizes absolute home paths only at path boundaries, so prose and relative paths no longer block the GitHub issue sync ([pm-swarm-4q55](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-4q55.toon))
+
+### Closed
+
+- Closed: Failed start with noExtensions leaves its newly acquired claim held (Node 22/26) ([pm-swarm-github-44bd244dd53c-28](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-28.toon))
+- Closed: Identity gate rejects harmless imported “mismatch/root cause” prose as an absolute home path ([pm-swarm-github-44bd244dd53c-30](https://github.com/unbraind/pm-swarm/blob/main/.agents/pm/issues/pm-swarm-github-44bd244dd53c-30.toon))
 
 ## 2026.10.31 - 2026-10-31
 

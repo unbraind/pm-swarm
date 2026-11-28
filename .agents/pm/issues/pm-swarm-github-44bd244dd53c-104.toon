@@ -1,0 +1,21 @@
+id: pm-swarm-github-44bd244dd53c-104
+title: "Capacity admission follow-ups: runnable remedy, pre-window interruption stamps, capacity records in handoff previews, worktree identity, fresh-claim test"
+description: "GH issue #104: https://github.com/unbraind/pm-swarm/issues/104 · author @unbraind · created 2026-11-25T20:47:52Z · updated 2026-11-25T21:48:55Z"
+type: Issue
+status: open
+priority: 2
+tags[2]: "gh:unbraind/pm-swarm#104","github_author:unbraind"
+created_at: "2026-11-25T20:47:52Z"
+updated_at: "2026-11-28T11:54:33.219Z"
+author: pm-github
+github_close_reason: ""
+github_closed_at: ""
+github_created_at: "2026-11-25T20:47:52Z"
+github_link_only: false
+github_number: 104
+github_release: ""
+github_state: open
+github_state_reason: unspecified
+github_updated_at: "2026-11-25T21:48:55Z"
+github_url: "https://github.com/unbraind/pm-swarm/issues/104"
+body: "## Summary\n\nFive Minor points from the last review of the capacity-aware lane admission pull request, deferred so the feature could land after five fix rounds (each round's Major findings were fixed there). None changes behaviour for lanes that do not use a capacity.\n\n## Items\n\n1. **Runnable remedy for capacity records** (`src/capacity.ts`): when `start` meets a capacity record, the guard recommends `pm swarm capacity`, which fails without a name. Recommend `pm swarm capacity --help`, or include the validated capacity name.\n2. **Interruption timestamps before the window start** (`src/interruption.ts`): after a clock step-back, `interrupt` can record a stop dated before the window's `starts_at`; once the window starts it is counted as an exhaustion report and the window admits no lanes until the reset. Refuse a stop dated before the window start (the upper bound is already checked).\n3. **Capacity records in incoming handoff previews** (`src/shared-tracker.ts`): an assigned `swarm-capacity` item with a valid `swarm_handoff` is shown by `next --dry-run` as work, while live `next` rejects it at the fence. Filter capacity-tagged items before parsing the handoff, so preview and live agree.\n4. **Worktree availability** (`src/swarm.ts`): a registered worktree whose path now holds an ordinary directory is reported as an available checkout. Verify that the path still resolves to the registered Git checkout, or report mere directory presence under a narrower field.\n5. **Transition matrix, fresh-claim check** (`test/capacity-transitions.test.ts`): the per-provider fresh-claim check reuses one item, so the second provider is tested for a rebind, not for admitting fresh work. Use a distinct unassigned item with a disjoint footprint per provider.\n\n## Acceptance\n\nEach item has a failing-first test and, where it fits, a row in the transition matrix; preview and live results agree for items 3 and 4; coverage stays at 100%."
